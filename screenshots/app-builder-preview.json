@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "অঘটনঘটন পটিয়সী",
+      "hasCanvas": false,
+      "bodyTextLen": 246,
+      "bodyTextHash": "2c8abf1593bedb7b80b963f6ea626373efd2353ebf75f1f9b144c1994a7c6922",
+      "bodyTextPrefix": "ঢাকার রাত · একটি ওয়েব বই অঘটনঘটন পটিয়সী সিনথিয়া করিম আর সৈয়দ মাহ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "অঘটনঘটন পটিয়সী",
+      "hasCanvas": false,
+      "bodyTextLen": 5261,
+      "bodyTextHash": "6e1dc67b0ba01101c01888e94f7a12a106117dc7d93a307a8c6e7adaad9dd22f",
+      "bodyTextPrefix": "সতর্কবার্তা প্রাপ্তবয়স্ক পাঠ এই বইয়ে প্রাপ্তবয়স্কদের জন্য সংবেদন",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
