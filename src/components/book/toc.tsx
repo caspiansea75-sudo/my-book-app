@@ -6,10 +6,12 @@ import { useReaderStore } from "@/lib/reader-store";
 import { cn } from "@/lib/utils";
 
 export function TocList({
+  bookSlug,
   chapters,
   activeSlug,
   onNavigate,
 }: {
+  bookSlug: string;
   chapters: ChapterMeta[];
   activeSlug?: string;
   onNavigate?: () => void;
@@ -24,8 +26,8 @@ export function TocList({
         return (
           <Link
             key={ch.slug}
-            to="/read/$slug"
-            params={{ slug: ch.slug }}
+            to="/read/$bookSlug/$slug"
+            params={{ bookSlug, slug: ch.slug }}
             onClick={onNavigate}
             data-active={active}
             className={cn(
@@ -61,11 +63,13 @@ export function TocList({
 }
 
 export function TocDrawer({
+  bookSlug,
   open,
   onClose,
   chapters,
   activeSlug,
 }: {
+  bookSlug: string;
   open: boolean;
   onClose: () => void;
   chapters: ChapterMeta[];
@@ -89,7 +93,7 @@ export function TocDrawer({
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div>
             <p className="font-display text-base">সূচিপত্র</p>
-            <p className="font-sans text-xs text-muted">৩৭টি আপডেট · দ্রুত যান</p>
+            <p className="font-sans text-xs text-muted">{formatCount(chapters.length)}টি আপডেট · দ্রুত যান</p>
           </div>
           <button
             type="button"
@@ -101,7 +105,7 @@ export function TocDrawer({
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-2 pt-3">
-          <TocList chapters={chapters} activeSlug={activeSlug} onNavigate={onClose} />
+          <TocList bookSlug={bookSlug} chapters={chapters} activeSlug={activeSlug} onNavigate={onClose} />
         </div>
       </aside>
     </>

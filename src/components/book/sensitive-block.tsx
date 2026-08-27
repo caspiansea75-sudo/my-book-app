@@ -8,9 +8,11 @@ export function SensitiveBlock({
 }: {
   para: Paragraph;
   fontSize: number;
+  toggleId?: string;
 }) {
   const nsfwMode = useReaderStore((s) => s.nsfwMode);
-  const flipped = useReaderStore((s) => s.inverted.includes(para.id));
+  const id = toggleId ?? para.id;
+  const flipped = useReaderStore((s) => s.inverted.includes(id));
   const toggle = useReaderStore((s) => s.togglePara);
   const visible = nsfwMode === "shown" ? !flipped : flipped;
 
@@ -19,7 +21,7 @@ export function SensitiveBlock({
       <div className="nsfw-veil overflow-hidden rounded-lg border border-border">
         <button
           type="button"
-          onClick={() => toggle(para.id)}
+          onClick={() => toggle(id)}
           className="pressable flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
         >
           <span className="flex min-w-0 items-center gap-3">
@@ -40,7 +42,7 @@ export function SensitiveBlock({
     <div className="nsfw-shown">
       <button
         type="button"
-        onClick={() => toggle(para.id)}
+        onClick={() => toggle(id)}
         className="pressable absolute -top-1 right-0 z-10 inline-flex items-center gap-1 rounded-full border border-border bg-surface/90 px-2 py-1 font-sans text-xs text-muted"
         aria-label="এই অংশ লুকান"
       >

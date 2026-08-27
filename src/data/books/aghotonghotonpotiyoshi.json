@@ -1,8 +1,11 @@
 {
+  "slug": "aghotonghotonpotiyoshi",
   "title": "অঘটনঘটন পটিয়সী",
   "titleEn": "Aghotonghoton Potiyoshi",
   "author": "অজানা",
   "language": "bn",
+  "tagline": "ঢাকার রাত · একটি ওয়েব বই",
+  "description": "সিনথিয়া করিম আর সৈয়দ মাহফুজ। নর্থ সাউথ আর জগন্নাথ। যে সম্পর্ক পরিবার মানতে চায় না, আর যে ছেলে অসম্ভবকে সম্ভব করতে নামে।",
   "chapterCount": 37,
   "paraCount": 1473,
   "nsfwCount": 628,

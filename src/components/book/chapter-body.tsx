@@ -4,9 +4,11 @@ import { SensitiveBlock } from "@/components/book/sensitive-block";
 export function ChapterBody({
   chapter,
   fontSize,
+  bookSlug,
 }: {
   chapter: Chapter;
   fontSize: number;
+  bookSlug?: string;
 }) {
   let firstBody = true;
 
@@ -45,7 +47,7 @@ export function ChapterBody({
             }
             if (para.nsfw) {
               firstBody = false;
-              return <SensitiveBlock key={para.id} para={para} fontSize={fontSize} />;
+              return <SensitiveBlock key={para.id} para={para} fontSize={fontSize} toggleId={bookSlug ? `${bookSlug}:${para.id}` : para.id} />;
             }
             const drop = firstBody;
             firstBody = false;

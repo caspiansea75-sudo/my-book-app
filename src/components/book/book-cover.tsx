@@ -1,16 +1,18 @@
-import { Link } from "@tanstack/react-router";
-import { BookOpen, CloudRain } from "lucide-react";
-import { bookIndex, formatCount } from "@/lib/book";
+import { Link, notFound } from "@tanstack/react-router";
+import { BookOpen, CloudRain, ChevronLeft } from "lucide-react";
+import { getBookIndex, formatCount } from "@/lib/book";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
 import { WarningGate } from "@/components/book/warning-gate";
 import { AmbientAudio } from "@/components/book/ambient-audio";
 import { cn } from "@/lib/utils";
 
-export function CoverPage() {
+export function BookCoverPage({ bookSlug }: { bookSlug: string }) {
   const lastSlug = useReaderStore((s) => s.lastSlug);
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
-  const book = bookIndex;
+  const book = getBookIndex(bookSlug);
+
+  if (!book) throw notFound();
 
   return (
     <main className="relative min-h-dvh">
@@ -19,32 +21,37 @@ export function CoverPage() {
 
       <section className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-5 py-16 sm:px-8">
         <div className="stagger-in">
+          <Link
+            to="/"
+            className="pressable mb-6 inline-flex items-center gap-1 font-sans text-xs text-muted hover:text-fg"
+          >
+            <ChevronLeft className="size-3.5" strokeWidth={1.75} />
+            লাইব্রেরি
+          </Link>
+
           <p className="flex items-center gap-2 font-sans text-xs tracking-widest text-lamp">
             <CloudRain className="size-4" strokeWidth={1.6} />
-            ঢাকার রাত · একটি ওয়েব বই
+            {book.tagline}
           </p>
           <h1 className="cover-title mt-5 font-display text-4xl font-semibold leading-tight sm:text-6xl">
-            অঘটনঘটন
-            <br />
-            পটিয়সী
+            {book.title}
           </h1>
           <p className="mt-5 max-w-lg font-display text-base leading-relaxed text-muted sm:text-lg">
-            সিনথিয়া করিম আর সৈয়দ মাহফুজ। নর্থ সাউথ আর জগন্নাথ। যে সম্পর্ক পরিবার মানতে চায় না,
-            আর যে ছেলে অসম্ভবকে সম্ভব করতে নামে।
+            {book.description}
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
-              to="/read/$slug"
-              params={{ slug: lastSlug || "01" }}
+              to="/read/$bookSlug/$slug"
+              params={{ bookSlug, slug: lastSlug || book.chapters[0]?.slug || "01" }}
               className="pressable lamp-glow inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-5 font-sans text-sm font-medium text-accent-fg"
             >
               <BookOpen className="size-4" strokeWidth={1.75} />
-              {lastSlug && lastSlug !== "01" ? "যেখানে ছিলেন" : "পড়া শুরু করুন"}
+              {lastSlug && lastSlug !== book.chapters[0]?.slug ? "যেখানে ছিলেন" : "পড়া শুরু করুন"}
             </Link>
             <Link
-              to="/read/$slug"
-              params={{ slug: "01" }}
+              to="/read/$bookSlug/$slug"
+              params={{ bookSlug, slug: book.chapters[0]?.slug || "01" }}
               className="pressable inline-flex h-12 items-center rounded-lg border border-border bg-surface px-5 font-sans text-sm text-fg"
             >
               প্রথম আপডেট
@@ -85,8 +92,8 @@ export function CoverPage() {
           {book.chapters.map((ch) => (
             <li key={ch.slug}>
               <Link
-                to="/read/$slug"
-                params={{ slug: ch.slug }}
+                to="/read/$bookSlug/$slug"
+                params={{ bookSlug, slug: ch.slug }}
                 className="pressable flex h-full flex-col rounded-lg border border-border bg-surface p-4 hover:bg-surface-2"
               >
                 <span className="flex items-center justify-between gap-2">

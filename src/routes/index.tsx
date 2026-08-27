@@ -1,4 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CoverPage } from "@/components/book/cover-page";
+import { LibraryPage } from "@/components/book/library-page";
 
-export const Route = createFileRoute("/")({ component: CoverPage });
+export const Route = createFileRoute("/")({ component: LibraryPage });

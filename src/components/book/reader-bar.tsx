@@ -15,11 +15,13 @@ import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
 import { cn } from "@/lib/utils";
 
 export function ReaderBar({
+  bookSlug,
   title,
   onOpenToc,
   prevSlug,
   nextSlug,
 }: {
+  bookSlug: string;
   title: string;
   onOpenToc: () => void;
   prevSlug?: string;
@@ -68,8 +70,8 @@ export function ReaderBar({
         <div className="flex items-center">
           {prevSlug ? (
             <Link
-              to="/read/$slug"
-              params={{ slug: prevSlug }}
+              to="/read/$bookSlug/$slug"
+              params={{ bookSlug, slug: prevSlug }}
               className="pressable grid size-11 place-items-center rounded-md text-fg hover:bg-surface-2"
               aria-label="আগের আপডেট"
             >
@@ -82,8 +84,8 @@ export function ReaderBar({
           )}
           {nextSlug ? (
             <Link
-              to="/read/$slug"
-              params={{ slug: nextSlug }}
+              to="/read/$bookSlug/$slug"
+              params={{ bookSlug, slug: nextSlug }}
               className="pressable grid size-11 place-items-center rounded-md text-fg hover:bg-surface-2"
               aria-label="পরের আপডেট"
             >
