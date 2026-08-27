@@ -5,6 +5,7 @@ import { useReaderStore } from "@/lib/reader-store";
 export function SensitiveBlock({
   para,
   fontSize,
+  toggleId,
 }: {
   para: Paragraph;
   fontSize: number;
