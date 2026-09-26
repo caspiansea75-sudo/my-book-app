@@ -2,7 +2,7 @@ import { useRef, useState, type DragEvent } from "react";
 import { ImagePlus, Link2, Upload, Video } from "lucide-react";
 import { prepareImageUpload, prepareVideoUpload } from "@/lib/compress";
 import { createMedia } from "@/lib/library-api";
-import { isHttpUrl } from "@/lib/media-url";
+import { detectMediaKind, isHttpUrl, normalizeMediaUrl, parseVideoUrl } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
 
 export function MediaUploader({
@@ -66,16 +66,28 @@ export function MediaUploader({
   }
 
   async function handleLink() {
-    const url = link.trim();
-    if (!isHttpUrl(url)) {
+    const raw = link.trim();
+    if (!isHttpUrl(raw)) {
       setError("সঠিক https লিংক দিন");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const isImage = /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url);
-      const kind = isImage ? "image" : "video";
+      const url = normalizeMediaUrl(raw);
+      const parsed = parseVideoUrl(url);
+      let kind: "image" | "video";
+      if (parsed?.provider === "youtube" || parsed?.provider === "vimeo") {
+        kind = "video";
+      } else if (/\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url)) {
+        kind = "image";
+      } else if (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(url)) {
+        kind = "video";
+      } else {
+        // No usable extension (common for Drive/Dropbox/etc links) —
+        // actually try loading it to tell image from video.
+        kind = await detectMediaKind(url);
+      }
       const result = await createMedia({
         data: {
           kind,
