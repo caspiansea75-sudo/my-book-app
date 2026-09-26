@@ -96,7 +96,7 @@ For streaming, structured outputs, vision, or the full model list, follow
 
 The same key drives **runtime** image/video features in the app (user avatars,
 scene art, generated content). Distinct from your build-time `imagine_text_to_image` / `imagine_image_to_image` / `imagine_image_to_video` tools (the
-`imagine` skill): use the **API** when the *running app* generates media, the
+`imagine-grok-build` skill): use the **API** when the *running app* generates media, the
 tools when *you* create static assets while building.
 
 ```ts

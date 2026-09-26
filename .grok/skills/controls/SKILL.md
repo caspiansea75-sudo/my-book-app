@@ -191,9 +191,10 @@ private closures:
 export type ControlsProbe = {
   getYaw: () => number;       // radians; or getHeading()
   getSpeed: () => number;
-  /** Inject held actions for one frame path; clear after test */
+  /** Inject held actions instead of real keys; both stay applied until you
+   *  change them, so §5c can hold a key across frames and clear at the end. */
   setSteer?: (v: number) => void; // -1..1, same sign as production
-  setKeys?: (codes: string[]) => void;
+  setKeys?: (codes: string[]) => void; // held until the next call; `[]` clears
 };
 
 declare global {
@@ -208,28 +209,48 @@ Wire `window.__controlsTest` from the game loop when `import.meta.env.DEV` or a
 
 ### 5c. Automated smoke (run it)
 
-In a short Playwright / agent script against the local preview:
+Drive the §5b probe with the preinstalled **`agent-browser`** CLI — that is the
+first move, not a hand-written script. **A thrown `eval` exits non-zero; a
+merely falsy one does not**, so assert by throwing. Run it as one `batch` — one
+CLI call, not one per verb — taking JSON on stdin; `--bail` stops at the first
+failing step and exits non-zero.
 
-1. Start / click-to-play so the sim runs.
-2. Set forward throttle; wait until `getSpeed() > threshold`.
-3. Record `y0 = getYaw()`.
-4. Hold **A** (or `setSteer(+1)` if that is your left convention) for 500ms.
-5. Assert `deltaAngle(getYaw(), y0)` has the **left** sign for your basis
-   (with the §1 basis: **left ⇒ yaw increased**).
-6. Repeat for **D** with opposite sign.
-7. **Fail the build** if either assert fails; fix signs; re-run.
-
-Pseudo-assert for the §1 basis:
-
-```js
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-// After holding A (left) while moving forward:
-expect(wrap(yawAfter - yawBefore)).toBeGreaterThan(0.05);
-// After holding D:
-expect(wrap(yawAfter - yawBefore)).toBeLessThan(-0.05);
+```bash
+agent-browser batch --bail <<'JSON'   # find's label is case-sensitive: copy it from `snapshot -i`
+[["open","http://127.0.0.1:8080/"],
+ ["find","text","Start","click"],
+ ["eval","if (!window.__controlsTest?.setKeys) throw Error('no §5b probe: add setKeys')"],
+ ["eval","__controlsTest.setKeys(['KeyW'])"],
+ ["wait","600"],
+ ["eval","if (__controlsTest.getSpeed() <= 0.1) throw Error('W: no move')"],
+ ["eval","(async () => { const t = __controlsTest, y0 = t.getYaw(); t.setKeys(['KeyW','KeyA']); await new Promise(r => setTimeout(r, 300)); t.setKeys(['KeyW']); const d = t.getYaw() - y0, w = Math.atan2(Math.sin(d), Math.cos(d)); if (w < -0.05) throw Error('A turns RIGHT — inverted, got ' + w.toFixed(2)); if (w <= 0.05) throw Error('A barely turned (' + w.toFixed(2) + ') — hold longer or check the sim is running'); return 'A ok' })()"],
+ ["eval","__controlsTest.setKeys([])"],
+ ["screenshot","/workspace/screenshots/controls.png"],
+ ["close"]]
+JSON
 ```
 
-For planes, assert **roll** (or on-screen bank) the same way: A ⇒ bank left.
+**Hold keys through the probe, not with `keydown`** — `agent-browser keydown`
+does not reach §4's `Set`, so a correct game reads as broken. No `setKeys` on
+your probe? Add it (§5b), or dispatch the key event yourself — the browser-QA
+reference's **Keys** note has the mechanism and the form.
+
+The hold sits **inside** one `eval`: spread across commands it lasts however
+long they take, and the ±π wrap in `Math.atan2(Math.sin(d), Math.cos(d))`
+reads a craft that turned more than π as one turning the other way. The IIFE is
+what keeps the step re-runnable — a bare `const d = …` fails the second time
+with "already declared" — and `async` is what lets the hold run in page time.
+Repeat for **D** with `'KeyD'` and both comparisons mirrored (`w > 0.05` is
+inverted, `w >= -0.05` is barely), single-quoted so the JSON needs no escapes;
+for planes assert **roll**: A ⇒ bank left.
+
+**`A turns RIGHT`** is the sign error: flip **one** sign and re-run.
+**`A barely turned`** is not — the craft moved the right way, just less than
+0.05 rad in 300 ms, which a boat or a heavy rover will do; raise the hold, or
+check the sim is running, and flip nothing. Any other non-zero exit — no probe,
+a wedged daemon — means the check never ran: read the message first. Read the
+browser-QA reference `AGENTS.md` links before your first flow — verbs, argument
+shapes and the fallback are there.
 
 ### 5d. What not to do
 

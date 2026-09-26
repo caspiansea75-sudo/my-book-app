@@ -27,7 +27,6 @@
         "./src/*"
       ]
     },
-    "resolveJsonModule": true,
     "allowImportingTsExtensions": true
   },
   "include": [

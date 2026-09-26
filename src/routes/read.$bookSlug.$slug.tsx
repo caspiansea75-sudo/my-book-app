@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
-import { getBookIndex, loadChapter, padSlug, type Chapter } from "@/lib/book";
+import { padSlug, type Chapter } from "@/lib/book";
+import { loadChapterForBook } from "@/lib/load-chapter";
+import { resolveBook } from "@/lib/library-api";
 import { useReaderStore } from "@/lib/reader-store";
 import { AmbientAudio } from "@/components/book/ambient-audio";
 import { ChapterBody } from "@/components/book/chapter-body";
@@ -9,14 +11,18 @@ import { TocDrawer, TocList } from "@/components/book/toc";
 import { WarningGate } from "@/components/book/warning-gate";
 
 export const Route = createFileRoute("/read/$bookSlug/$slug")({
+  loader: async ({ params }) => {
+    const book = await resolveBook({ data: { slug: params.bookSlug } });
+    if (!book) throw notFound();
+    return { book };
+  },
   component: ReaderPage,
 });
 
 function ReaderPage() {
-  const { bookSlug, slug: rawSlug } = Route.useParams();
+  const { book } = Route.useLoaderData();
+  const { slug: rawSlug } = Route.useParams();
   const slug = padSlug(rawSlug);
-  const book = getBookIndex(bookSlug);
-  if (!book) throw notFound();
 
   const [chapter, setChapter] = useState<Chapter | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,12 +35,12 @@ function ReaderPage() {
     let live = true;
     setChapter(null);
     setError(null);
-    loadChapter(bookSlug, slug)
+    loadChapterForBook(book, slug)
       .then((ch) => {
         if (!live) return;
         setChapter(ch);
-        setLastSlug(slug);
-        setProgress(slug, ch.sections[0]?.paragraphs[0]?.id ?? slug);
+        setLastSlug(book.slug, slug);
+        setProgress(`${book.slug}:${slug}`, ch.sections[0]?.paragraphs[0]?.id ?? slug);
         window.scrollTo(0, 0);
       })
       .catch((err: unknown) => {
@@ -43,7 +49,7 @@ function ReaderPage() {
     return () => {
       live = false;
     };
-  }, [bookSlug, slug, setLastSlug, setProgress]);
+  }, [book, slug, setLastSlug, setProgress]);
 
   const nav = useMemo(() => {
     const i = book.chapters.findIndex((c) => c.slug === slug);
@@ -58,7 +64,7 @@ function ReaderPage() {
       <AmbientAudio />
       <WarningGate />
       <ReaderBar
-        bookSlug={bookSlug}
+        bookSlug={book.slug}
         title={chapter?.title ?? "পড়া হচ্ছে…"}
         onOpenToc={() => setTocOpen(true)}
         prevSlug={nav.prev}
@@ -68,7 +74,7 @@ function ReaderPage() {
       <div className="mx-auto flex max-w-6xl">
         <aside className="toc-rail sticky top-28 hidden w-72 shrink-0 overflow-y-auto border-r border-border bg-surface/40 px-2 py-6 lg:block">
           <p className="mb-3 px-3 font-sans text-xs tracking-widest text-subtle">সূচিপত্র</p>
-          <TocList bookSlug={bookSlug} chapters={book.chapters} activeSlug={slug} />
+          <TocList bookSlug={book.slug} chapters={book.chapters} activeSlug={slug} />
         </aside>
 
         <div className="min-w-0 flex-1">
@@ -78,7 +84,7 @@ function ReaderPage() {
               <p className="mt-2 font-sans text-sm text-muted">{error}</p>
               <Link
                 to="/book/$bookSlug"
-                params={{ bookSlug }}
+                params={{ bookSlug: book.slug }}
                 className="pressable mt-6 inline-flex h-11 items-center rounded-lg bg-accent px-4 text-sm text-accent-fg"
               >
                 প্রচ্ছদে ফিরুন
@@ -93,12 +99,12 @@ function ReaderPage() {
             </div>
           ) : (
             <>
-              <ChapterBody chapter={chapter} fontSize={fontSize} bookSlug={bookSlug} />
+              <ChapterBody chapter={chapter} fontSize={fontSize} bookSlug={book.slug} />
               <nav className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 pb-16">
                 {nav.prev ? (
                   <Link
                     to="/read/$bookSlug/$slug"
-                    params={{ bookSlug, slug: nav.prev }}
+                    params={{ bookSlug: book.slug, slug: nav.prev }}
                     className="pressable inline-flex h-12 items-center rounded-lg border border-border bg-surface px-4 font-sans text-sm text-fg"
                   >
                     আগের আপডেট
@@ -109,7 +115,7 @@ function ReaderPage() {
                 {nav.next ? (
                   <Link
                     to="/read/$bookSlug/$slug"
-                    params={{ bookSlug, slug: nav.next }}
+                    params={{ bookSlug: book.slug, slug: nav.next }}
                     className="pressable inline-flex h-12 items-center rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
                   >
                     পরের আপডেট
@@ -117,7 +123,7 @@ function ReaderPage() {
                 ) : (
                   <Link
                     to="/book/$bookSlug"
-                    params={{ bookSlug }}
+                    params={{ bookSlug: book.slug }}
                     className="pressable inline-flex h-12 items-center rounded-lg border border-border px-4 font-sans text-sm text-fg"
                   >
                     প্রচ্ছদ
@@ -130,7 +136,7 @@ function ReaderPage() {
       </div>
 
       <TocDrawer
-        bookSlug={bookSlug}
+        bookSlug={book.slug}
         open={tocOpen}
         onClose={() => setTocOpen(false)}
         chapters={book.chapters}

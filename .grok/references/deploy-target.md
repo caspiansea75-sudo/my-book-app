@@ -7,6 +7,13 @@ that works under `npm run dev` but breaks a production / SSR build is a bug.
 Watch for dev-only deps, server-only Node APIs run at import time, runtime
 filesystem writes, and hard-coded ports / hosts / secrets.
 
+Vercel installs with `npm install --omit=dev` (`vercel.json`), so anything the
+production build imports — Vite plugins, PostCSS/Tailwind plugins, type-only
+packages a `vite.config` imports — must be in `dependencies`. Only lint, format
+and test tooling belongs in `devDependencies`; a package added with
+`npm install -D` will be missing on deploy and the build fails with
+"Cannot find package".
+
 ## A passing `npm run build` does not mean the deployed app renders
 
 The most common blank-deploy failure is

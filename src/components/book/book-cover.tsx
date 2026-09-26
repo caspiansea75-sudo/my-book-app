@@ -1,25 +1,33 @@
-import { Link, notFound } from "@tanstack/react-router";
-import { BookOpen, CloudRain, ChevronLeft } from "lucide-react";
-import { getBookIndex, formatCount } from "@/lib/book";
-import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
-import { WarningGate } from "@/components/book/warning-gate";
+import { Link } from "@tanstack/react-router";
+import { BookOpen, ChevronLeft, CloudRain, PenLine } from "lucide-react";
+import { CoverArt } from "@/components/book/cover-art";
 import { AmbientAudio } from "@/components/book/ambient-audio";
+import { WarningGate } from "@/components/book/warning-gate";
+import { formatCount, type BookIndex } from "@/lib/book";
+import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
 import { cn } from "@/lib/utils";
 
-export function BookCoverPage({ bookSlug }: { bookSlug: string }) {
-  const lastSlug = useReaderStore((s) => s.lastSlug);
+export function BookCoverPage({ book }: { book: BookIndex }) {
+  const lastSlug = useReaderStore((s) => s.lastByBook[book.slug]);
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
-  const book = getBookIndex(bookSlug);
-
-  if (!book) throw notFound();
+  const first = book.chapters[0]?.slug || "01";
+  const resume = lastSlug || first;
 
   return (
     <main className="relative min-h-dvh">
       <AmbientAudio />
       <WarningGate />
 
-      <section className="mx-auto flex min-h-dvh max-w-3xl flex-col justify-center px-5 py-16 sm:px-8">
+      <section className="mx-auto grid min-h-dvh max-w-5xl items-center gap-10 px-5 py-16 sm:px-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <CoverArt
+          title={book.title}
+          tagline={book.tagline}
+          coverUrl={book.coverUrl}
+          slug={book.slug}
+          className="aspect-[3/4] w-full max-w-sm justify-self-center rounded-xl shadow-soft lg:justify-self-end"
+        />
+
         <div className="stagger-in">
           <Link
             to="/"
@@ -43,18 +51,26 @@ export function BookCoverPage({ bookSlug }: { bookSlug: string }) {
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
               to="/read/$bookSlug/$slug"
-              params={{ bookSlug, slug: lastSlug || book.chapters[0]?.slug || "01" }}
+              params={{ bookSlug: book.slug, slug: resume }}
               className="pressable lamp-glow inline-flex h-12 items-center gap-2 rounded-lg bg-accent px-5 font-sans text-sm font-medium text-accent-fg"
             >
               <BookOpen className="size-4" strokeWidth={1.75} />
-              {lastSlug && lastSlug !== book.chapters[0]?.slug ? "যেখানে ছিলেন" : "পড়া শুরু করুন"}
+              {lastSlug && lastSlug !== first ? "যেখানে ছিলেন" : "পড়া শুরু করুন"}
             </Link>
             <Link
               to="/read/$bookSlug/$slug"
-              params={{ bookSlug, slug: book.chapters[0]?.slug || "01" }}
+              params={{ bookSlug: book.slug, slug: first }}
               className="pressable inline-flex h-12 items-center rounded-lg border border-border bg-surface px-5 font-sans text-sm text-fg"
             >
               প্রথম আপডেট
+            </Link>
+            <Link
+              to="/studio/$bookSlug"
+              params={{ bookSlug: book.slug }}
+              className="pressable inline-flex h-12 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-muted hover:text-fg"
+            >
+              <PenLine className="size-4" strokeWidth={1.75} />
+              {book.origin === "studio" ? "সম্পাদনা" : "ছবি যোগ"}
             </Link>
           </div>
 
@@ -78,7 +94,7 @@ export function BookCoverPage({ bookSlug }: { bookSlug: string }) {
         </div>
       </section>
 
-      <section className="mx-auto max-w-3xl px-5 pb-24 sm:px-8">
+      <section className="mx-auto max-w-5xl px-5 pb-24 sm:px-8">
         <div className="mb-6 flex items-end justify-between gap-4">
           <div>
             <h2 className="font-display text-2xl">সূচিপত্র</h2>
@@ -93,7 +109,7 @@ export function BookCoverPage({ bookSlug }: { bookSlug: string }) {
             <li key={ch.slug}>
               <Link
                 to="/read/$bookSlug/$slug"
-                params={{ bookSlug, slug: ch.slug }}
+                params={{ bookSlug: book.slug, slug: ch.slug }}
                 className="pressable flex h-full flex-col rounded-lg border border-border bg-surface p-4 hover:bg-surface-2"
               >
                 <span className="flex items-center justify-between gap-2">

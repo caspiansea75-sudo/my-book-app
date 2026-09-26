@@ -1,5 +1,25 @@
 # Reading the user, protecting routes, and preventing flicker
 
+## When sign-in UI may render (hard rules)
+
+- **Connector / owner-data apps: never gate the data fetch behind a session.**
+  When the data comes from the app's connector grants, the fetch runs on the
+  gate-injected connector token — a chain that does not involve the app
+  session. Fetch first; use the session for personalization only (greeting,
+  per-user rows). Requiring sign-in before fetching adds a click that changes
+  nothing.
+- **A sign-in CTA may render only after the session check has RESOLVED to no
+  user** — never while `isPending` is true (no CTA flash on load), and never
+  as a reaction to a data error (the `app-data` skill's error mapping owns
+  those states; only its `login` kind ever shows "Continue with Grok").
+- **In preview, gate identity signs the owner in with zero clicks** — a
+  visible sign-in button for the owner in the preview is a bug to fix, not a
+  style choice (`grok-identity.md`).
+- **Use `<SignInGate>` from `@/lib/auth/gates`** — `{ children, fallback? }`:
+  nothing while pending, `children` when signed in, `fallback` (or the
+  standard provider buttons) only once signed out is known. Do not hand-roll
+  sign-in CTAs from `useCurrentUser()`.
+
 ## Reading the user / protecting routes
 
 `@/lib/auth/use-current-user` (with auth on these reflect the REAL session, so a
@@ -12,9 +32,11 @@ preview visitor is signed out until they sign in):
   reload bounces signed-in users to sign-in.
 
 **State components** from `@/lib/auth/gates`: `SignedIn`, `SignedOut`,
-`RedirectToSignIn`, `UserButton`. (When auth is disabled via
-`VITE_AUTH_ENABLED=false` they apply dev-user semantics so a non-auth app still
-renders.)
+`SignInGate` (`{ children, fallback? }` — nothing while pending, `children`
+signed in, `fallback` or the standard provider buttons only once signed out is
+known; prefer it over hand-rolled sign-in CTAs), `RedirectToSignIn`,
+`UserButton`. (When auth is disabled via `VITE_AUTH_ENABLED=false` they apply
+dev-user semantics so a non-auth app still renders.)
 
 ```tsx
 import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";

@@ -66,7 +66,9 @@ Keep building. Stay sequential only if the user is art-directing or the art to r
 **Never wait for it.** No `wait_tasks`, and **never `get_task_output` on the brand task**: reading a task's
 output consumes it, and a consumed task sends no completion notification, so the card's result — a failure
 included — would reach nobody. Answer as soon as the app renders; the pass wakes you later, and that turn is
-**one short sentence at most** ("Added the share card." / "The card failed; the default one stands").
+**one short sentence at most** — one that asks for a republish, since `public/og.jpg` ships in the build
+and a card that lands after a publish never reaches the live app on its own:
+"Added the share card — publish again if you already did." / "The card failed; the default one stands."
 
 While the pass keeps `/workspace/.grok/og-pending` fresh, brand checks say nothing about the card: in flight
 is not a finding. The marker goes stale after 10 minutes, so a very long pass lets the warning through — but

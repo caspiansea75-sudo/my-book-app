@@ -1,0 +1,1 @@
+import{g as e,h as t,m as n}from"./index-qbHokjEj.js";import{i as r,n as i}from"./book-BVHq9QGW.js";async function a(a,o){let s=r(o);if(a.origin===`studio`){let e=await t({data:{bookSlug:a.slug,slug:s}});if(!e)throw Error(`এই আপডেটটি পাওয়া যায়নি`);return e}let c=await i(a.slug,s),l=await n({data:{bookSlug:a.slug,slug:s}});return e(c,l)}export{a as t};

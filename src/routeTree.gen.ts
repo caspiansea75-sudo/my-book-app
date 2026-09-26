@@ -10,12 +10,27 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as StudioRouteImport } from './routes/studio'
 import { Route as BookBookSlugRouteImport } from './routes/book.$bookSlug'
+import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
+import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
 import { Route as ReadBookSlugSlugRouteImport } from './routes/read.$bookSlug.$slug'
+import { Route as StudioBookSlugSlugRouteImport } from './routes/studio.$bookSlug.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GalleryRoute = GalleryRouteImport.update({
+  id: '/gallery',
+  path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudioRoute = StudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookBookSlugRoute = BookBookSlugRouteImport.update({
@@ -23,39 +38,97 @@ const BookBookSlugRoute = BookBookSlugRouteImport.update({
   path: '/book/$bookSlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioBookSlugRoute = StudioBookSlugRouteImport.update({
+  id: '/$bookSlug',
+  path: '/$bookSlug',
+  getParentRoute: () => StudioRoute,
+} as any)
+const ApiMediaIdRoute = ApiMediaIdRouteImport.update({
+  id: '/api/media/$id',
+  path: '/api/media/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReadBookSlugSlugRoute = ReadBookSlugSlugRouteImport.update({
   id: '/read/$bookSlug/$slug',
   path: '/read/$bookSlug/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StudioBookSlugSlugRoute = StudioBookSlugSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => StudioBookSlugRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/gallery': typeof GalleryRoute
+  '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
+  '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
+  '/api/media/$id': typeof ApiMediaIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
+  '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/gallery': typeof GalleryRoute
+  '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
+  '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
+  '/api/media/$id': typeof ApiMediaIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
+  '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/gallery': typeof GalleryRoute
+  '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
+  '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
+  '/api/media/$id': typeof ApiMediaIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
+  '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/book/$bookSlug' | '/read/$bookSlug/$slug'
+  fullPaths:
+    | '/'
+    | '/gallery'
+    | '/studio'
+    | '/book/$bookSlug'
+    | '/studio/$bookSlug'
+    | '/api/media/$id'
+    | '/read/$bookSlug/$slug'
+    | '/studio/$bookSlug/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/book/$bookSlug' | '/read/$bookSlug/$slug'
-  id: '__root__' | '/' | '/book/$bookSlug' | '/read/$bookSlug/$slug'
+  to:
+    | '/'
+    | '/gallery'
+    | '/studio'
+    | '/book/$bookSlug'
+    | '/studio/$bookSlug'
+    | '/api/media/$id'
+    | '/read/$bookSlug/$slug'
+    | '/studio/$bookSlug/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/gallery'
+    | '/studio'
+    | '/book/$bookSlug'
+    | '/studio/$bookSlug'
+    | '/api/media/$id'
+    | '/read/$bookSlug/$slug'
+    | '/studio/$bookSlug/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  GalleryRoute: typeof GalleryRoute
+  StudioRoute: typeof StudioRouteWithChildren
   BookBookSlugRoute: typeof BookBookSlugRoute
+  ApiMediaIdRoute: typeof ApiMediaIdRoute
   ReadBookSlugSlugRoute: typeof ReadBookSlugSlugRoute
 }
 
@@ -68,11 +141,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gallery': {
+      id: '/gallery'
+      path: '/gallery'
+      fullPath: '/gallery'
+      preLoaderRoute: typeof GalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio': {
+      id: '/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/book/$bookSlug': {
       id: '/book/$bookSlug'
       path: '/book/$bookSlug'
       fullPath: '/book/$bookSlug'
       preLoaderRoute: typeof BookBookSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/studio/$bookSlug': {
+      id: '/studio/$bookSlug'
+      path: '/$bookSlug'
+      fullPath: '/studio/$bookSlug'
+      preLoaderRoute: typeof StudioBookSlugRouteImport
+      parentRoute: typeof StudioRoute
+    }
+    '/api/media/$id': {
+      id: '/api/media/$id'
+      path: '/api/media/$id'
+      fullPath: '/api/media/$id'
+      preLoaderRoute: typeof ApiMediaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/read/$bookSlug/$slug': {
@@ -82,12 +183,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReadBookSlugSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/studio/$bookSlug/$slug': {
+      id: '/studio/$bookSlug/$slug'
+      path: '/$slug'
+      fullPath: '/studio/$bookSlug/$slug'
+      preLoaderRoute: typeof StudioBookSlugSlugRouteImport
+      parentRoute: typeof StudioBookSlugRoute
+    }
   }
 }
 
+interface StudioBookSlugRouteChildren {
+  StudioBookSlugSlugRoute: typeof StudioBookSlugSlugRoute
+}
+
+const StudioBookSlugRouteChildren: StudioBookSlugRouteChildren = {
+  StudioBookSlugSlugRoute: StudioBookSlugSlugRoute,
+}
+
+const StudioBookSlugRouteWithChildren = StudioBookSlugRoute._addFileChildren(
+  StudioBookSlugRouteChildren,
+)
+
+interface StudioRouteChildren {
+  StudioBookSlugRoute: typeof StudioBookSlugRouteWithChildren
+}
+
+const StudioRouteChildren: StudioRouteChildren = {
+  StudioBookSlugRoute: StudioBookSlugRouteWithChildren,
+}
+
+const StudioRouteWithChildren =
+  StudioRoute._addFileChildren(StudioRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  GalleryRoute: GalleryRoute,
+  StudioRoute: StudioRouteWithChildren,
   BookBookSlugRoute: BookBookSlugRoute,
+  ApiMediaIdRoute: ApiMediaIdRoute,
   ReadBookSlugSlugRoute: ReadBookSlugSlugRoute,
 }
 export const routeTree = rootRouteImport

@@ -73,8 +73,6 @@
   }
 }
 
-/* —— Themes: lofi Dhaka night / café / paper / leather —— */
-
 :root,
 [data-theme="monsoon"] {
   --book-bg: #0c1016;
@@ -148,7 +146,6 @@
   --rain-opacity: 0.12;
 }
 
-/* Grain + vignette */
 .book-grain {
   pointer-events: none;
   position: fixed;
@@ -172,7 +169,6 @@
   opacity: 0.18;
 }
 
-/* Rain */
 .rain-layer {
   pointer-events: none;
   position: fixed;
@@ -209,7 +205,6 @@
   }
 }
 
-/* Cover title shimmer */
 .cover-title {
   background: linear-gradient(
     105deg,
@@ -285,7 +280,6 @@
   }
 }
 
-/* Chapter body */
 .chapter-body {
   font-family: var(--font-display);
   font-weight: 400;
@@ -325,7 +319,6 @@
   background: var(--book-border);
 }
 
-/* Sensitive block */
 .nsfw-text {
   color: var(--book-nsfw);
   font-family: var(--font-display);
@@ -386,10 +379,177 @@
   .drawer {
     transition: none;
   }
+  .pressable {
+    transition: none;
+  }
 }
 
 .ornament {
   font-family: var(--font-display);
   letter-spacing: 0.55em;
   color: var(--book-subtle);
+}
+
+.field-input {
+  width: 100%;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--book-border);
+  background: var(--book-bg);
+  color: var(--book-fg);
+  padding: 10px 12px;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  outline: none;
+}
+.field-input:focus {
+  border-color: color-mix(in oklab, var(--book-lamp) 55%, var(--book-border));
+}
+.field-input:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.cover-plate {
+  background: var(--book-surface-2);
+  min-height: 8rem;
+}
+.cover-plate img {
+  outline: 1px solid color-mix(in oklab, var(--book-fg) 10%, transparent);
+  outline-offset: -1px;
+}
+.cover-plate-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, color-mix(in oklab, var(--book-bg) 55%, transparent), transparent 42%);
+  pointer-events: none;
+}
+.cover-plate-lines {
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+  background-image: repeating-linear-gradient(
+    -18deg,
+    transparent,
+    transparent 11px,
+    color-mix(in oklab, var(--book-fg) 18%, transparent) 12px
+  );
+  pointer-events: none;
+}
+
+.media-block {
+  margin: 1.6em 0 1.8em;
+}
+.media-block figcaption {
+  margin-top: 0.7em;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--book-muted);
+  text-align: center;
+}
+.media-frame {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--book-surface);
+  border: 1px solid var(--book-border);
+}
+.media-frame img,
+.media-frame video {
+  display: block;
+  width: 100%;
+  height: auto;
+  outline: 1px solid color-mix(in oklab, var(--book-fg) 10%, transparent);
+  outline-offset: -1px;
+}
+.media-frame-video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+}
+.media-frame-video iframe,
+.media-frame-video video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.gallery-grid {
+  columns: 2;
+  column-gap: 12px;
+}
+@media (min-width: 720px) {
+  .gallery-grid {
+    columns: 3;
+  }
+}
+.gallery-tile {
+  position: relative;
+  break-inside: avoid;
+  margin-bottom: 12px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--book-border);
+  background: var(--book-surface);
+}
+.gallery-tile img {
+  display: block;
+  width: 100%;
+  height: auto;
+  outline: 1px solid color-mix(in oklab, var(--book-fg) 10%, transparent);
+  outline-offset: -1px;
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 48px 16px 16px;
+}
+.lightbox-scrim {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--book-bg) 82%, black);
+  border: 0;
+}
+.lightbox-stage {
+  position: relative;
+  z-index: 1;
+  width: min(960px, 100%);
+  max-height: calc(100dvh - 64px);
+  overflow: auto;
+}
+.lightbox-stage .media-block {
+  margin: 0;
+}
+.lightbox-btn {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--book-border);
+  background: var(--book-surface);
+  color: var(--book-fg);
+}
+.lightbox-close {
+  top: 12px;
+  right: 12px;
+}
+.lightbox-prev {
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lightbox-next {
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
 }

@@ -60,12 +60,10 @@ export function ReaderBar({
           className="pressable flex items-center gap-2 rounded-md px-2 py-2 text-muted hover:text-fg"
         >
           <BookOpen className="size-4" strokeWidth={1.75} />
-          <span className="hidden font-display text-sm sm:inline">পটিয়সী</span>
+          <span className="hidden font-display text-sm sm:inline">গল্প</span>
         </Link>
 
-        <p className="min-w-0 flex-1 truncate px-1 text-center font-display text-sm text-fg">
-          {title}
-        </p>
+        <p className="min-w-0 flex-1 truncate px-1 text-center font-display text-sm text-fg">{title}</p>
 
         <div className="flex items-center">
           {prevSlug ? (
@@ -127,14 +125,12 @@ export function ReaderBar({
           >
             <Minus className="size-3.5" strokeWidth={1.75} />
           </button>
-          <span className="min-w-8 text-center font-sans text-xs tabular-nums text-muted">
-            {fontSize}
-          </span>
+          <span className="min-w-8 text-center font-sans text-xs tabular-nums text-muted">{fontSize}</span>
           <button
             type="button"
             onClick={() => setFontSize(fontSize + 1)}
             className="pressable grid size-10 place-items-center text-muted hover:text-fg"
-            aria-label="অক্ষর বড়"
+            aria-label="অক্ষর বড়"
           >
             <Plus className="size-3.5" strokeWidth={1.75} />
           </button>
@@ -144,7 +140,7 @@ export function ReaderBar({
           type="button"
           onClick={() => setAudioOn(!audioOn)}
           className="pressable grid size-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted hover:text-fg"
-          aria-label={audioOn ? "আওয়াজ বন্ধ" : "লোফাই বৃষ্টি"}
+          aria-label={audioOn ? "আওয়াজ বন্ধ" : "লোফাই বৃষ্টি"}
         >
           {audioOn ? (
             <Volume2 className="size-4" strokeWidth={1.75} />

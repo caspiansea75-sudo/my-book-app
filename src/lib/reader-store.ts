@@ -5,7 +5,7 @@ export const THEMES = [
   { id: "monsoon", label: "বর্ষা রাত", hint: "ধানমন্ডি বৃষ্টি" },
   { id: "cafe", label: "কফি হাউস", hint: "অ্যাম্বার ল্যাম্প" },
   { id: "manuscript", label: "হাতের খাতা", hint: "ক্রীম কাগজ" },
-  { id: "leather", label: "পুরান ঢাকা", hint: "চামড়ার মলাট" },
+  { id: "leather", label: "পুরান ঢাকা", hint: "চামড়ার মলাট" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];
@@ -15,7 +15,7 @@ type ReaderState = {
   fontSize: number;
   nsfwMode: "hidden" | "shown";
   inverted: string[];
-  lastSlug: string;
+  lastByBook: Record<string, string>;
   progress: Record<string, string>;
   audioOn: boolean;
   warned: boolean;
@@ -25,8 +25,9 @@ type ReaderState = {
   hideAllNsfw: () => void;
   togglePara: (id: string) => void;
   isParaVisible: (id: string, nsfw: boolean) => boolean;
-  setLastSlug: (slug: string) => void;
-  setProgress: (slug: string, paraId: string) => void;
+  setLastSlug: (bookSlug: string, slug: string) => void;
+  lastSlugFor: (bookSlug: string) => string | undefined;
+  setProgress: (key: string, paraId: string) => void;
   setAudioOn: (on: boolean) => void;
   setWarned: () => void;
 };
@@ -38,7 +39,7 @@ export const useReaderStore = create<ReaderState>()(
       fontSize: 19,
       nsfwMode: "hidden",
       inverted: [],
-      lastSlug: "01",
+      lastByBook: {},
       progress: {},
       audioOn: false,
       warned: false,
@@ -58,20 +59,22 @@ export const useReaderStore = create<ReaderState>()(
         const flipped = inverted.includes(id);
         return nsfwMode === "shown" ? !flipped : flipped;
       },
-      setLastSlug: (slug) => set({ lastSlug: slug }),
-      setProgress: (slug, paraId) =>
-        set((s) => ({ progress: { ...s.progress, [slug]: paraId } })),
+      setLastSlug: (bookSlug, slug) =>
+        set((s) => ({ lastByBook: { ...s.lastByBook, [bookSlug]: slug } })),
+      lastSlugFor: (bookSlug) => get().lastByBook[bookSlug],
+      setProgress: (key, paraId) =>
+        set((s) => ({ progress: { ...s.progress, [key]: paraId } })),
       setAudioOn: (audioOn) => set({ audioOn }),
       setWarned: () => set({ warned: true }),
     }),
     {
-      name: "aghoton-reader-v1",
+      name: "golpo-reader-v2",
       partialize: (s) => ({
         theme: s.theme,
         fontSize: s.fontSize,
         nsfwMode: s.nsfwMode,
         inverted: s.inverted.slice(-400),
-        lastSlug: s.lastSlug,
+        lastByBook: s.lastByBook,
         progress: s.progress,
         audioOn: s.audioOn,
         warned: s.warned,

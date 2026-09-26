@@ -22,7 +22,7 @@ export function TocList({
     <nav aria-label="সূচিপত্র" className="flex flex-col gap-1 pb-8">
       {chapters.map((ch) => {
         const active = ch.slug === activeSlug;
-        const read = Boolean(progress[ch.slug]);
+        const read = Boolean(progress[`${bookSlug}:${ch.slug}`] || progress[ch.slug]);
         return (
           <Link
             key={ch.slug}
@@ -47,13 +47,9 @@ export function TocList({
                 <span className={cn("font-display text-sm font-medium", active ? "text-fg" : "text-fg/90")}>
                   {ch.title}
                 </span>
-                {ch.hasNsfw ? (
-                  <span className="font-sans text-xs text-nsfw/80">সং</span>
-                ) : null}
+                {ch.hasNsfw ? <span className="font-sans text-xs text-nsfw/80">সং</span> : null}
               </span>
-              <span className="mt-0.5 block truncate font-sans text-xs text-muted">
-                {ch.excerpt}
-              </span>
+              <span className="mt-0.5 block truncate font-sans text-xs text-muted">{ch.excerpt}</span>
             </span>
           </Link>
         );

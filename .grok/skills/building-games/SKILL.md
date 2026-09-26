@@ -154,7 +154,7 @@ forward = (-sin(yaw), 0, -cos(yaw))
   backgrounds, 2D sprites, UI art). **Never** use a generated photo as a 3D mesh,
   viewmodel, or character substitute — build those in 3D geometry / glTF.
   Set `crossOrigin="anonymous"` on images drawn to canvas/textures.
-  See the **`imagine`** skill (2D only — image tools cannot produce real 3D).
+  See the **`imagine-grok-build`** skill (2D only — image tools cannot produce real 3D).
 - **Engine-ready game art doctrine** → open **`game-asset-core`**
   (`../game-asset-core/`) for defaults + blind verify + retry discipline, then the
   matching specialist: **`game-animation-frames`** (loop / motion laws),

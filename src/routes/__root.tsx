@@ -4,7 +4,7 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeRoot } from "@/components/book/theme-root";
 import appCss from "../styles.css?url";
 
-const APP_NAME = "অঘটনঘটন পটিয়সী";
+const APP_NAME = "গল্প সংগ্রহ";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0c1016" },
       {
         name: "description",
-        content: "সিনথিয়া ও মাহফুজের ঢাকা — একটি ইন্টারঅ্যাকটিভ ওয়েব বই।",
+        content: "একটি নৈশ লাইব্রেরি — গল্প পড়ুন, ছবি ও ভিডিও যোগ করুন।",
       },
     ],
     links: [

@@ -22,23 +22,23 @@ Google, X, and email/password.** No other social/OAuth provider (GitHub, Apple,
 Discord, …), no magic links, passkeys, OTP, phone/SMS, or anonymous sign-in. Do
 not add entries to `GROK_PROVIDERS`. Method detail and the email/password switch
 (edit **only** `src/lib/auth/email-password.ts`): `references/sign-in-methods.md`.
-**Exception — connector / app-data apps sign in ONLY via "Continue with Grok"
-gate sign-in, no Google/X buttons**: `references/grok-identity.md`.
+**Exception — gate viewers are signed in already; NEVER render login/re-auth
+buttons for them. Connector / app-data apps: ONLY gate "Continue with Grok",
+no Google/X buttons**: `references/grok-identity.md`.
 
 **Sign-in is OFF by default** — the template ships `.grok/app-env.json` with
 `{"VITE_AUTH_ENABLED": "false"}`, so only add accounts when the ask calls for
 them (AGENTS.md §0.5). Switching it on is "Turning sign-in on" below.
 
-**Once on, sign-in is REAL — including in the sandbox live preview.** Build real
-sign-in; do **NOT** scaffold demo/mock/hardcoded users. Preview: popup + baked
-preview client; deployed: per-app client + `DATABASE_URL` + zero-click gate
-sign-in (`references/prewired-and-env.md`, `references/grok-identity.md`).
+**Once on, sign-in is REAL — including in the sandbox live preview.** Do **NOT**
+scaffold demo/mock/hardcoded users. Preview: popup + baked preview client;
+deployed: per-app client + `DATABASE_URL` + zero-click gate sign-in
+(`references/prewired-and-env.md`).
 
 **While OFF** (`VITE_AUTH_ENABLED=false`) a **dev user** is returned so a
-non-auth app renders without a signed-in visitor — dev and preview only. The
-deployed flag is the deployer's (always `"true"` today), so deployed,
-`requireUserId` rejects every visitor; an app without sign-in uses neither
-`authMiddleware` nor `requireUserId`.
+non-auth app renders without a signed-in visitor — dev and preview only.
+Deployed, the flag is the platform's (always `"true"`), so `requireUserId`
+rejects every visitor — auth-off apps use neither it nor `authMiddleware`.
 
 Everything is **preinstalled and pre-wired in `src/lib/auth/`** — do not
 `npm install` anything; `better-auth` is the only auth package (never
@@ -77,7 +77,7 @@ Do all of this — the routes alone render the disabled branch:
    both from `references/wiring.md` (the catch-all API route is what makes
    `/api/auth/*` and the broker callback work).
 4. **Sign out:** a login with no way out is not done — render `<UserButton />`
-   from `@/lib/auth/gates` (it wires `signOut()`); see `references/session-ui.md`.
+   from `@/lib/auth/gates` (wires `signOut()`; hides sign-out for gate sessions).
 5. **Existing data:** wrap the app's server functions in `authMiddleware` (an
    auth-off app must not have been using it — see the `neon` skill). Rows from
    before sign-in existed are **development data**: drop and recreate them
@@ -95,9 +95,8 @@ Do all of this — the routes alone render the disabled branch:
 - **Reading the user:** `useCurrentUser()` is display-only (`null` means
   *loading OR signed out*, so never redirect on it alone); guard on
   `useCurrentUserState()`'s `isPending` instead. Gates (`SignedIn`, `SignedOut`,
-  `RedirectToSignIn`, `UserButton`) live in `@/lib/auth/gates`. Skeleton/flicker
-  rules and cookie-SSR for a zero-flash deployed first paint:
-  `references/session-ui.md`.
+  `SignInGate`, `RedirectToSignIn`, `UserButton`) live in `@/lib/auth/gates`.
+  CTA hard rules, skeleton, and cookie-SSR zero-flash: `references/session-ui.md`.
 - **Per-user data (mandatory):** every server function that touches per-user data
   must use the prewired `authMiddleware` and scope every read **and** write to
   `context.userId` — a Postgres driver has full DB access, so nothing else limits
@@ -108,3 +107,4 @@ Do all of this — the routes alone render the disabled branch:
   Fetch-Metadata sibling isolation are already wired — never weaken them to make
   an error go away (`references/sign-in-methods.md` covers the model and the
   "Invalid origin" fix).
+
