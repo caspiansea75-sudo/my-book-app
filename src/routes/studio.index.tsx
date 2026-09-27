@@ -1,24 +1,47 @@
 import { useState, type FormEvent } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { PenLine } from "lucide-react";
+import { PenLine, Sparkles } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
 import { createBook, listLibrary } from "@/lib/library-api";
+import { aiStatus, suggestBookBlurb } from "@/lib/ai-api";
 
 export const Route = createFileRoute("/studio/")({
-  loader: () => listLibrary(),
+  loader: async () => {
+    const [books, ai] = await Promise.all([listLibrary(), aiStatus()]);
+    return { books, aiConfigured: ai.configured };
+  },
   component: StudioHome,
 });
 
 function StudioHome() {
-  const books = Route.useLoaderData();
+  const { books, aiConfigured } = Route.useLoaderData();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
   const [tagline, setTagline] = useState("");
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function onAiSuggest() {
+    if (!title.trim()) {
+      setError("আগে একটা শিরোনাম লিখুন, তারপর AI সাহায্য করবে");
+      return;
+    }
+    setAiBusy(true);
+    setError(null);
+    try {
+      const { tagline: t, description: d } = await suggestBookBlurb({ data: { title } });
+      if (t) setTagline(t);
+      if (d) setDescription(d);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AI সাহায্য করতে পারেনি");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -82,6 +105,17 @@ function StudioHome() {
               className="field-input"
             />
           </label>
+          {aiConfigured ? (
+            <button
+              type="button"
+              onClick={() => void onAiSuggest()}
+              disabled={aiBusy || !title.trim()}
+              className="pressable mt-3 inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 font-sans text-xs text-lamp disabled:opacity-50"
+            >
+              <Sparkles className="size-3.5" strokeWidth={1.75} />
+              {aiBusy ? "AI লিখছে…" : "AI দিয়ে ট্যাগলাইন ও পরিচিতি লিখুন"}
+            </button>
+          ) : null}
           {error ? <p className="mt-3 font-sans text-sm text-nsfw">{error}</p> : null}
           <button
             type="submit"
