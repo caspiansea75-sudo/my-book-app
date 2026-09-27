@@ -18,6 +18,7 @@ type ReaderState = {
   lastByBook: Record<string, string>;
   progress: Record<string, string>;
   audioOn: boolean;
+  audioVolume: number;
   warned: boolean;
   setTheme: (theme: ThemeId) => void;
   setFontSize: (n: number) => void;
@@ -29,6 +30,7 @@ type ReaderState = {
   lastSlugFor: (bookSlug: string) => string | undefined;
   setProgress: (key: string, paraId: string) => void;
   setAudioOn: (on: boolean) => void;
+  setAudioVolume: (v: number) => void;
   setWarned: () => void;
 };
 
@@ -42,6 +44,7 @@ export const useReaderStore = create<ReaderState>()(
       lastByBook: {},
       progress: {},
       audioOn: false,
+      audioVolume: 0.6,
       warned: false,
       setTheme: (theme) => set({ theme }),
       setFontSize: (n) => set({ fontSize: Math.min(24, Math.max(16, n)) }),
@@ -65,6 +68,7 @@ export const useReaderStore = create<ReaderState>()(
       setProgress: (key, paraId) =>
         set((s) => ({ progress: { ...s.progress, [key]: paraId } })),
       setAudioOn: (audioOn) => set({ audioOn }),
+      setAudioVolume: (v) => set({ audioVolume: Math.min(1, Math.max(0, v)) }),
       setWarned: () => set({ warned: true }),
     }),
     {
@@ -77,6 +81,7 @@ export const useReaderStore = create<ReaderState>()(
         lastByBook: s.lastByBook,
         progress: s.progress,
         audioOn: s.audioOn,
+        audioVolume: s.audioVolume,
         warned: s.warned,
       }),
     },

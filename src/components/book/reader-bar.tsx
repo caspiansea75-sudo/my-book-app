@@ -36,6 +36,8 @@ export function ReaderBar({
   const setTheme = useReaderStore((s) => s.setTheme);
   const audioOn = useReaderStore((s) => s.audioOn);
   const setAudioOn = useReaderStore((s) => s.setAudioOn);
+  const audioVolume = useReaderStore((s) => s.audioVolume);
+  const setAudioVolume = useReaderStore((s) => s.setAudioVolume);
 
   const cycleTheme = () => {
     const i = THEMES.findIndex((t) => t.id === theme);
@@ -136,18 +138,33 @@ export function ReaderBar({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setAudioOn(!audioOn)}
-          className="pressable grid size-10 shrink-0 place-items-center rounded-full border border-border bg-surface text-muted hover:text-fg"
-          aria-label={audioOn ? "আওয়াজ বন্ধ" : "লোফাই বৃষ্টি"}
-        >
-          {audioOn ? (
-            <Volume2 className="size-4" strokeWidth={1.75} />
-          ) : (
-            <VolumeX className="size-4" strokeWidth={1.75} />
-          )}
-        </button>
+        <div className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-border bg-surface pl-1 pr-3">
+          <button
+            type="button"
+            onClick={() => setAudioOn(!audioOn)}
+            className="pressable grid size-8 shrink-0 place-items-center rounded-full text-muted hover:text-fg"
+            aria-label={audioOn ? "আওয়াজ বন্ধ" : "থিমের শব্দ চালু করুন"}
+          >
+            {audioOn ? (
+              <Volume2 className="size-4" strokeWidth={1.75} />
+            ) : (
+              <VolumeX className="size-4" strokeWidth={1.75} />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={audioOn ? Math.round(audioVolume * 100) : 0}
+            onChange={(e) => {
+              const v = Number(e.target.value) / 100;
+              setAudioVolume(v);
+              setAudioOn(v > 0);
+            }}
+            aria-label="আওয়াজের ভলিউম"
+            className="h-1.5 w-16 shrink-0 accent-lamp sm:w-20"
+          />
+        </div>
 
         <button
           type="button"
