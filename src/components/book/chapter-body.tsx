@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Chapter, Paragraph } from "@/lib/book";
 import { mediaSrc } from "@/lib/media-url";
 import { SensitiveBlock } from "@/components/book/sensitive-block";
 import { MediaFigure } from "@/components/book/media-figure";
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
+import { cn } from "@/lib/utils";
 
 export function ChapterBody({
   chapter,
@@ -40,8 +41,8 @@ export function ChapterBody({
 
   return (
     <article className="chapter-body mx-auto max-w-2xl px-4 pb-24 pt-8 sm:px-6">
-      <header className="mb-10 text-center">
-        <p className="ornament mb-3 text-[10px]">✦</p>
+      <header className="stagger-in mb-10 text-center">
+        <p className="ornament flicker mb-3 text-[10px]">✦</p>
         <p className="font-sans text-xs tracking-widest text-lamp">{chapter.titleEn}</p>
         <h1 className="mt-2 font-display text-3xl font-semibold text-fg sm:text-4xl">{chapter.title}</h1>
         {chapter.excerpt ? (
@@ -49,7 +50,7 @@ export function ChapterBody({
             {chapter.excerpt}
           </p>
         ) : null}
-        <p className="ornament mt-6 text-[10px]">✦</p>
+        <p className="ornament flicker mt-6 text-[10px]">✦</p>
       </header>
 
       {chapter.sections.map((section) => (
@@ -93,14 +94,14 @@ export function ChapterBody({
             const drop = firstBody;
             firstBody = false;
             return (
-              <p
+              <RevealParagraph
                 key={para.id}
                 id={para.id}
                 className={drop ? "drop-cap text-fg" : "text-fg"}
                 style={{ fontSize: `${fontSize}px` }}
               >
                 {para.text}
-              </p>
+              </RevealParagraph>
             );
           })}
         </section>
@@ -115,5 +116,57 @@ export function ChapterBody({
         />
       ) : null}
     </article>
+  );
+}
+
+/**
+ * A paragraph that fades/rises into view the first time it scrolls into
+ * the viewport. Falls back to fully visible immediately if
+ * IntersectionObserver isn't available (very old browsers) or the id
+ * already sits at the top of the page on first paint.
+ */
+function RevealParagraph({
+  id,
+  className,
+  style,
+  children,
+}: {
+  id: string;
+  className?: string;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -8% 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <p
+      ref={ref}
+      id={id}
+      className={cn(className, "reveal-p", visible && "reveal-p--in")}
+      style={style}
+    >
+      {children}
+    </p>
   );
 }

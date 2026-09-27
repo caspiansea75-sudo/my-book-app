@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useReaderStore } from "@/lib/reader-store";
-import { RainLayer } from "@/components/book/rain-layer";
+import { ThemeParticles } from "@/components/book/theme-particles";
 
 export function ThemeRoot({ children }: { children: ReactNode }) {
   const theme = useReaderStore((s) => s.theme);
@@ -17,7 +17,7 @@ export function ThemeRoot({ children }: { children: ReactNode }) {
   return (
     <div className="relative min-h-dvh bg-bg text-fg">
       {children}
-      <RainLayer />
+      <ThemeParticles theme={theme} />
       <div className="book-grain" aria-hidden="true" />
       <div className="book-vignette" aria-hidden="true" />
     </div>

@@ -205,6 +205,172 @@
   }
 }
 
+/* --- Cafe: warm steam wisps drifting up from an implied cup/lamp --- */
+.steam-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  opacity: 0.5;
+  mix-blend-mode: screen;
+}
+.steam-layer span {
+  position: absolute;
+  bottom: -10%;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--book-lamp) 55%, transparent) 0%,
+    transparent 70%
+  );
+  filter: blur(6px);
+  animation: steam-rise linear infinite;
+}
+@keyframes steam-rise {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(24px, -92vh, 0) scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* --- Manuscript: slow dust motes drifting in the page light --- */
+.dust-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  opacity: 0.6;
+}
+.dust-layer span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--book-lamp) 70%, transparent);
+  animation: dust-drift ease-in-out infinite;
+}
+@keyframes dust-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.15;
+  }
+  50% {
+    transform: translate3d(14px, -26px, 0);
+    opacity: 0.6;
+  }
+}
+
+/* --- Leather / Old Dhaka: slow warm embers drifting like a lantern's sparks --- */
+.ember-layer {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  opacity: 0.7;
+  mix-blend-mode: screen;
+}
+.ember-layer span {
+  position: absolute;
+  bottom: -4%;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--book-lamp);
+  box-shadow: 0 0 6px 1px color-mix(in oklab, var(--book-lamp) 80%, transparent);
+  animation: ember-rise linear infinite, ember-flicker 1.6s ease-in-out infinite;
+}
+@keyframes ember-rise {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(-16px, -70vh, 0);
+    opacity: 0;
+  }
+}
+@keyframes ember-flicker {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steam-layer span,
+  .dust-layer span,
+  .ember-layer span {
+    animation: none;
+    opacity: 0.2;
+  }
+}
+
+/* --- Gentle candle/lamp flicker for ornamental marks --- */
+.flicker {
+  animation: flicker-glow 4.2s ease-in-out infinite;
+}
+@keyframes flicker-glow {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow: 0 0 10px color-mix(in oklab, var(--book-lamp) 45%, transparent);
+  }
+  45% {
+    opacity: 0.75;
+    text-shadow: 0 0 4px transparent;
+  }
+  60% {
+    opacity: 1;
+    text-shadow: 0 0 14px color-mix(in oklab, var(--book-lamp) 55%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .flicker {
+    animation: none;
+  }
+}
+
+/* --- Scroll-reveal for chapter paragraphs --- */
+.reveal-p {
+  opacity: 0;
+  transform: translateY(16px);
+  filter: blur(3px);
+  transition: opacity 750ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 750ms cubic-bezier(0.22, 1, 0.36, 1), filter 750ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal-p--in {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-p {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}
+
 .cover-title {
   background: linear-gradient(
     105deg,
@@ -298,6 +464,7 @@
   padding: 0.08em 0.12em 0 0;
   font-weight: 600;
   color: var(--book-lamp);
+  text-shadow: 0 0 22px color-mix(in oklab, var(--book-lamp) 40%, transparent);
 }
 
 .scene-break {
