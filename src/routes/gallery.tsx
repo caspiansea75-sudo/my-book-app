@@ -82,7 +82,7 @@ function GalleryPage() {
         {visible.length === 0 ? (
           <p className="mt-12 font-sans text-sm text-muted">এখনো কিছু যোগ হয়নি। একটি ছবি তুলে শুরু করুন।</p>
         ) : (
-          <div className="gallery-grid mt-8">
+          <div className="gallery-grid stagger-in mt-8">
             {visible.map((item, i) => (
               <article key={item.id} className="gallery-tile group">
                 <button
@@ -105,6 +105,13 @@ function GalleryPage() {
                       <Video className="size-8" />
                     </span>
                   )}
+                  <span className="gallery-tile-veil" aria-hidden="true" />
+                  {item.title ? (
+                    <span className="gallery-tile-caption">
+                      {item.kind === "video" ? <Video className="size-3" strokeWidth={2} /> : null}
+                      {item.title}
+                    </span>
+                  ) : null}
                 </button>
                 <button
                   type="button"
