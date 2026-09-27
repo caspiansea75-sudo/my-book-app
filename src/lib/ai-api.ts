@@ -43,8 +43,81 @@ async function callGemini(prompt: string): Promise<string> {
 }
 
 export const aiStatus = createServerFn({ method: "GET" }).handler(async () => {
-  return { configured: isAiConfigured() };
+  return {
+    chatConfigured: isAiConfigured(),
+    audioConfigured: Boolean(process.env.ELEVENLABS_API_KEY),
+  };
 });
+
+export const aiChat = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      message: z.string().min(1),
+      history: z.array(z.object({ role: z.enum(["user", "model"]), text: z.string() })).default([]),
+    }),
+  )
+  .handler(async ({ data }): Promise<{ reply: string }> => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("AI সংযোগ দেওয়া নেই। GEMINI_API_KEY সেট করুন।");
+
+    const contents = [
+      ...data.history.map((h) => ({ role: h.role, parts: [{ text: h.text }] })),
+      { role: "user", parts: [{ text: data.message }] },
+    ];
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents, generationConfig: { temperature: 0.8, maxOutputTokens: 800 } }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`AI সাড়া দেয়নি (${res.status}). ${body.slice(0, 200)}`);
+    }
+    const json = (await res.json()) as {
+      candidates?: { content?: { parts?: { text?: string }[] } }[];
+    };
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) throw new Error("AI থেকে কোনো উত্তর পাওয়া যায়নি (সম্ভবত নিরাপত্তা ফিল্টারে আটকেছে)");
+    return { reply: text.trim() };
+  });
+
+// Pollinations.AI needs no API key at all — the client renders an <img>
+// pointed straight at its URL. This helper just builds that URL safely.
+export const buildImageUrl = (prompt: string, seed?: number): string => {
+  const base = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
+  const params = new URLSearchParams({ width: "768", height: "768", nologo: "true" });
+  if (seed != null) params.set("seed", String(seed));
+  return `${base}?${params.toString()}`;
+};
+
+export const aiNarrate = createServerFn({ method: "POST" })
+  .validator(z.object({ text: z.string().min(1).max(2000), voiceId: z.string().default("21m00Tcm4TlvDq8ikWAM") }))
+  .handler(async ({ data }): Promise<{ audioBase64: string }> => {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey) throw new Error("অডিওর জন্য ELEVENLABS_API_KEY সেট করা নেই।");
+
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${data.voiceId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "xi-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        text: data.text,
+        model_id: "eleven_multilingual_v2",
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`অডিও তৈরি হয়নি (${res.status}). ${body.slice(0, 200)}`);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { audioBase64: buf.toString("base64") };
+  });
 
 export const suggestBookBlurb = createServerFn({ method: "POST" })
   .validator(z.object({ title: z.string().min(1) }))

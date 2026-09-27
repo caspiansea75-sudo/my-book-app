@@ -9,7 +9,7 @@ import { aiStatus, suggestBookBlurb } from "@/lib/ai-api";
 export const Route = createFileRoute("/studio/")({
   loader: async () => {
     const [books, ai] = await Promise.all([listLibrary(), aiStatus()]);
-    return { books, aiConfigured: ai.configured };
+    return { books, aiConfigured: ai.chatConfigured };
   },
   component: StudioHome,
 });
