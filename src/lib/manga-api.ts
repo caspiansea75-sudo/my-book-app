@@ -38,6 +38,67 @@ export type MangaPanel = {
   sortOrder: number;
 };
 
+export const updateMangaSeries = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      slug: z.string().min(1),
+      title: z.string().min(1).max(160),
+      description: z.string().max(1200).optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    await sql`
+      update manga_series
+      set title = ${data.title}, description = ${data.description ?? ""}
+      where slug = ${data.slug}
+    `;
+    return { ok: true };
+  });
+
+export const setMangaCover = createServerFn({ method: "POST" })
+  .validator(z.object({ slug: z.string().min(1), mediaId: z.number().int().positive().nullable() }))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    await sql`update manga_series set cover_media_id = ${data.mediaId} where slug = ${data.slug}`;
+    return { ok: true };
+  });
+
+export const deleteMangaSeries = createServerFn({ method: "POST" })
+  .validator(z.object({ slug: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    await sql`delete from manga_series where slug = ${data.slug}`;
+    return { ok: true };
+  });
+
+export const deleteMangaChapter = createServerFn({ method: "POST" })
+  .validator(z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    await sql`
+      delete from manga_chapters c
+      using manga_series s
+      where c.series_id = s.id and s.slug = ${data.seriesSlug} and c.slug = ${data.chapterSlug}
+    `;
+    return { ok: true };
+  });
+
+export const updateMangaChapterTitle = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1), title: z.string().min(1).max(160) }),
+  )
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    await sql`
+      update manga_chapters c
+      set title = ${data.title}
+      from manga_series s
+      where c.series_id = s.id and s.slug = ${data.seriesSlug} and c.slug = ${data.chapterSlug}
+    `;
+    return { ok: true };
+  });
+
 export const listMangaSeries = createServerFn({ method: "GET" }).handler(async () => {
   const sql = await getSql();
   const rows = await sql<{

@@ -1,42 +1,96 @@
 import { useState, type FormEvent } from "react";
-import { Link, createFileRoute, notFound, useRouter } from "@tanstack/react-router";
-import { BookImage, PenLine, Play, Plus } from "lucide-react";
+import { Link, createFileRoute, notFound, useNavigate, useRouter } from "@tanstack/react-router";
+import { BookImage, ImagePlus, PenLine, Play, Plus, Trash2 } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
-import { createMangaChapter, getMangaSeries } from "@/lib/manga-api";
+import { MediaUploader } from "@/components/studio/media-uploader";
+import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
+import {
+  createMangaChapter,
+  deleteMangaChapter,
+  deleteMangaSeries,
+  getMangaSeries,
+  setMangaCover,
+  updateMangaSeries,
+} from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/")({
   loader: async ({ params }) => {
-    const series = await getMangaSeries({ data: { slug: params.seriesSlug } });
+    const [series, media] = await Promise.all([
+      getMangaSeries({ data: { slug: params.seriesSlug } }),
+      listMedia(),
+    ]);
     if (!series) throw notFound();
-    return { series };
+    return { series, media };
   },
   component: MangaSeriesPage,
 });
 
 function MangaSeriesPage() {
-  const { series } = Route.useLoaderData();
+  const { series, media } = Route.useLoaderData();
   const router = useRouter();
-  const [title, setTitle] = useState("");
+  const navigate = useNavigate();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [title, setTitle] = useState(series.title);
+  const [description, setDescription] = useState(series.description);
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [metaError, setMetaError] = useState<string | null>(null);
+
+  const [showChapterForm, setShowChapterForm] = useState(series.chapters.length === 0);
+  const [chapterTitle, setChapterTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(series.chapters.length === 0);
 
-  async function onCreate(e: FormEvent) {
+  async function onCreateChapter(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await createMangaChapter({ data: { seriesSlug: series.slug, title } });
-      setTitle("");
-      setShowForm(false);
+      await createMangaChapter({ data: { seriesSlug: series.slug, title: chapterTitle } });
+      setChapterTitle("");
+      setShowChapterForm(false);
       await router.invalidate();
     } catch (err) {
       setError(err instanceof Error ? err.message : "তৈরি হয়নি");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function saveMeta(e: FormEvent) {
+    e.preventDefault();
+    setSavingMeta(true);
+    setMetaError(null);
+    try {
+      await updateMangaSeries({ data: { slug: series.slug, title, description } });
+      setEditOpen(false);
+      await router.invalidate();
+    } catch (err) {
+      setMetaError(err instanceof Error ? err.message : "সংরক্ষণ ব্যর্থ");
+    } finally {
+      setSavingMeta(false);
+    }
+  }
+
+  async function pickCover(id: number) {
+    await setMangaCover({ data: { slug: series.slug, mediaId: id } });
+    setCoverOpen(false);
+    await router.invalidate();
+  }
+
+  async function removeSeries() {
+    if (!window.confirm("এই মাঙ্গা এবং এর সব অধ্যায়/প্যানেল স্থায়ীভাবে মুছে ফেলবেন?")) return;
+    await deleteMangaSeries({ data: { slug: series.slug } });
+    await navigate({ to: "/manga" });
+  }
+
+  async function removeChapter(chapterSlug: string) {
+    if (!window.confirm("এই অধ্যায় ও এর সব প্যানেল মুছে ফেলবেন?")) return;
+    await deleteMangaChapter({ data: { seriesSlug: series.slug, chapterSlug } });
+    await router.invalidate();
   }
 
   return (
@@ -52,31 +106,116 @@ function MangaSeriesPage() {
         </Link>
 
         <div className="mt-4 flex flex-col gap-5 sm:flex-row">
-          <CoverArt
-            title={series.title}
-            coverUrl={series.coverMediaId ? mediaSrc(series.coverMediaId) : null}
-            slug={series.slug}
-            className="h-56 w-44 shrink-0 rounded-lg"
-          />
-          <div className="min-w-0">
-            <h1 className="font-display text-3xl font-semibold sm:text-4xl">{series.title}</h1>
-            {series.description ? (
-              <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{series.description}</p>
-            ) : null}
+          <div className="shrink-0">
+            <CoverArt
+              title={series.title}
+              coverUrl={series.coverMediaId ? mediaSrc(series.coverMediaId) : null}
+              slug={series.slug}
+              className="h-56 w-44 rounded-lg"
+            />
             <button
               type="button"
-              onClick={() => setShowForm((v) => !v)}
-              className="pressable mt-5 inline-flex h-11 items-center gap-1.5 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
+              onClick={() => setCoverOpen((v) => !v)}
+              className="pressable mt-2 inline-flex h-9 w-44 items-center justify-center gap-1.5 rounded-lg border border-border font-sans text-xs text-fg"
             >
-              <Plus className="size-4" strokeWidth={1.75} />
-              নতুন অধ্যায়
+              <ImagePlus className="size-3.5" strokeWidth={1.75} />
+              প্রচ্ছদ
             </button>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            {editOpen ? (
+              <form onSubmit={(e) => void saveMeta(e)} className="space-y-2.5">
+                <input value={title} onChange={(e) => setTitle(e.target.value)} className="field-input" />
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="field-input"
+                />
+                {metaError ? <p className="font-sans text-sm text-nsfw">{metaError}</p> : null}
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={savingMeta || !title.trim()}
+                    className="pressable h-10 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg disabled:opacity-50"
+                  >
+                    সংরক্ষণ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditOpen(false);
+                      setTitle(series.title);
+                      setDescription(series.description);
+                    }}
+                    className="pressable h-10 rounded-lg border border-border px-4 font-sans text-sm text-muted"
+                  >
+                    বাতিল
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <h1 className="font-display text-3xl font-semibold sm:text-4xl">{series.title}</h1>
+                {series.description ? (
+                  <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{series.description}</p>
+                ) : null}
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChapterForm((v) => !v)}
+                    className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
+                  >
+                    <Plus className="size-4" strokeWidth={1.75} />
+                    নতুন অধ্যায়
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(true)}
+                    className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-4 font-sans text-sm text-fg"
+                  >
+                    <PenLine className="size-4" strokeWidth={1.75} />
+                    সম্পাদনা
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void removeSeries()}
+                    className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-4 font-sans text-sm text-nsfw"
+                  >
+                    <Trash2 className="size-4" strokeWidth={1.75} />
+                    মাঙ্গা মুছুন
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {showForm ? (
+        {coverOpen ? (
+          <div className="mt-6 rounded-xl border border-border bg-surface p-4">
+            <p className="mb-3 font-display">প্রচ্ছদের ছবি</p>
+            <MediaUploader compact onUploaded={(id) => void pickCover(id)} />
+            <div className="mt-4 grid grid-cols-4 gap-2 sm:grid-cols-6">
+              {media
+                .filter((m) => m.kind === "image")
+                .map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => void pickCover(item.id)}
+                    className="pressable overflow-hidden rounded-md border border-border"
+                  >
+                    <img src={item.thumbSrc || item.src} alt="" className="aspect-square w-full object-cover" />
+                  </button>
+                ))}
+            </div>
+          </div>
+        ) : null}
+
+        {showChapterForm ? (
           <form
-            onSubmit={(e) => void onCreate(e)}
+            onSubmit={(e) => void onCreateChapter(e)}
             className="mt-6 rounded-xl border border-border bg-surface p-5"
           >
             <label className="block">
@@ -84,15 +223,15 @@ function MangaSeriesPage() {
               <input
                 required
                 autoFocus
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                value={chapterTitle}
+                onChange={(e) => setChapterTitle(e.target.value)}
                 className="field-input"
               />
             </label>
             {error ? <p className="mt-3 font-sans text-sm text-nsfw">{error}</p> : null}
             <button
               type="submit"
-              disabled={busy || !title.trim()}
+              disabled={busy || !chapterTitle.trim()}
               className="pressable mt-4 inline-flex h-11 items-center rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg disabled:opacity-50"
             >
               {busy ? "তৈরি হচ্ছে…" : "অধ্যায় খুলুন"}
@@ -108,7 +247,7 @@ function MangaSeriesPage() {
             {series.chapters.map((c) => (
               <div
                 key={c.slug}
-                className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3"
+                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-base">{c.title}</p>
@@ -132,6 +271,14 @@ function MangaSeriesPage() {
                     পড়ুন
                   </Link>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={() => void removeChapter(c.slug)}
+                  className="pressable grid size-9 shrink-0 place-items-center rounded-full text-nsfw/80 hover:text-nsfw"
+                  aria-label="অধ্যায় মুছুন"
+                >
+                  <Trash2 className="size-3.5" strokeWidth={1.75} />
+                </button>
               </div>
             ))}
           </div>

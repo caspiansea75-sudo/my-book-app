@@ -1,14 +1,16 @@
-import { useState } from "react";
-import { Link, createFileRoute, notFound, useRouter } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ChevronLeft, ImagePlus, Trash2 } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { Link, createFileRoute, notFound, useNavigate, useRouter } from "@tanstack/react-router";
+import { ArrowDown, ArrowUp, ChevronLeft, ImagePlus, PenLine, Trash2 } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia, type MediaItem } from "@/lib/library-api";
 import {
   addMangaPanel,
+  deleteMangaChapter,
   getMangaChapterForEdit,
   removeMangaPanel,
   reorderMangaPanels,
+  updateMangaChapterTitle,
 } from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/edit")({
@@ -27,11 +29,33 @@ function MangaEditPage() {
   const { chapter, media } = Route.useLoaderData();
   const { seriesSlug, chapterSlug } = Route.useParams();
   const router = useRouter();
+  const navigate = useNavigate();
   const [busyId, setBusyId] = useState<number | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [titleEditOpen, setTitleEditOpen] = useState(false);
+  const [title, setTitle] = useState(chapter.chapterTitle);
+  const [savingTitle, setSavingTitle] = useState(false);
 
   async function refresh() {
     await router.invalidate();
+  }
+
+  async function saveTitle(e: FormEvent) {
+    e.preventDefault();
+    setSavingTitle(true);
+    try {
+      await updateMangaChapterTitle({ data: { seriesSlug, chapterSlug, title } });
+      setTitleEditOpen(false);
+      await refresh();
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
+  async function removeChapter() {
+    if (!window.confirm("এই অধ্যায় ও এর সব প্যানেল মুছে ফেলবেন?")) return;
+    await deleteMangaChapter({ data: { seriesSlug, chapterSlug } });
+    await navigate({ to: "/manga/$seriesSlug", params: { seriesSlug } });
   }
 
   async function handleAdd(mediaId: number) {
@@ -80,7 +104,53 @@ function MangaEditPage() {
           {chapter.seriesTitle}
         </Link>
         <h1 className="mt-3 font-display text-3xl font-semibold sm:text-4xl">{chapter.chapterTitle}</h1>
-        <p className="mt-2 font-sans text-sm text-muted">
+        {titleEditOpen ? (
+          <form onSubmit={(e) => void saveTitle(e)} className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="field-input max-w-xs"
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={savingTitle || !title.trim()}
+              className="pressable h-10 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg disabled:opacity-50"
+            >
+              সংরক্ষণ
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTitleEditOpen(false);
+                setTitle(chapter.chapterTitle);
+              }}
+              className="pressable h-10 rounded-lg border border-border px-4 font-sans text-sm text-muted"
+            >
+              বাতিল
+            </button>
+          </form>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setTitleEditOpen(true)}
+              className="pressable inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 font-sans text-xs text-muted hover:text-fg"
+            >
+              <PenLine className="size-3.5" strokeWidth={1.75} />
+              নাম বদলান
+            </button>
+            <button
+              type="button"
+              onClick={() => void removeChapter()}
+              className="pressable inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 font-sans text-xs text-nsfw"
+            >
+              <Trash2 className="size-3.5" strokeWidth={1.75} />
+              অধ্যায় মুছুন
+            </button>
+          </div>
+        )}
+        <p className="mt-3 font-sans text-sm text-muted">
           প্যানেল যোগ করুন, উপরে-নিচে সাজান। উপরের প্যানেলটাই প্রথমে দেখা যাবে।
         </p>
 
