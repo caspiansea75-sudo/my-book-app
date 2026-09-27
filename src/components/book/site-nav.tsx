@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BookImage, BookOpen, Images, PenLine, Sparkles } from "lucide-react";
+import { BookImage, BookOpen, Images, PenLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
@@ -7,7 +7,6 @@ const ITEMS = [
   { to: "/gallery", label: "চিত্রশালা", icon: Images, id: "gallery" },
   { to: "/manga", label: "মাঙ্গা", icon: BookImage, id: "manga" },
   { to: "/studio", label: "স্টুডিও", icon: PenLine, id: "studio" },
-  { to: "/ai", label: "AI", icon: Sparkles, id: "ai" },
 ] as const;
 
 export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
