@@ -9,8 +9,10 @@ import {
   FolderOpen,
   FolderPlus,
   Home,
+  Link2,
   Pencil,
   Search,
+  ShieldAlert,
   Trash2,
   Upload,
   Video,
@@ -19,15 +21,17 @@ import {
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
 import { SiteNav } from "@/components/book/site-nav";
 import { MultiUploader } from "@/components/media/multi-uploader";
-import { deleteMedia } from "@/lib/library-api";
 import {
   createFolder,
   deleteFolder,
+  deleteMediaSafe,
+  getMediaUsage,
   loadVault,
   moveFolder,
   moveMedia,
   renameFolder,
   renameMedia,
+  type MediaUsage,
   type Vault,
   type VaultFolder,
   type VaultItem,
@@ -102,6 +106,7 @@ function MediaPage() {
   const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<SortKey>("new");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
+  const [unusedOnly, setUnusedOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [showUpload, setShowUpload] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -186,11 +191,12 @@ function MediaPage() {
     const list = vault.items.filter((item) => {
       if (!flat && item.folderId !== folderId) return false;
       if (typeFilter !== "all" && item.kind !== typeFilter) return false;
+      if (unusedOnly && item.usageCount > 0) return false;
       if (q && !displayName(item).toLocaleLowerCase().includes(q)) return false;
       return true;
     });
     return sortItems(list, sort);
-  }, [vault.items, flat, folderId, typeFilter, query, sort]);
+  }, [vault.items, flat, folderId, typeFilter, unusedOnly, query, sort]);
 
   const lightboxItems: LightboxItem[] = useMemo(
     () =>
@@ -289,10 +295,13 @@ function MediaPage() {
     }
   }
 
-  async function confirmDeleteItems(ids: number[]) {
+  async function confirmDeleteItems(ids: number[], force: boolean) {
     setModal(null);
     await run(async () => {
-      for (const id of ids) await deleteMedia({ data: { id } });
+      const result = await deleteMediaSafe({ data: { ids, force } });
+      if (result.skipped.length > 0) {
+        setNotice(`${bn(result.skipped.length)} টি ফাইল ব্যবহৃত, তাই রাখা হয়েছে।`);
+      }
     });
     exitSelect();
   }
@@ -421,6 +430,18 @@ function MediaPage() {
               {label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setUnusedOnly((v) => !v)}
+            aria-pressed={unusedOnly}
+            className={
+              unusedOnly
+                ? "pressable h-10 rounded-full bg-accent px-3 font-sans text-xs text-accent-fg"
+                : "pressable h-10 rounded-full border border-border px-3 font-sans text-xs text-muted"
+            }
+          >
+            শুধু অব্যবহৃত
+          </button>
           <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
           <button
             type="button"
@@ -607,6 +628,18 @@ function MediaPage() {
                       </span>
                     </button>
 
+                    {item.usageCount > 0 ? (
+                      <span
+                        title="বই, মাঙ্গা বা প্রচ্ছদে ব্যবহৃত"
+                        className={cn(
+                          "pointer-events-none absolute z-10 inline-flex h-6 items-center gap-1 rounded-full bg-bg/80 px-2 font-sans text-[0.65rem] text-fg backdrop-blur-sm",
+                          selectMode ? "top-2 left-10" : "top-2 left-2",
+                        )}
+                      >
+                        <Link2 className="size-3" strokeWidth={2} />
+                        {bn(item.usageCount)}
+                      </span>
+                    ) : null}
                     {selectMode ? (
                       <span
                         aria-hidden="true"
@@ -727,11 +760,10 @@ function MediaPage() {
         />
       ) : null}
       {modal?.type === "delete-items" ? (
-        <ConfirmDialog
-          title={`${bn(modal.ids.length)} টি ফাইল মুছবেন?`}
-          body="ফাইল স্থায়ীভাবে মুছে যাবে। বইয়ের প্রচ্ছদ, অধ্যায়ের ছবি বা মাঙ্গার প্যানেলে ব্যবহার হলে সেখান থেকেও চলে যেতে পারে।"
-          confirmLabel="মুছুন"
-          onConfirm={() => void confirmDeleteItems(modal.ids)}
+        <DeleteItemsDialog
+          ids={modal.ids}
+          names={new Map(vault.items.map((i) => [i.id, displayName(i)]))}
+          onDelete={(force) => void confirmDeleteItems(modal.ids, force)}
           onClose={() => setModal(null)}
         />
       ) : null}
@@ -903,6 +935,109 @@ function ConfirmDialog({
         >
           {confirmLabel}
         </button>
+      </div>
+    </Dialog>
+  );
+}
+
+const USAGE_NOTE: Record<MediaUsage["kind"], string> = {
+  manga: "মাঙ্গার প্যানেল মুছে যাবে",
+  cover: "প্রচ্ছদ খালি হয়ে যাবে",
+  story: "গল্পে ছবির জায়গা ভাঙা দেখাবে",
+};
+
+function DeleteItemsDialog({
+  ids,
+  names,
+  onDelete,
+  onClose,
+}: {
+  ids: number[];
+  names: Map<number, string>;
+  onDelete: (force: boolean) => void;
+  onClose: () => void;
+}) {
+  const [usage, setUsage] = useState<Record<number, MediaUsage[]> | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    getMediaUsage({ data: { ids } })
+      .then((u) => live && setUsage(u))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [ids]);
+
+  const usedIds = usage ? ids.filter((id) => usage[id]?.length) : [];
+  const freeCount = usage ? ids.length - usedIds.length : 0;
+  const kinds = new Set(usedIds.flatMap((id) => usage?.[id]?.map((u) => u.kind) ?? []));
+
+  return (
+    <Dialog title={`${bn(ids.length)} টি ফাইল মুছবেন?`} onClose={onClose}>
+      {failed ? (
+        <p className="mt-3 font-sans text-sm leading-relaxed text-nsfw">
+          কোথায় ব্যবহৃত তা যাচাই করা যায়নি, তাই নিরাপত্তার জন্য মোছা বন্ধ রাখা হয়েছে। একটু পরে আবার চেষ্টা করুন।
+        </p>
+      ) : usage == null ? (
+        <p className="mt-3 font-sans text-sm text-muted">কোথায় ব্যবহৃত দেখা হচ্ছে…</p>
+      ) : usedIds.length === 0 ? (
+        <p className="mt-3 font-sans text-sm leading-relaxed text-muted">
+          কোনো বই, মাঙ্গা বা প্রচ্ছদে এগুলো ব্যবহার হচ্ছে না। ফাইল স্থায়ীভাবে মুছে যাবে।
+        </p>
+      ) : (
+        <>
+          <p className="mt-3 flex items-start gap-2 font-sans text-sm leading-relaxed text-fg">
+            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-lamp" />
+            {bn(usedIds.length)} টি ফাইল এখনো ব্যবহৃত হচ্ছে। সাধারণ মোছায় এগুলো রেখে দেওয়া হবে।
+          </p>
+          <ul className="mt-3 max-h-[32dvh] space-y-3 overflow-y-auto rounded-lg border border-border bg-bg p-3">
+            {usedIds.map((id) => (
+              <li key={id} className="font-sans text-xs">
+                <span className="block truncate text-sm text-fg">{names.get(id) ?? `#${id}`}</span>
+                {usage?.[id]?.map((u) => (
+                  <span key={u.label} className="block truncate text-muted">
+                    {u.label}
+                  </span>
+                ))}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 font-sans text-xs leading-relaxed text-subtle">
+            জোর করে মুছলে:
+            {kinds.has("manga") ? ` ${USAGE_NOTE.manga};` : ""}
+            {kinds.has("cover") ? ` ${USAGE_NOTE.cover};` : ""}
+            {kinds.has("story") ? ` ${USAGE_NOTE.story} (আগে স্টুডিও থেকে ছবিটি সরিয়ে নিন)` : ""}
+          </p>
+        </>
+      )}
+      <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="pressable h-11 rounded-lg border border-border px-4 font-sans text-sm text-fg"
+        >
+          থাক
+        </button>
+        {usage && usedIds.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => onDelete(true)}
+            className="pressable h-11 rounded-lg border border-nsfw px-4 font-sans text-sm text-nsfw"
+          >
+            তবুও সব মুছুন
+          </button>
+        ) : null}
+        {usage && (usedIds.length === 0 || freeCount > 0) ? (
+          <button
+            type="button"
+            onClick={() => onDelete(false)}
+            className="pressable h-11 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
+          >
+            {usedIds.length === 0 ? "মুছুন" : `শুধু অব্যবহৃত ${bn(freeCount)} টি মুছুন`}
+          </button>
+        ) : null}
       </div>
     </Dialog>
   );

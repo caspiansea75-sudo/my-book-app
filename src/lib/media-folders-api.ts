@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
+import { getCanonBook } from "@/lib/book";
 import { mediaSrc, mediaThumbSrc } from "@/lib/media-url";
 
 export type VaultFolder = {
@@ -25,6 +26,14 @@ export type VaultItem = {
   bytes: number;
   createdAt: string;
   folderId: number | null;
+  /** In how many distinct places (manga, stories, covers) this file is used. */
+  usageCount: number;
+};
+
+export type MediaUsage = {
+  kind: "manga" | "story" | "cover";
+  /** Human-readable place, e.g. "Series › Chapter". */
+  label: string;
 };
 
 export type Vault = { folders: VaultFolder[]; items: VaultItem[] };
@@ -57,7 +66,7 @@ function iso(value: string | Date): string {
   return new Date(value).toISOString();
 }
 
-function asItem(row: ItemRow): VaultItem {
+function asItem(row: ItemRow, usageCount: number): VaultItem {
   const uploaded = row.source === "upload";
   const thumbSrc = row.thumb_url
     ? row.thumb_url
@@ -80,7 +89,75 @@ function asItem(row: ItemRow): VaultItem {
     bytes: row.bytes,
     createdAt: iso(row.created_at),
     folderId: row.folder_id,
+    usageCount,
   };
+}
+
+function chapterTitle(bookSlug: string, chapterSlug: string): string {
+  const chapter = getCanonBook(bookSlug)?.chapters.find((c) => c.slug === chapterSlug);
+  return chapter?.title || `অধ্যায় ${chapterSlug}`;
+}
+
+/**
+ * Every place an image is used, keyed by media id. Read-only.
+ *
+ * Deleting a media row cascades through manga panels, book covers and chapter
+ * inserts automatically — but images placed in stories made in the studio are
+ * stored as plain ids inside the chapter text (no database link), so those
+ * would silently become broken pictures. This looks in all of them.
+ */
+async function collectUsage(sql: Sql): Promise<Map<number, MediaUsage[]>> {
+  const out = new Map<number, Map<string, MediaUsage>>();
+  const add = (mediaId: number | null, kind: MediaUsage["kind"], label: string) => {
+    if (mediaId == null) return;
+    const bucket = out.get(mediaId) ?? new Map<string, MediaUsage>();
+    bucket.set(`${kind}:${label}`, { kind, label });
+    out.set(mediaId, bucket);
+  };
+
+  const panels = await sql<{ media_id: number; series: string; chapter: string }>`
+    select p.media_id, s.title as series, c.title as chapter
+    from manga_panels p
+    join manga_chapters c on c.id = p.chapter_id
+    join manga_series s on s.id = c.series_id
+  `;
+  for (const r of panels) add(r.media_id, "manga", `মাঙ্গা: ${r.series} › ${r.chapter}`);
+
+  const mangaCovers = await sql<{ cover_media_id: number; title: string }>`
+    select cover_media_id, title from manga_series where cover_media_id is not null
+  `;
+  for (const r of mangaCovers) add(r.cover_media_id, "cover", `মাঙ্গার প্রচ্ছদ: ${r.title}`);
+
+  const bookCoverCol = await sql<{ cover_media_id: number; title: string }>`
+    select cover_media_id, title from library_books where cover_media_id is not null
+  `;
+  for (const r of bookCoverCol) add(r.cover_media_id, "cover", `বইয়ের প্রচ্ছদ: ${r.title}`);
+
+  const studioBookTitles = new Map(
+    (await sql<{ slug: string; title: string }>`select slug, title from library_books`).map((b) => [b.slug, b.title]),
+  );
+  const bookTitle = (slug: string) => getCanonBook(slug)?.title ?? studioBookTitles.get(slug) ?? slug;
+
+  const covers = await sql<{ book_slug: string; media_id: number }>`select book_slug, media_id from book_covers`;
+  for (const r of covers) add(r.media_id, "cover", `বইয়ের প্রচ্ছদ: ${bookTitle(r.book_slug)}`);
+
+  const inserts = await sql<{ book_slug: string; chapter_slug: string; media_id: number }>`
+    select book_slug, chapter_slug, media_id from chapter_inserts
+  `;
+  for (const r of inserts) {
+    add(r.media_id, "story", `গল্প: ${bookTitle(r.book_slug)} › ${chapterTitle(r.book_slug, r.chapter_slug)}`);
+  }
+
+  const inline = await sql<{ media_id: number; book: string; chapter: string }>`
+    select (m.v #>> '{}')::int as media_id, b.title as book, c.title as chapter
+    from library_chapters c
+    join library_books b on b.id = c.book_id
+    cross join lateral jsonb_path_query(c.body, '$.sections[*].paragraphs[*].mediaId') as m(v)
+    where jsonb_typeof(m.v) = 'number'
+  `;
+  for (const r of inline) add(r.media_id, "story", `গল্প: ${r.book} › ${r.chapter}`);
+
+  return new Map([...out].map(([id, bucket]) => [id, [...bucket.values()]]));
 }
 
 /** Everything the media page needs in one round trip (no heavy blob columns). */
@@ -102,6 +179,7 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
     order by m.created_at desc, m.id desc
     limit 2000
   `;
+  const usage = await collectUsage(sql);
   return {
     folders: folderRows.map((r) => ({
       id: r.id,
@@ -110,7 +188,7 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
       createdAt: iso(r.created_at),
       itemCount: Number(r.item_count),
     })),
-    items: itemRows.map(asItem),
+    items: itemRows.map((r) => asItem(r, usage.get(r.id)?.length ?? 0)),
   };
 });
 
@@ -220,4 +298,41 @@ export const renameMedia = createServerFn({ method: "POST" })
     const sql = await getSql();
     await sql`update media set title = ${data.title.trim()} where id = ${data.id}`;
     return { ok: true };
+  });
+
+/** Where each of these files is used. Files that are used nowhere are omitted. */
+export const getMediaUsage = createServerFn({ method: "POST" })
+  .validator(z.object({ ids: z.array(z.number().int().positive()).min(1).max(500) }))
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const usage = await collectUsage(sql);
+    const result: Record<number, MediaUsage[]> = {};
+    for (const id of data.ids) {
+      const places = usage.get(id);
+      if (places && places.length > 0) result[id] = places;
+    }
+    return result;
+  });
+
+/**
+ * Delete files. Unless `force` is set, files that are still used somewhere are
+ * skipped and reported back, so nothing in use disappears by accident.
+ */
+export const deleteMediaSafe = createServerFn({ method: "POST" })
+  .validator(
+    z.object({ ids: z.array(z.number().int().positive()).min(1).max(500), force: z.boolean().default(false) }),
+  )
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    let ids = data.ids;
+    let skipped: number[] = [];
+    if (!data.force) {
+      const usage = await collectUsage(sql);
+      skipped = ids.filter((id) => (usage.get(id)?.length ?? 0) > 0);
+      ids = ids.filter((id) => !skipped.includes(id));
+    }
+    if (ids.length > 0) {
+      await sql.query(`delete from media where id = any($1::int[])`, [ids]);
+    }
+    return { deleted: ids.length, skipped };
   });
