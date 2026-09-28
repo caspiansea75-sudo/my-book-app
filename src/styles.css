@@ -765,3 +765,67 @@
   top: 50%;
   transform: translateY(-50%);
 }
+
+/* --- Writer text effects (studio: রং ও ইফেক্ট) --- */
+.tx-bold {
+  font-weight: 700;
+}
+.tx-italic {
+  font-style: italic;
+}
+.tx-center {
+  text-align: center;
+}
+.tx-whisper {
+  font-size: 0.86em;
+  opacity: 0.72;
+  letter-spacing: 0.04em;
+}
+.tx-shadow {
+  text-shadow: 2px 3px 6px rgb(0 0 0 / 0.65);
+}
+.tx-glow {
+  text-shadow: 0 0 8px currentColor, 0 0 18px color-mix(in oklab, currentColor 55%, transparent);
+}
+.tx-flicker {
+  animation: tx-flicker 3.4s ease-in-out infinite;
+}
+.tx-shake {
+  animation: tx-shake 0.5s linear infinite;
+}
+@keyframes tx-flicker {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  42% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  68% {
+    opacity: 0.7;
+  }
+}
+@keyframes tx-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(0.6px, -0.5px);
+  }
+  50% {
+    transform: translate(-0.6px, 0.5px);
+  }
+  75% {
+    transform: translate(0.5px, 0.6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tx-flicker,
+  .tx-shake {
+    animation: none;
+  }
+}

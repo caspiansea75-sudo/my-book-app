@@ -5,6 +5,8 @@ export type Paragraph = {
   text: string;
   kind: ParaKind;
   nsfw: boolean;
+  color?: string;
+  effects?: string[];
   mediaId?: number;
   url?: string;
   caption?: string;

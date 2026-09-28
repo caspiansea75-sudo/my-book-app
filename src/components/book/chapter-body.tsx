@@ -5,6 +5,7 @@ import { SensitiveBlock } from "@/components/book/sensitive-block";
 import { MediaFigure } from "@/components/book/media-figure";
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
 import { cn } from "@/lib/utils";
+import { effectClass } from "@/lib/text-style";
 
 export function ChapterBody({
   chapter,
@@ -100,7 +101,16 @@ export function ChapterBody({
                 className={drop ? "drop-cap text-fg" : "text-fg"}
                 style={{ fontSize: `${fontSize}px` }}
               >
-                {para.text}
+                {para.color || para.effects?.length ? (
+                  <span
+                    className={cn("block", effectClass(para.effects))}
+                    style={para.color ? { color: para.color } : undefined}
+                  >
+                    {para.text}
+                  </span>
+                ) : (
+                  para.text
+                )}
               </RevealParagraph>
             );
           })}

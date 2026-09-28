@@ -13,9 +13,10 @@ import {
 import { MediaFigure } from "@/components/book/media-figure";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { cn } from "@/lib/utils";
+import { COLOR_SWATCHES, TEXT_EFFECTS, effectClass } from "@/lib/text-style";
 
 type Block =
-  | { key: string; type: "p"; text: string; nsfw: boolean; originId: string }
+  | { key: string; type: "p"; text: string; nsfw: boolean; color?: string; effects?: string[]; originId: string }
   | { key: string; type: "break"; originId: string }
   | { key: string; type: "image"; mediaId: number; caption: string; originId: string }
   | { key: string; type: "video"; mediaId?: number; url?: string; caption: string; originId: string };
@@ -52,6 +53,8 @@ function blocksFromChapter(chapter: Chapter | null): Block[] {
           type: "p",
           text: para.text,
           nsfw: para.nsfw,
+          color: para.color,
+          effects: para.effects,
           originId: para.id,
         });
       }
@@ -88,7 +91,14 @@ function toSections(blocks: Block[]): Section[] {
         caption: block.caption,
       };
     }
-    return { id: block.originId, kind: "p", text: block.text, nsfw: block.nsfw };
+    return {
+      id: block.originId,
+      kind: "p",
+      text: block.text,
+      nsfw: block.nsfw,
+      color: block.color,
+      effects: block.effects,
+    };
   });
   return [{ id: "main", title: "", paragraphs }];
 }
@@ -259,8 +269,17 @@ export function ChapterEditor({
                 onChange={(e) => update(i, { text: e.target.value })}
                 disabled={canon}
                 rows={4}
-                className="field-input min-h-28 font-display leading-relaxed"
+                className={cn("field-input min-h-28 font-display leading-relaxed", effectClass(block.effects))}
+                style={block.color ? { color: block.color } : undefined}
                 placeholder="অনুচ্ছেদ লিখুন…"
+              />
+            ) : null}
+            {block.type === "p" && !canon ? (
+              <TextStyleBar
+                color={block.color}
+                effects={block.effects ?? []}
+                onColor={(color) => update(i, { color })}
+                onEffects={(effects) => update(i, { effects })}
               />
             ) : null}
             {block.type === "break" ? (
@@ -435,5 +454,81 @@ function IconBtn({
       {children}
       {label}
     </button>
+  );
+}
+
+function TextStyleBar({
+  color,
+  effects,
+  onColor,
+  onEffects,
+}: {
+  color?: string;
+  effects: string[];
+  onColor: (color: string | undefined) => void;
+  onEffects: (effects: string[]) => void;
+}) {
+  function toggle(id: string) {
+    onEffects(effects.includes(id) ? effects.filter((x) => x !== id) : [...effects, id]);
+  }
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-border bg-surface-2 p-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-sans text-[11px] text-muted">রং</span>
+        <button
+          type="button"
+          onClick={() => onColor(undefined)}
+          aria-label="ডিফল্ট রং"
+          title="ডিফল্ট"
+          className={cn(
+            "pressable size-6 rounded-full border border-border bg-bg text-[10px] text-muted",
+            !color && "ring-1 ring-lamp",
+          )}
+        >
+          ×
+        </button>
+        {COLOR_SWATCHES.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            onClick={() => onColor(c.value)}
+            aria-label={c.label}
+            title={c.label}
+            style={{ backgroundColor: c.value }}
+            className={cn(
+              "pressable size-6 rounded-full border border-border",
+              color === c.value && "ring-2 ring-lamp ring-offset-1 ring-offset-transparent",
+            )}
+          />
+        ))}
+        <label className="pressable inline-flex h-6 cursor-pointer items-center gap-1 rounded-full border border-border px-2 font-sans text-[11px] text-muted">
+          কাস্টম
+          <input
+            type="color"
+            value={color && /^#[0-9a-f]{6}$/i.test(color) ? color : "#ffffff"}
+            onChange={(e) => onColor(e.target.value)}
+            className="size-4 cursor-pointer border-0 bg-transparent p-0"
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-sans text-[11px] text-muted">ইফেক্ট</span>
+        {TEXT_EFFECTS.map((fx) => (
+          <button
+            key={fx.id}
+            type="button"
+            onClick={() => toggle(fx.id)}
+            className={cn(
+              "pressable h-7 rounded-full border px-2.5 font-sans text-[11px]",
+              effects.includes(fx.id)
+                ? "border-lamp text-lamp"
+                : "border-border text-muted hover:text-fg",
+            )}
+          >
+            {fx.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

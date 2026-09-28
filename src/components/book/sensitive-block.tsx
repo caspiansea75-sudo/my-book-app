@@ -1,6 +1,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import type { Paragraph } from "@/lib/book";
 import { useReaderStore } from "@/lib/reader-store";
+import { effectClass } from "@/lib/text-style";
 
 export function SensitiveBlock({
   para,
@@ -50,7 +51,10 @@ export function SensitiveBlock({
         <Eye className="size-3" strokeWidth={1.75} />
         লুকান
       </button>
-      <p className="nsfw-text pr-16" style={{ fontSize: `${fontSize}px` }}>
+      <p
+        className={`nsfw-text pr-16 ${effectClass(para.effects)}`}
+        style={{ fontSize: `${fontSize}px`, ...(para.color ? { color: para.color } : {}) }}
+      >
         {para.text}
       </p>
     </div>
