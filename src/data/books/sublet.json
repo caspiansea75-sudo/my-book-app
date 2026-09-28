@@ -1,0 +1,26 @@
+{
+  "slug": "sublet",
+  "title": "সাবলেট",
+  "titleEn": "Sublet",
+  "author": "অজানা",
+  "language": "bn",
+  "tagline": "করোনার পর · একটি ওয়েব বই",
+  "description": "করোনার পর পরিবার সাবলেট উঠে। বাবা চাকরিহীন, আম্মু পর্দাশীল। কিন্তু আংকেল আর নবীনদার সাথে সম্পর্ক জটিল হয়ে ওঠে।",
+  "chapterCount": 1,
+  "paraCount": 40,
+  "nsfwCount": 29,
+  "chars": 60921,
+  "chapters": [
+    {
+      "id": 1,
+      "slug": "01",
+      "title": "সাবলেট",
+      "titleEn": "Sublet",
+      "excerpt": "করোনার শেষ হয়েছে দুই মাস হল। করোনার কারনে বাবার ছয় মাস ধরে চাকরি নেই। বাসা ভাড়া বাকি চার মাসের…",
+      "paraCount": 40,
+      "nsfwCount": 29,
+      "chars": 60921,
+      "hasNsfw": true
+    }
+  ]
+}

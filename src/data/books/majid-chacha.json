@@ -1,0 +1,26 @@
+{
+  "slug": "majid-chacha",
+  "title": "মজিদ চাচা",
+  "titleEn": "Majid Chacha",
+  "author": "অজানা",
+  "language": "bn",
+  "tagline": "পটুয়াখালী · একটি ওয়েব বই",
+  "description": "তাসনিম জেরিন। ধার্মিক হিজাবী ডাক্তার। গ্রামে পোস্টিং। মজিদ চাচা রিকশাওয়ালা। যে রাতের বৃষ্টিতে শুরু হয় সবকিছু।",
+  "chapterCount": 1,
+  "paraCount": 72,
+  "nsfwCount": 65,
+  "chars": 45919,
+  "chapters": [
+    {
+      "id": 1,
+      "slug": "01",
+      "title": "মজিদ চাচা",
+      "titleEn": "Majid Chacha",
+      "excerpt": "আমি তাসনিম জেরিন । আমার বয়স এখন ২৬ বছর। আমি এক টি ধার্মিক মেয়ে। দুধে আলতা গায়ের রং…",
+      "paraCount": 72,
+      "nsfwCount": 65,
+      "chars": 45919,
+      "hasNsfw": true
+    }
+  ]
+}
