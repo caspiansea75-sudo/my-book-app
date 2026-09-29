@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
-import { memberFromCookieHeader } from "@/lib/members-core";
 
 /**
  * Chat pictures and avatars. Signed-in members only, and a picture is only
@@ -17,6 +16,7 @@ export const Route = createFileRoute("/api/chat-image/$id")({
         const id = Number.parseInt(params.id, 10);
         if (!Number.isFinite(id) || id <= 0) return new Response("Not found", { status: 404 });
 
+        const { memberFromCookieHeader } = await import("@/lib/members-core");
         const me = await memberFromCookieHeader(request.headers.get("cookie"));
         if (!me) return new Response("Unauthorized", { status: 401 });
 
