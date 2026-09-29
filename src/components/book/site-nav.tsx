@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BookImage, BookOpen, FolderOpen, Images, PenLine, Users } from "lucide-react";
+import { BookImage, BookOpen, Images, PenLine, Users } from "lucide-react";
 import { LangSwitch } from "@/components/i18n/lang-switch";
 import { AccountChip } from "@/components/members/account-chip";
 import { useMe } from "@/lib/use-me";
@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 const ITEMS = [
   { to: "/", label: "লাইব্রেরি", icon: BookOpen, id: "library" },
   { to: "/gallery", label: "চিত্রশালা", icon: Images, id: "gallery" },
-  { to: "/media", label: "ফোল্ডার", icon: FolderOpen, id: "folders" },
   { to: "/manga", label: "মাঙ্গা", icon: BookImage, id: "manga" },
   { to: "/studio", label: "স্টুডিও", icon: PenLine, id: "studio" },
   { to: "/members", label: "সদস্য", icon: Users, id: "members" },
