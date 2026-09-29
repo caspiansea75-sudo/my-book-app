@@ -1,0 +1,235 @@
+/* Media page polish — everything is prefixed mf- and used only by /media. */
+
+.mf-page {
+  isolation: isolate;
+}
+
+/* Lamp glow behind the header, slowly breathing */
+.mf-aurora {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 26rem;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38rem 16rem at 28% 0%, color-mix(in oklab, var(--book-lamp) 20%, transparent), transparent 70%),
+    radial-gradient(30rem 14rem at 78% 8%, color-mix(in oklab, var(--book-accent) 16%, transparent), transparent 70%);
+  animation: mf-breathe 9s ease-in-out infinite;
+}
+@keyframes mf-breathe {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(6px); }
+}
+
+/* Eyebrow: letters glide together, then a thin lamp line draws underneath */
+.mf-eyebrow {
+  position: relative;
+  width: fit-content;
+  padding-bottom: 0.5rem;
+  animation: mf-track 1100ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.mf-eyebrow::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--book-lamp), transparent);
+  transform-origin: left;
+  animation: mf-draw 1200ms 350ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes mf-track {
+  from { letter-spacing: 0.55em; opacity: 0; }
+  to { letter-spacing: 0.22em; opacity: 1; }
+}
+@keyframes mf-draw {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Title: words fade in from a blur, then a warm light drifts across the text */
+.mf-word {
+  display: inline-block;
+  margin-right: 0.28em;
+  color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    var(--book-fg) 35%,
+    color-mix(in oklab, var(--book-lamp) 85%, var(--book-fg)) 50%,
+    var(--book-fg) 65%
+  );
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    mf-word-in 800ms cubic-bezier(0.22, 1, 0.36, 1) backwards,
+    mf-sheen 7s 1.6s ease-in-out infinite;
+  animation-delay: calc(var(--w, 0) * 110ms + 150ms), calc(var(--w, 0) * 110ms + 1.6s);
+}
+@keyframes mf-word-in {
+  from { opacity: 0; filter: blur(10px); transform: translateY(16px); }
+  to { opacity: 1; filter: blur(0); transform: none; }
+}
+@keyframes mf-sheen {
+  0% { background-position: 100% 0; }
+  45%, 100% { background-position: 0% 0; }
+}
+
+/* Cards and tiles rise in one after another (capped so big folders stay snappy).
+   `backwards` (not `both`) so hover transforms still work once it has landed. */
+.mf-rise {
+  animation: mf-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(min(var(--i, 0), 14) * 55ms);
+}
+@keyframes mf-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.mf-card,
+.mf-tile {
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 300ms ease-out,
+    border-color 300ms ease-out;
+}
+.mf-card {
+  position: relative;
+  overflow: hidden;
+}
+/* a soft band of light sweeps across a folder on hover */
+.mf-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in oklab, var(--book-lamp) 14%, transparent) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+}
+.mf-card > * {
+  position: relative;
+  z-index: 1;
+}
+.mf-folder-icon {
+  transition: transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 300ms ease-out;
+}
+
+/* Folder name gets an underline that draws itself on hover */
+.mf-name {
+  background: linear-gradient(currentColor, currentColor) left bottom / 0% 1px no-repeat;
+  padding-bottom: 2px;
+  transition: background-size 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mf-tile img {
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Hover effects only where hovering exists (not on touch screens) */
+@media (hover: hover) {
+  .mf-card:hover,
+  .mf-tile:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--book-lamp) 55%, var(--book-border));
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--book-lamp) 22%, transparent),
+      0 14px 30px -12px color-mix(in oklab, var(--book-lamp) 32%, transparent);
+  }
+  .mf-card:hover::before {
+    transform: translateX(120%);
+    transition: transform 900ms ease-out;
+  }
+  .mf-card:hover .mf-folder-icon {
+    transform: scale(1.14) rotate(-7deg);
+    filter: drop-shadow(0 0 8px color-mix(in oklab, var(--book-lamp) 60%, transparent));
+  }
+  .mf-card:hover .mf-name {
+    background-size: 100% 1px;
+  }
+  .mf-tile:hover img {
+    transform: scale(1.07);
+  }
+}
+
+/* "Used in" badge pops in */
+.mf-pop {
+  animation: mf-pop 500ms 250ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes mf-pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Empty message fades in and floats gently */
+.mf-empty {
+  animation:
+    mf-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) backwards,
+    mf-float 5s 700ms ease-in-out infinite;
+}
+@keyframes mf-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Selection bar slides up from the bottom */
+.mf-bar {
+  animation: mf-bar 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes mf-bar {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Dialogs: scrim fades, panel eases up */
+.mf-scrim {
+  animation: mf-fade 250ms ease-out backwards;
+}
+.mf-dialog {
+  animation: mf-dialog 380ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@keyframes mf-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes mf-dialog {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mf-aurora,
+  .mf-eyebrow,
+  .mf-eyebrow::after,
+  .mf-word,
+  .mf-rise,
+  .mf-pop,
+  .mf-empty,
+  .mf-bar,
+  .mf-scrim,
+  .mf-dialog {
+    animation: none;
+  }
+  .mf-word {
+    color: var(--book-fg);
+    background-image: none;
+  }
+  .mf-card,
+  .mf-tile,
+  .mf-tile img,
+  .mf-folder-icon,
+  .mf-name {
+    transition: none;
+  }
+  .mf-card:hover,
+  .mf-tile:hover,
+  .mf-card:hover .mf-folder-icon,
+  .mf-tile:hover img {
+    transform: none;
+  }
+}

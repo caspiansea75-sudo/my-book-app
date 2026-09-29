@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type ReactNode,
+} from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ArrowUpDown,
@@ -37,6 +46,7 @@ import {
   type VaultItem,
 } from "@/lib/media-folders-api";
 import { cn } from "@/lib/utils";
+import "@/components/media/media-effects.css";
 
 export const Route = createFileRoute("/media")({
   loader: () => loadVault(),
@@ -317,14 +327,21 @@ function MediaPage() {
   const allSelected = visible.length > 0 && visible.every((i) => selected.has(i.id));
 
   return (
-    <main className="relative min-h-dvh pb-28">
+    <main className="mf-page relative min-h-dvh pb-28">
+      <div className="mf-aurora" aria-hidden="true" />
       <SiteNav active="folders" />
       <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
-        <p className="flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
+        <p className="mf-eyebrow flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
           <FolderOpen className="size-4" strokeWidth={1.6} />
           মিডিয়া ফোল্ডার
         </p>
-        <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl">আমার ছবি ও ভিডিও</h1>
+        <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl" aria-label="আমার ছবি ও ভিডিও">
+          {"আমার ছবি ও ভিডিও".split(" ").map((word, i) => (
+            <span key={word} aria-hidden="true" className="mf-word" style={{ "--w": i } as CSSProperties}>
+              {word}
+            </span>
+          ))}
+        </h1>
         <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">
           ফোল্ডার বানিয়ে ছবি ও ভিডিও গুছিয়ে রাখুন। সাজান, খুঁজুন, একসাথে অনেকগুলো বেছে সরান — ফাইল টেনে ফোল্ডারে
           ছেড়েও দেওয়া যায়।
@@ -510,13 +527,14 @@ function MediaPage() {
         {childFolders.length > 0 ? (
           <div className="mt-8">
             <h2 className="font-sans text-xs tracking-[0.18em] text-subtle">ফোল্ডার</h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {childFolders.map((f) => (
+            <div key={`f-${folderId}-${showAll}`} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {childFolders.map((f, fi) => (
                 <div
                   key={f.id}
                   {...dropProps(f.id)}
+                  style={{ "--i": fi } as CSSProperties}
                   className={cn(
-                    "group flex items-center gap-1 rounded-xl border border-border bg-surface pr-1",
+                    "mf-card mf-rise group flex items-center gap-1 rounded-xl border border-border bg-surface pr-1",
                     dropTarget === f.id && "border-lamp bg-surface-2 ring-2 ring-lamp",
                   )}
                 >
@@ -525,9 +543,9 @@ function MediaPage() {
                     onClick={() => goFolder(f.id)}
                     className="pressable flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-xl px-4 py-3 text-left"
                   >
-                    <Folder className="size-6 shrink-0 text-lamp" strokeWidth={1.5} />
+                    <Folder className="mf-folder-icon size-6 shrink-0 text-lamp" strokeWidth={1.5} />
                     <span className="min-w-0">
-                      <span className="block truncate font-sans text-sm text-fg">{f.name}</span>
+                      <span className="mf-name block truncate font-sans text-sm text-fg">{f.name}</span>
                       <span className="block font-sans text-xs text-subtle">
                         {bn(f.itemCount)} ফাইল
                         {subCount.get(f.id) ? ` · ${bn(subCount.get(f.id) ?? 0)} ফোল্ডার` : ""}
@@ -569,7 +587,7 @@ function MediaPage() {
           </div>
 
           {visible.length === 0 ? (
-            <p className="mt-6 font-sans text-sm text-muted">
+            <p className="mf-empty mt-6 font-sans text-sm text-muted">
               {searching
                 ? "মেলে এমন কিছু পাওয়া যায়নি।"
                 : vault.items.length === 0
@@ -579,7 +597,10 @@ function MediaPage() {
                     : "এই ফোল্ডারে এখনো কিছু নেই। ফাইল টেনে এনে ছাড়ুন বা আপলোড করুন।"}
             </p>
           ) : (
-            <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            <ul
+              key={`t-${folderId}-${showAll}`}
+              className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
+            >
               {visible.map((item, i) => {
                 const isSel = selected.has(item.id);
                 return (
@@ -587,8 +608,9 @@ function MediaPage() {
                     key={item.id}
                     draggable
                     onDragStart={(e) => onTileDragStart(e, item)}
+                    style={{ "--i": i } as CSSProperties}
                     className={cn(
-                      "group relative aspect-square overflow-hidden rounded-md border bg-surface",
+                      "mf-tile mf-rise group relative aspect-square overflow-hidden rounded-md border bg-surface",
                       isSel ? "border-lamp ring-2 ring-lamp" : "border-border",
                     )}
                   >
@@ -632,7 +654,7 @@ function MediaPage() {
                       <span
                         title="বই, মাঙ্গা বা প্রচ্ছদে ব্যবহৃত"
                         className={cn(
-                          "pointer-events-none absolute z-10 inline-flex h-6 items-center gap-1 rounded-full bg-bg/80 px-2 font-sans text-[0.65rem] text-fg backdrop-blur-sm",
+                          "mf-pop pointer-events-none absolute z-10 inline-flex h-6 items-center gap-1 rounded-full bg-bg/80 px-2 font-sans text-[0.65rem] text-fg backdrop-blur-sm",
                           selectMode ? "top-2 left-10" : "top-2 left-2",
                         )}
                       >
@@ -679,7 +701,7 @@ function MediaPage() {
         <div
           role="toolbar"
           aria-label="বাছাই করা ফাইলের কাজ"
-          className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-xl flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur-md"
+          className="mf-bar fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-xl flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface/95 px-4 py-3 shadow-lg backdrop-blur-md"
         >
           <span className="font-sans text-sm text-fg">{bn(selected.size)} টি বাছা</span>
           <div className="flex items-center gap-1.5">
@@ -832,9 +854,9 @@ function Dialog({ title, onClose, children }: { title: string; onClose: () => vo
         type="button"
         aria-label="বন্ধ"
         onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+        className="mf-scrim absolute inset-0 bg-black/60 backdrop-blur-[2px]"
       />
-      <div className="relative w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6">
+      <div className="mf-dialog relative w-full max-w-md rounded-xl border border-border bg-surface p-5 shadow-xl sm:p-6">
         <h2 className="font-display text-xl">{title}</h2>
         {children}
       </div>

@@ -74,6 +74,8 @@ export type LibraryBookCard = {
   chapterCount: number;
   origin: BookOrigin;
   coverUrl: string | null;
+  nsfwCount?: number;
+  createdAt?: number;
 };
 
 const bookModules = import.meta.glob<{ default: BookIndex }>("/src/data/books/*.json", {

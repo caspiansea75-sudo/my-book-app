@@ -3,6 +3,7 @@ import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { padSlug, type Chapter } from "@/lib/book";
 import { loadChapterForBook } from "@/lib/load-chapter";
 import { resolveBook } from "@/lib/library-api";
+import { useLibraryStore } from "@/lib/library-store";
 import { useReaderStore } from "@/lib/reader-store";
 import { AmbientAudio } from "@/components/book/ambient-audio";
 import { ChapterBody } from "@/components/book/chapter-body";
@@ -30,6 +31,7 @@ function ReaderPage() {
   const fontSize = useReaderStore((s) => s.fontSize);
   const setLastSlug = useReaderStore((s) => s.setLastSlug);
   const setProgress = useReaderStore((s) => s.setProgress);
+  const touchBook = useLibraryStore((s) => s.touch);
 
   useEffect(() => {
     let live = true;
@@ -41,6 +43,7 @@ function ReaderPage() {
         setChapter(ch);
         setLastSlug(book.slug, slug);
         setProgress(`${book.slug}:${slug}`, ch.sections[0]?.paragraphs[0]?.id ?? slug);
+        touchBook(book.slug);
         window.scrollTo(0, 0);
       })
       .catch((err: unknown) => {
@@ -49,7 +52,7 @@ function ReaderPage() {
     return () => {
       live = false;
     };
-  }, [book, slug, setLastSlug, setProgress]);
+  }, [book, slug, setLastSlug, setProgress, touchBook]);
 
   const nav = useMemo(() => {
     const i = book.chapters.findIndex((c) => c.slug === slug);

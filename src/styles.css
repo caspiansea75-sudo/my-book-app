@@ -859,3 +859,33 @@
 .rich-bare:focus {
   border-color: transparent;
 }
+
+/* --- Library browsing --- */
+.cover-blur {
+  overflow: hidden;
+}
+.cover-blur > * {
+  filter: blur(16px) saturate(0.85);
+  transform: scale(1.1);
+  transition:
+    filter 0.25s ease,
+    transform 0.25s ease;
+}
+.group:hover .cover-blur > *,
+.group:focus-within .cover-blur > * {
+  filter: none;
+  transform: none;
+}
+.lib-overlay-hover {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.group:hover .lib-overlay-hover,
+.lib-overlay-hover:focus-within {
+  opacity: 1;
+}
+@media (hover: none) {
+  .lib-overlay-hover {
+    opacity: 1;
+  }
+}

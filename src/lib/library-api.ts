@@ -223,6 +223,11 @@ async function coverMap(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.book_slug, mediaSrc(r.media_id)]));
 }
 
+function toMs(v: unknown): number {
+  const t = new Date(v as string | number | Date).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
 export const listLibrary = createServerFn({ method: "GET" }).handler(async () => {
   const sql = await getSql();
   const covers = await coverMap();
@@ -245,6 +250,8 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     chapterCount: countMap.get(row.id) ?? 0,
     origin: "studio",
     coverUrl: row.cover_media_id ? mediaSrc(row.cover_media_id) : covers.get(row.slug) ?? null,
+    nsfwCount: 0,
+    createdAt: toMs(row.created_at),
   }));
   const canon: LibraryBookCard[] = listCanonBooks().map((book) => ({
     slug: book.slug,
@@ -256,6 +263,8 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     chapterCount: book.chapterCount,
     origin: "canon",
     coverUrl: covers.get(book.slug) ?? null,
+    nsfwCount: book.nsfwCount,
+    createdAt: 0,
   }));
   return [...studio, ...canon];
 });
