@@ -565,6 +565,20 @@ const chapterSchema = z.object({
           nsfw: z.boolean().optional().default(false),
           color: z.string().max(40).optional(),
           effects: z.array(z.string().max(24)).max(10).optional(),
+          align: z.enum(["left", "center", "right"]).optional(),
+          runs: z
+            .array(
+              z.object({
+                t: z.string(),
+                b: z.boolean().optional(),
+                i: z.boolean().optional(),
+                u: z.boolean().optional(),
+                c: z.string().max(40).optional(),
+                fx: z.array(z.string().max(24)).max(10).optional(),
+              }),
+            )
+            .max(3000)
+            .optional(),
           mediaId: z.number().int().positive().optional(),
           url: z.string().optional(),
           caption: z.string().optional(),
@@ -591,6 +605,8 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
         nsfw: Boolean(p.nsfw),
         color: p.color || undefined,
         effects: p.effects && p.effects.length ? p.effects : undefined,
+        align: p.align,
+        runs: p.runs && p.runs.length ? p.runs : undefined,
         mediaId: p.mediaId,
         url: p.url,
         caption: p.caption,

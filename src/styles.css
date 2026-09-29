@@ -829,3 +829,33 @@
     animation: none;
   }
 }
+
+/* --- Rich paragraph editor (studio) --- */
+.tx-inl.tx-shake {
+  display: inline-block;
+}
+.rich-edit {
+  outline: none;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.rich-edit:empty::before {
+  content: attr(data-placeholder);
+  color: var(--book-subtle);
+  pointer-events: none;
+}
+.rich-edit.tx-shake,
+.rich-edit .tx-shake,
+.rich-edit.tx-flicker,
+.rich-edit .tx-flicker {
+  animation: none;
+}
+.rich-bare {
+  border-color: transparent;
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 2;
+}
+.rich-bare:focus {
+  border-color: transparent;
+}

@@ -1,5 +1,16 @@
 export type ParaKind = "p" | "break" | "image" | "video";
 
+export type TextRun = {
+  t: string;
+  b?: boolean;
+  i?: boolean;
+  u?: boolean;
+  c?: string;
+  fx?: string[];
+};
+
+export type ParaAlign = "left" | "center" | "right";
+
 export type Paragraph = {
   id: string;
   text: string;
@@ -7,6 +18,8 @@ export type Paragraph = {
   nsfw: boolean;
   color?: string;
   effects?: string[];
+  runs?: TextRun[];
+  align?: ParaAlign;
   mediaId?: number;
   url?: string;
   caption?: string;

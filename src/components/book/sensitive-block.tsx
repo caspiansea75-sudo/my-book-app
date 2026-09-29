@@ -2,6 +2,7 @@ import { Eye, EyeOff } from "lucide-react";
 import type { Paragraph } from "@/lib/book";
 import { useReaderStore } from "@/lib/reader-store";
 import { effectClass } from "@/lib/text-style";
+import { renderRuns } from "@/components/book/rich-text";
 
 export function SensitiveBlock({
   para,
@@ -53,9 +54,13 @@ export function SensitiveBlock({
       </button>
       <p
         className={`nsfw-text pr-16 ${effectClass(para.effects)}`}
-        style={{ fontSize: `${fontSize}px`, ...(para.color ? { color: para.color } : {}) }}
+        style={{
+          fontSize: `${fontSize}px`,
+          ...(para.color ? { color: para.color } : {}),
+          ...(para.align ? { textAlign: para.align } : {}),
+        }}
       >
-        {para.text}
+        {para.runs && para.runs.length ? renderRuns(para.runs) : para.text}
       </p>
     </div>
   );
