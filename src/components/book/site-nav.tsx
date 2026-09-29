@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BookImage, BookOpen, Images, PenLine, Users } from "lucide-react";
+import { BookImage, BookOpen, Images, MessageCircle, PenLine, Users } from "lucide-react";
 import { LangSwitch } from "@/components/i18n/lang-switch";
 import { AccountChip } from "@/components/members/account-chip";
 import { useMe } from "@/lib/use-me";
@@ -10,14 +10,15 @@ const ITEMS = [
   { to: "/gallery", label: "চিত্রশালা", icon: Images, id: "gallery" },
   { to: "/manga", label: "মাঙ্গা", icon: BookImage, id: "manga" },
   { to: "/studio", label: "স্টুডিও", icon: PenLine, id: "studio" },
+  { to: "/chat", label: "চ্যাট", icon: MessageCircle, id: "chat" },
   { to: "/members", label: "সদস্য", icon: Users, id: "members" },
 ] as const;
 
-export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
+export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] | "profile" }) {
   const me = useMe();
   const items = ITEMS.filter((item) => {
     if (item.id === "members") return me?.role === "admin";
-    if (item.id === "studio" || item.id === "folders") return !!me;
+    if (item.id === "studio" || item.id === "chat") return !!me;
     return true;
   });
   return (
@@ -38,7 +39,7 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
                 key={item.id}
                 to={item.to}
                 className={cn(
-                  "pressable inline-flex h-10 items-center gap-1.5 rounded-full px-3 font-sans text-xs",
+                  "pressable inline-flex h-10 items-center gap-1.5 rounded-full px-2.5 font-sans text-xs sm:px-3",
                   on ? "bg-accent text-accent-fg" : "text-muted hover:bg-surface-2 hover:text-fg",
                 )}
               >
