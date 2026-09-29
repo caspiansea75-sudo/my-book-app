@@ -30,6 +30,7 @@ type MediaRow = {
   height: number | null;
   bytes: number;
   owner_id?: number | null;
+  owner_name?: string | null;
   created_at: string;
 };
 
@@ -207,7 +208,7 @@ async function studioBookIndex(row: BookRow): Promise<BookIndex> {
     slug: row.slug,
     title: row.title,
     titleEn: row.title_en,
-    author: row.author,
+    author: row.author || row.owner_name || "",
     language: "bn",
     tagline: row.tagline,
     description: row.description,
@@ -230,6 +231,18 @@ async function coverMap(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.book_slug, mediaSrc(r.media_id)]));
 }
 
+async function authorMap(): Promise<Map<string, string>> {
+  const sql = await getSql();
+  const rows = await sql<{ key: string; author: string }>`select key, author from author_overrides where kind = 'book'`;
+  return new Map(rows.map((r) => [r.key, r.author]));
+}
+
+/** The JSON books ship with a placeholder writer; treat it as "not set". */
+function cleanAuthor(name: string | undefined): string {
+  const v = (name ?? "").trim();
+  return !v || /^(অজানা|unknown|anonymous|n\/a)$/i.test(v) ? "" : v;
+}
+
 function toMs(v: unknown): number {
   const t = new Date(v as string | number | Date).getTime();
   return Number.isFinite(t) ? t : 0;
@@ -240,8 +253,10 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
   const hid = await hiddenSet("book");
   const sql = await getSql();
   const covers = await coverMap();
+  const authors = await authorMap();
   const studioRows = await sql<BookRow>`
-    select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at
+    select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at,
+      (select m.display_name from members m where m.id = library_books.owner_id) as owner_name
     from library_books
     order by created_at desc
   `;
@@ -253,7 +268,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     slug: row.slug,
     title: row.title,
     titleEn: row.title_en,
-    author: row.author,
+    author: row.author || row.owner_name || "",
     tagline: row.tagline,
     description: row.description,
     chapterCount: countMap.get(row.id) ?? 0,
@@ -267,7 +282,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     slug: book.slug,
     title: book.title,
     titleEn: book.titleEn,
-    author: book.author,
+    author: authors.get(book.slug) ?? cleanAuthor(book.author),
     tagline: book.tagline,
     description: book.description,
     chapterCount: book.chapterCount,
@@ -288,9 +303,11 @@ export const resolveBook = createServerFn({ method: "GET" })
     if (me.role !== "admin" && (await isHidden("book", data.slug))) return null;
     const canon = getCanonBook(data.slug);
     const covers = await coverMap();
+    const authors = await authorMap();
     if (canon) {
       return {
         ...canon,
+        author: authors.get(canon.slug) ?? cleanAuthor(canon.author),
         origin: "canon" as const,
         coverUrl: covers.get(canon.slug) ?? null,
         ownerId: null,
@@ -298,7 +315,8 @@ export const resolveBook = createServerFn({ method: "GET" })
     }
     const sql = await getSql();
     const rows = await sql<BookRow>`
-      select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at
+      select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at,
+      (select m.display_name from members m where m.id = library_books.owner_id) as owner_name
       from library_books
       where slug = ${data.slug}
       limit 1

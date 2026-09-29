@@ -15,6 +15,7 @@ function uniqueSlug(base: string, taken: Set<string>): string {
 }
 
 export type MangaSeriesCard = {
+  author: string;
   hidden?: boolean;
   slug: string;
   title: string;
@@ -121,8 +122,11 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     description: string;
     cover_media_id: number | null;
     chapter_count: string;
+    author: string;
+    owner_name: string | null;
   }>`
-    select s.slug, s.title, s.description, s.cover_media_id,
+    select s.slug, s.title, s.description, s.cover_media_id, s.author,
+      (select m.display_name from members m where m.id = s.owner_id) as owner_name,
       count(c.id) as chapter_count
     from manga_series s
     left join manga_chapters c on c.series_id = s.id
@@ -135,6 +139,7 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     description: r.description,
     coverMediaId: r.cover_media_id,
     chapterCount: Number(r.chapter_count),
+    author: r.author || r.owner_name || "",
   })) satisfies MangaSeriesCard[];
   const shown = list.map((x) => ({ ...x, hidden: hid.has(x.slug) }));
   return me.role === "admin" ? shown : shown.filter((x) => !x.hidden);
@@ -177,7 +182,10 @@ export const getMangaSeries = createServerFn({ method: "GET" })
       description: string;
       cover_media_id: number | null;
       owner_id: number | null;
-    }>`select id, slug, title, description, cover_media_id, owner_id from manga_series where slug = ${data.slug} limit 1`;
+      author: string;
+      owner_name: string | null;
+    }>`select id, slug, title, description, cover_media_id, owner_id, author,
+      (select m.display_name from members m where m.id = manga_series.owner_id) as owner_name from manga_series where slug = ${data.slug} limit 1`;
     const series = seriesRows[0];
     if (!series) return null;
 
@@ -202,6 +210,7 @@ export const getMangaSeries = createServerFn({ method: "GET" })
 
     return {
       hidden: hiddenNow,
+      author: series.author || series.owner_name || "",
       slug: series.slug,
       title: series.title,
       description: series.description,

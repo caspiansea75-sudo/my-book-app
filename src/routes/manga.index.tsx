@@ -112,6 +112,7 @@ function MangaHub() {
                 />
                 <div className="p-3">
                   <p className="font-display text-lg">{s.title}</p>
+                  {s.author ? <p className="mt-0.5 font-sans text-xs text-lamp">{s.author}</p> : null}
                   <p className="mt-1 font-sans text-xs text-muted">{s.chapterCount} অধ্যায়</p>
                 </div>
               </Link>

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { BookOpen, ChevronLeft, CloudRain, PenLine } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
+import { AuthorLine } from "@/components/members/author-line";
 import { AmbientAudio } from "@/components/book/ambient-audio";
 import { WarningGate } from "@/components/book/warning-gate";
 import { formatCount, type BookIndex } from "@/lib/book";
@@ -46,6 +47,7 @@ export function BookCoverPage({ book }: { book: BookIndex }) {
           <h1 className="cover-title mt-5 font-display text-4xl font-semibold leading-tight sm:text-6xl">
             {book.title}
           </h1>
+          <AuthorLine kind="book" slug={book.slug} author={book.author} canEdit={canEditOwner(me, book.ownerId)} />
           <p className="mt-5 max-w-lg font-display text-base leading-relaxed text-muted sm:text-lg">
             {book.description}
           </p>
