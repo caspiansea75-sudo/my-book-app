@@ -1,9 +1,8 @@
 import { Link, useRouter, useRouteContext } from "@tanstack/react-router";
 import { LogIn, LogOut, ShieldCheck } from "lucide-react";
-import { Avatar } from "@/components/members/avatar";
 import { logout } from "@/lib/members-api";
 
-/** Profile link + logout. Sits in the site nav. */
+/** Who is signed in + logout. Sits in the site nav. */
 export function AccountChip() {
   const router = useRouter();
   const { me } = useRouteContext({ from: "__root__" });
@@ -26,18 +25,11 @@ export function AccountChip() {
   }
 
   return (
-    <div className="flex items-center gap-0.5 font-sans text-xs text-muted">
-      <Link
-        to="/profile"
-        title="আমার প্রোফাইল"
-        className="pressable inline-flex h-10 items-center gap-1.5 rounded-full px-1.5 hover:bg-surface-2 hover:text-fg sm:pr-3"
-      >
-        <Avatar name={me.displayName} url={me.avatarUrl} size={28} />
-        <span className="hidden max-w-28 items-center gap-1 truncate sm:inline-flex">
-          {me.role === "admin" ? <ShieldCheck className="size-3.5 text-lamp" /> : null}
-          {me.displayName}
-        </span>
-      </Link>
+    <div className="flex items-center gap-1 font-sans text-xs text-muted">
+      <span className="hidden max-w-28 items-center gap-1 truncate sm:inline-flex">
+        {me.role === "admin" ? <ShieldCheck className="size-3.5 text-lamp" /> : null}
+        {me.displayName}
+      </span>
       <button
         type="button"
         onClick={() => void out()}
