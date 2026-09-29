@@ -3,6 +3,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { PenLine } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
+import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { createBook, listLibrary } from "@/lib/library-api";
 
 export const Route = createFileRoute("/studio/")({
@@ -36,14 +37,15 @@ function StudioHome() {
   }
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="mf-page relative min-h-dvh">
+      <FxAurora />
       <SiteNav active="studio" />
       <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
-        <p className="flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
+        <p className="mf-eyebrow flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
           <PenLine className="size-4" strokeWidth={1.6} />
           সম্পাদনা কক্ষ
         </p>
-        <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl">স্টুডিও</h1>
+        <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl"><FxWords text="স্টুডিও" /></h1>
         <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">
           নতুন বই লিখুন, প্রচ্ছদ তুলুন, অধ্যায়ে ছবি ও ভিডিও বসান। সবকিছু সাইটেই থাকে — Vercel ডিপ্লয়ের সাথে
           সংরক্ষিত, GitHub-এ মিডিয়া কমিট করতে হয় না।
@@ -94,12 +96,13 @@ function StudioHome() {
 
         <h2 className="mt-14 font-display text-2xl">বইসমূহ</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          {books.map((book) => (
+          {books.map((book, i) => (
             <Link
               key={book.slug}
               to="/studio/$bookSlug"
               params={{ bookSlug: book.slug }}
-              className="pressable flex gap-4 overflow-hidden rounded-xl border border-border bg-surface p-3 hover:bg-surface-2"
+              className="mf-card mf-rise pressable flex gap-4 overflow-hidden rounded-xl border border-border bg-surface p-3 hover:bg-surface-2"
+              style={fxIndex(i)}
             >
               <CoverArt
                 title={book.title}

@@ -3,6 +3,7 @@ import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BookImage } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
+import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { createMangaSeries, listMangaSeries } from "@/lib/manga-api";
 import { mediaSrc } from "@/lib/media-url";
 
@@ -34,14 +35,15 @@ function MangaHub() {
   }
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="mf-page relative min-h-dvh">
+      <FxAurora />
       <SiteNav active="manga" />
       <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8">
-        <p className="flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
+        <p className="mf-eyebrow flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
           <BookImage className="size-4" strokeWidth={1.6} />
           মাঙ্গা
         </p>
-        <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl">মাঙ্গা স্টুডিও</h1>
+        <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl"><FxWords text="মাঙ্গা স্টুডিও" /></h1>
         <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">
           চিত্রশালার ছবি দিয়ে প্যানেল সাজিয়ে নিজের মাঙ্গা তৈরি করুন, আর স্ক্রল করে মাঙ্গার মতো পড়ুন।
         </p>
@@ -90,12 +92,13 @@ function MangaHub() {
           <p className="mt-4 font-sans text-sm text-muted">এখনো কোনো মাঙ্গা তৈরি হয়নি।</p>
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {series.map((s) => (
+            {series.map((s, i) => (
               <Link
                 key={s.slug}
                 to="/manga/$seriesSlug"
                 params={{ seriesSlug: s.slug }}
-                className="pressable group overflow-hidden rounded-xl border border-border bg-surface"
+                className="mf-card mf-rise pressable group overflow-hidden rounded-xl border border-border bg-surface"
+                style={fxIndex(i)}
               >
                 <CoverArt
                   title={s.title}

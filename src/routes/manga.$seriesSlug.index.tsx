@@ -3,6 +3,7 @@ import { Link, createFileRoute, notFound, useNavigate, useRouter } from "@tansta
 import { BookImage, ImagePlus, PenLine, Play, Plus, Trash2 } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
+import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
@@ -94,7 +95,8 @@ function MangaSeriesPage() {
   }
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="mf-page relative min-h-dvh">
+      <FxAurora />
       <SiteNav active="manga" />
       <section className="mx-auto max-w-4xl px-5 py-12 sm:px-8">
         <Link
@@ -157,7 +159,7 @@ function MangaSeriesPage() {
               </form>
             ) : (
               <>
-                <h1 className="font-display text-3xl font-semibold sm:text-4xl">{series.title}</h1>
+                <h1 className="font-display text-3xl font-semibold sm:text-4xl"><FxWords text={series.title} /></h1>
                 {series.description ? (
                   <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{series.description}</p>
                 ) : null}
@@ -243,11 +245,12 @@ function MangaSeriesPage() {
         {series.chapters.length === 0 ? (
           <p className="mt-4 font-sans text-sm text-muted">এখনো কোনো অধ্যায় নেই।</p>
         ) : (
-          <div className="stagger-in mt-5 space-y-2.5">
-            {series.chapters.map((c) => (
+          <div className="mt-5 space-y-2.5">
+            {series.chapters.map((c, i) => (
               <div
                 key={c.slug}
-                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3"
+                style={fxIndex(i)}
+                className="mf-card mf-rise flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="font-display text-base">{c.title}</p>

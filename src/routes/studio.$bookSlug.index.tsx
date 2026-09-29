@@ -3,6 +3,7 @@ import { Link, createFileRoute, notFound, useNavigate, useRouter } from "@tansta
 import { ChevronLeft, ImagePlus, Plus } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
+import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { formatCount } from "@/lib/book";
 import {
@@ -75,7 +76,8 @@ function StudioBookPage() {
   }
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="mf-page relative min-h-dvh">
+      <FxAurora />
       <SiteNav active="studio" />
       <section className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
         <Link to="/studio" className="pressable inline-flex items-center gap-1 text-xs text-muted hover:text-fg">
@@ -106,7 +108,7 @@ function StudioBookPage() {
             <p className="font-sans text-xs tracking-widest text-lamp">
               {canon ? "মূল সংগ্রহ" : "স্টুডিও বই"}
             </p>
-            <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl">{book.title}</h1>
+            <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl"><FxWords text={book.title} /></h1>
             <p className="mt-2 font-sans text-sm text-muted">
               {formatCount(book.chapterCount)} অধ্যায়
             </p>
@@ -185,8 +187,8 @@ function StudioBookPage() {
         </div>
 
         <ol className="mt-5 grid gap-2">
-          {book.chapters.map((ch) => (
-            <li key={ch.slug}>
+          {book.chapters.map((ch, i) => (
+            <li key={ch.slug} className="mf-rise" style={fxIndex(i)}>
               <Link
                 to="/studio/$bookSlug/$slug"
                 params={{ bookSlug: book.slug, slug: ch.slug }}
