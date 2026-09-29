@@ -11,6 +11,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
+import { fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
 import { SHELF_LABEL, type LibView, type Shelf } from "@/lib/library-store";
 import { cn } from "@/lib/utils";
@@ -177,6 +178,7 @@ function Progress({ opened, total }: { opened: number; total: number }) {
 }
 
 export function LibraryCard({
+  index = 0,
   book,
   view,
   meta,
@@ -189,6 +191,8 @@ export function LibraryCard({
   onShelf,
   onMove,
 }: {
+  /** Position in the grid, used to stagger the entrance animation. */
+  index?: number;
   book: LibraryBookCard;
   view: LibView;
   meta: CardMeta;
@@ -218,8 +222,9 @@ export function LibraryCard({
   return (
     <div
       id={`book-${book.slug}`}
+      style={fxIndex(index)}
       className={cn(
-        "group relative scroll-mt-28 rounded-xl",
+        "mf-tile mf-rise group relative scroll-mt-28 rounded-xl",
         over && "ring-2 ring-lamp",
         manual && "cursor-grab",
       )}

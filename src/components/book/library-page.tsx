@@ -17,6 +17,7 @@ import {
 import { CoverArt } from "@/components/book/cover-art";
 import { LibraryCard, type CardMeta } from "@/components/book/library-card";
 import { SiteNav } from "@/components/book/site-nav";
+import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
 import {
   LIB_DEFAULTS,
@@ -286,18 +287,22 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
   );
 
   return (
-    <main className="relative min-h-dvh">
+    <main className="mf-page relative min-h-dvh">
+      <FxAurora />
       <SiteNav active="library" />
       <section className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-16">
-        <div className="stagger-in mx-auto max-w-2xl text-center">
-          <p className="flex items-center justify-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="mf-eyebrow mx-auto flex items-center justify-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
             <CloudRain className="size-4" strokeWidth={1.6} />
             গল্প সংগ্রহ
           </p>
-          <h1 className="mt-5 font-display text-4xl font-semibold leading-tight sm:text-6xl">
-            আপনার লাইব্রেরি
+          <h1 className="mt-5 font-display text-4xl font-semibold leading-tight sm:text-6xl [&>.mf-word:last-child]:mr-0">
+            <FxWords text="আপনার লাইব্রেরি" />
           </h1>
-          <p className="mx-auto mt-4 max-w-lg font-sans text-sm leading-relaxed text-muted sm:text-base">
+          <p
+            className="mf-rise mx-auto mt-4 max-w-lg font-sans text-sm leading-relaxed text-muted sm:text-base"
+            style={fxIndex(6)}
+          >
             রাতে পড়ার বই, প্রচ্ছদ, ছবি ও ভিডিও — সব এক জায়গায়। স্টুডিও থেকে নতুন গল্প যোগ করুন।
           </p>
         </div>
@@ -581,6 +586,7 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
           {filtered.map((book, i) => (
             <LibraryCard
               key={book.slug}
+              index={i}
               book={book}
               view={prefs.view}
               meta={metas.get(book.slug)!}
@@ -619,8 +625,9 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
 
           <Link
             to="/studio"
+            style={fxIndex(filtered.length)}
             className={cn(
-              "pressable flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface",
+              "mf-card mf-rise pressable flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface",
               prefs.view === "list" || prefs.view === "covers" ? "min-h-24" : "min-h-64",
             )}
           >
