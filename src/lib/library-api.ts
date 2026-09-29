@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
+import { assertBookAccess, assertMediaAccess, requireMember } from "@/lib/members-core";
 import {
   emptyChapterBody,
   getCanonBook,
@@ -390,6 +391,7 @@ const uploadSchema = z.object({
 export const createMedia = createServerFn({ method: "POST" })
   .validator(uploadSchema)
   .handler(async ({ data }) => {
+    const me = await requireMember();
     if (data.source === "url") {
       const url = data.url?.trim() ?? "";
       if (!url) throw new Error("লিংক দিন");
@@ -416,6 +418,7 @@ export const createMedia = createServerFn({ method: "POST" })
         `;
         const id = rows[0]?.id;
         if (!id) throw new Error("সংরক্ষণ হয়নি");
+        await (await getSql())`update media set owner_id = ${me.id} where id = ${id}`;
         return { id };
       }
       const sql = await getSql();
@@ -437,6 +440,7 @@ export const createMedia = createServerFn({ method: "POST" })
       `;
       const id = rows[0]?.id;
       if (!id) throw new Error("সংরক্ষণ হয়নি");
+      await (await getSql())`update media set owner_id = ${me.id} where id = ${id}`;
       return { id };
     }
 
@@ -464,12 +468,15 @@ export const createMedia = createServerFn({ method: "POST" })
     `;
     const id = rows[0]?.id;
     if (!id) throw new Error("সংরক্ষণ হয়নি");
+    await (await getSql())`update media set owner_id = ${me.id} where id = ${id}`;
     return { id };
   });
 
 export const deleteMedia = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.number().int().positive() }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertMediaAccess(me, [data.id]);
     const sql = await getSql();
     await sql`delete from media where id = ${data.id}`;
     return { ok: true };
@@ -488,6 +495,7 @@ const bookSchema = z.object({
 export const createBook = createServerFn({ method: "POST" })
   .validator(bookSchema)
   .handler(async ({ data }) => {
+    const me = await requireMember();
     const sql = await getSql();
     const existing = await sql<{ slug: string }>`select slug from library_books`;
     const taken = new Set([
@@ -496,7 +504,7 @@ export const createBook = createServerFn({ method: "POST" })
     ]);
     const slug = uniqueSlug(data.slug || data.titleEn || data.title, taken);
     const rows = await sql<{ slug: string }>`
-      insert into library_books (slug, title, title_en, author, tagline, description, cover_media_id)
+      insert into library_books (slug, title, title_en, author, tagline, description, cover_media_id, owner_id)
       values (
         ${slug},
         ${data.title},
@@ -504,7 +512,8 @@ export const createBook = createServerFn({ method: "POST" })
         ${data.author ?? ""},
         ${data.tagline ?? ""},
         ${data.description ?? ""},
-        ${data.coverMediaId ?? null}
+        ${data.coverMediaId ?? null},
+        ${me.id}
       )
       returning slug
     `;
@@ -516,6 +525,8 @@ export const createBook = createServerFn({ method: "POST" })
 export const updateBook = createServerFn({ method: "POST" })
   .validator(bookSchema.extend({ slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertBookAccess(me, data.slug);
     const sql = await getSql();
     await sql`
       update library_books
@@ -537,6 +548,8 @@ export const setBookCover = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertBookAccess(me, data.slug);
     const sql = await getSql();
     const studio = await sql<{ id: number }>`select id from library_books where slug = ${data.slug} limit 1`;
     if (studio[0]) {
@@ -600,6 +613,8 @@ const chapterSchema = z.object({
 export const saveStudioChapter = createServerFn({ method: "POST" })
   .validator(chapterSchema)
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertBookAccess(me, data.bookSlug);
     const sql = await getSql();
     const books = await sql<{ id: number }>`select id from library_books where slug = ${data.bookSlug} limit 1`;
     const book = books[0];
@@ -664,6 +679,8 @@ const insertSchema = z.object({
 export const saveChapterInserts = createServerFn({ method: "POST" })
   .validator(insertSchema)
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertBookAccess(me, data.bookSlug);
     if (!getCanonBook(data.bookSlug)) throw new Error("শুধু আসল বইয়ে ছবি যোগ করা যায় এই পথে");
     const sql = await getSql();
     await sql`delete from chapter_inserts where book_slug = ${data.bookSlug} and chapter_slug = ${data.chapterSlug}`;
@@ -681,6 +698,8 @@ export const saveChapterInserts = createServerFn({ method: "POST" })
 export const deleteStudioChapter = createServerFn({ method: "POST" })
   .validator(z.object({ bookSlug: z.string().min(1), slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertBookAccess(me, data.bookSlug);
     const sql = await getSql();
     const books = await sql<{ id: number }>`select id from library_books where slug = ${data.bookSlug} limit 1`;
     const book = books[0];
@@ -692,6 +711,8 @@ export const deleteStudioChapter = createServerFn({ method: "POST" })
 export const deleteStudioBook = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertBookAccess(me, data.slug);
     const sql = await getSql();
     await sql`delete from library_books where slug = ${data.slug}`;
     return { ok: true };

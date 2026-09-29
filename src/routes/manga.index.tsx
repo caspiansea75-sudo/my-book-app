@@ -6,6 +6,7 @@ import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { createMangaSeries, listMangaSeries } from "@/lib/manga-api";
 import { mediaSrc } from "@/lib/media-url";
+import { useMe } from "@/lib/use-me";
 
 export const Route = createFileRoute("/manga/")({
   loader: () => listMangaSeries(),
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/manga/")({
 
 function MangaHub() {
   const series = Route.useLoaderData();
+  const me = useMe();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
@@ -48,44 +50,46 @@ function MangaHub() {
           চিত্রশালার ছবি দিয়ে প্যানেল সাজিয়ে নিজের মাঙ্গা তৈরি করুন, আর স্ক্রল করে মাঙ্গার মতো পড়ুন।
         </p>
 
-        <form
-          onSubmit={(e) => void onCreate(e)}
-          className="mt-10 rounded-xl border border-border bg-surface p-5 sm:p-6"
-        >
-          <h2 className="font-display text-xl">নতুন মাঙ্গা</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1.5 block font-sans text-xs text-muted">শিরোনাম</span>
-              <input
-                required
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
+        {me ? (
+          <form
+            onSubmit={(e) => void onCreate(e)}
+            className="mt-10 rounded-xl border border-border bg-surface p-5 sm:p-6"
+          >
+            <h2 className="font-display text-xl">নতুন মাঙ্গা</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block font-sans text-xs text-muted">শিরোনাম</span>
+                <input
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="field-input"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block font-sans text-xs text-muted">English title (slug-এর জন্য)</span>
+                <input value={titleEn} onChange={(e) => setTitleEn(e.target.value)} className="field-input" />
+              </label>
+            </div>
+            <label className="mt-3 block">
+              <span className="mb-1.5 block font-sans text-xs text-muted">পরিচিতি</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={2}
                 className="field-input"
               />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block font-sans text-xs text-muted">English title (slug-এর জন্য)</span>
-              <input value={titleEn} onChange={(e) => setTitleEn(e.target.value)} className="field-input" />
-            </label>
-          </div>
-          <label className="mt-3 block">
-            <span className="mb-1.5 block font-sans text-xs text-muted">পরিচিতি</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="field-input"
-            />
-          </label>
-          {error ? <p className="mt-3 font-sans text-sm text-nsfw">{error}</p> : null}
-          <button
-            type="submit"
-            disabled={busy || !title.trim()}
-            className="pressable mt-5 inline-flex h-12 items-center rounded-lg bg-accent px-5 font-sans text-sm text-accent-fg disabled:opacity-50"
-          >
-            {busy ? "তৈরি হচ্ছে…" : "মাঙ্গা খুলুন"}
-          </button>
-        </form>
+            {error ? <p className="mt-3 font-sans text-sm text-nsfw">{error}</p> : null}
+            <button
+              type="submit"
+              disabled={busy || !title.trim()}
+              className="pressable mt-5 inline-flex h-12 items-center rounded-lg bg-accent px-5 font-sans text-sm text-accent-fg disabled:opacity-50"
+            >
+              {busy ? "তৈরি হচ্ছে…" : "মাঙ্গা খুলুন"}
+            </button>
+          </form>
+        ) : null}
 
         <h2 className="mt-14 font-display text-2xl">সব মাঙ্গা</h2>
         {series.length === 0 ? (

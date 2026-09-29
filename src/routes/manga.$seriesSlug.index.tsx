@@ -7,6 +7,7 @@ import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
+import { useMe } from "@/lib/use-me";
 import {
   createMangaChapter,
   deleteMangaChapter,
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/manga/$seriesSlug/")({
 
 function MangaSeriesPage() {
   const { series, media } = Route.useLoaderData();
+  const me = useMe();
   const router = useRouter();
   const navigate = useNavigate();
 
@@ -40,7 +42,7 @@ function MangaSeriesPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
 
-  const [showChapterForm, setShowChapterForm] = useState(series.chapters.length === 0);
+  const [showChapterForm, setShowChapterForm] = useState(!!me && series.chapters.length === 0);
   const [chapterTitle, setChapterTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,14 +117,16 @@ function MangaSeriesPage() {
               slug={series.slug}
               className="h-56 w-44 rounded-lg"
             />
-            <button
-              type="button"
-              onClick={() => setCoverOpen((v) => !v)}
-              className="pressable mt-2 inline-flex h-9 w-44 items-center justify-center gap-1.5 rounded-lg border border-border font-sans text-xs text-fg"
-            >
-              <ImagePlus className="size-3.5" strokeWidth={1.75} />
-              প্রচ্ছদ
-            </button>
+            {me ? (
+              <button
+                type="button"
+                onClick={() => setCoverOpen((v) => !v)}
+                className="pressable mt-2 inline-flex h-9 w-44 items-center justify-center gap-1.5 rounded-lg border border-border font-sans text-xs text-fg"
+              >
+                <ImagePlus className="size-3.5" strokeWidth={1.75} />
+                প্রচ্ছদ
+              </button>
+            ) : null}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -163,38 +167,40 @@ function MangaSeriesPage() {
                 {series.description ? (
                   <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{series.description}</p>
                 ) : null}
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowChapterForm((v) => !v)}
-                    className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
-                  >
-                    <Plus className="size-4" strokeWidth={1.75} />
-                    নতুন অধ্যায়
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditOpen(true)}
-                    className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-4 font-sans text-sm text-fg"
-                  >
-                    <PenLine className="size-4" strokeWidth={1.75} />
-                    সম্পাদনা
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void removeSeries()}
-                    className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-4 font-sans text-sm text-nsfw"
-                  >
-                    <Trash2 className="size-4" strokeWidth={1.75} />
-                    মাঙ্গা মুছুন
-                  </button>
-                </div>
+                {me ? (
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowChapterForm((v) => !v)}
+                      className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
+                    >
+                      <Plus className="size-4" strokeWidth={1.75} />
+                      নতুন অধ্যায়
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditOpen(true)}
+                      className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-4 font-sans text-sm text-fg"
+                    >
+                      <PenLine className="size-4" strokeWidth={1.75} />
+                      সম্পাদনা
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeSeries()}
+                      className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg border border-border px-4 font-sans text-sm text-nsfw"
+                    >
+                      <Trash2 className="size-4" strokeWidth={1.75} />
+                      মাঙ্গা মুছুন
+                    </button>
+                  </div>
+                ) : null}
               </>
             )}
           </div>
         </div>
 
-        {coverOpen ? (
+        {me && coverOpen ? (
           <div className="mt-6 rounded-xl border border-border bg-surface p-4">
             <p className="mb-3 font-display">প্রচ্ছদের ছবি</p>
             <MediaUploader compact onUploaded={(id) => void pickCover(id)} />
@@ -215,7 +221,7 @@ function MangaSeriesPage() {
           </div>
         ) : null}
 
-        {showChapterForm ? (
+        {me && showChapterForm ? (
           <form
             onSubmit={(e) => void onCreateChapter(e)}
             className="mt-6 rounded-xl border border-border bg-surface p-5"
@@ -256,14 +262,16 @@ function MangaSeriesPage() {
                   <p className="font-display text-base">{c.title}</p>
                   <p className="mt-0.5 font-sans text-xs text-muted">{c.panelCount} প্যানেল</p>
                 </div>
-                <Link
-                  to="/manga/$seriesSlug/$chapterSlug/edit"
-                  params={{ seriesSlug: series.slug, chapterSlug: c.slug }}
-                  className="pressable inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 font-sans text-xs text-muted hover:text-fg"
-                >
-                  <PenLine className="size-3.5" strokeWidth={1.75} />
-                  সম্পাদনা
-                </Link>
+                {me ? (
+                  <Link
+                    to="/manga/$seriesSlug/$chapterSlug/edit"
+                    params={{ seriesSlug: series.slug, chapterSlug: c.slug }}
+                    className="pressable inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 font-sans text-xs text-muted hover:text-fg"
+                  >
+                    <PenLine className="size-3.5" strokeWidth={1.75} />
+                    সম্পাদনা
+                  </Link>
+                ) : null}
                 {c.panelCount > 0 ? (
                   <Link
                     to="/manga/$seriesSlug/$chapterSlug"
@@ -274,14 +282,16 @@ function MangaSeriesPage() {
                     পড়ুন
                   </Link>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={() => void removeChapter(c.slug)}
-                  className="pressable grid size-9 shrink-0 place-items-center rounded-full text-nsfw/80 hover:text-nsfw"
-                  aria-label="অধ্যায় মুছুন"
-                >
-                  <Trash2 className="size-3.5" strokeWidth={1.75} />
-                </button>
+                {me ? (
+                  <button
+                    type="button"
+                    onClick={() => void removeChapter(c.slug)}
+                    className="pressable grid size-9 shrink-0 place-items-center rounded-full text-nsfw/80 hover:text-nsfw"
+                    aria-label="অধ্যায় মুছুন"
+                  >
+                    <Trash2 className="size-3.5" strokeWidth={1.75} />
+                  </button>
+                ) : null}
               </div>
             ))}
           </div>

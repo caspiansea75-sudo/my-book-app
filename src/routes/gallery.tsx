@@ -6,6 +6,7 @@ import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { deleteMedia, listMedia, type MediaItem } from "@/lib/library-api";
+import { useMe } from "@/lib/use-me";
 
 export const Route = createFileRoute("/gallery")({
   loader: () => listMedia(),
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/gallery")({
 
 function GalleryPage() {
   const initial = Route.useLoaderData();
+  const me = useMe();
   const [items, setItems] = useState<MediaItem[]>(initial);
   const [filter, setFilter] = useState<"all" | "image" | "video">("all");
   const [open, setOpen] = useState<number | null>(null);
@@ -50,13 +52,15 @@ function GalleryPage() {
           লিংক দিয়ে।
         </p>
 
-        <div className="mt-8">
-          <MediaUploader
-            onUploaded={() => {
-              void refresh();
-            }}
-          />
-        </div>
+        {me ? (
+          <div className="mt-8">
+            <MediaUploader
+              onUploaded={() => {
+                void refresh();
+              }}
+            />
+          </div>
+        ) : null}
 
         <div className="mt-8 flex flex-wrap gap-1.5">
           {(
@@ -115,18 +119,20 @@ function GalleryPage() {
                     </span>
                   ) : null}
                 </button>
-                <button
-                  type="button"
-                  className="pressable absolute top-2 right-2 grid size-10 place-items-center rounded-full bg-bg/70 text-muted opacity-0 group-hover:opacity-100"
-                  aria-label="মুছুন"
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    await deleteMedia({ data: { id: item.id } });
-                    await refresh();
-                  }}
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                {me ? (
+                  <button
+                    type="button"
+                    className="pressable absolute top-2 right-2 grid size-10 place-items-center rounded-full bg-bg/70 text-muted opacity-0 group-hover:opacity-100"
+                    aria-label="মুছুন"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      await deleteMedia({ data: { id: item.id } });
+                      await refresh();
+                    }}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                ) : null}
               </article>
             ))}
           </div>

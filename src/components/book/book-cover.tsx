@@ -5,9 +5,11 @@ import { AmbientAudio } from "@/components/book/ambient-audio";
 import { WarningGate } from "@/components/book/warning-gate";
 import { formatCount, type BookIndex } from "@/lib/book";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
+import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 export function BookCoverPage({ book }: { book: BookIndex }) {
+  const me = useMe();
   const lastSlug = useReaderStore((s) => s.lastByBook[book.slug]);
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
@@ -64,14 +66,16 @@ export function BookCoverPage({ book }: { book: BookIndex }) {
             >
               প্রথম আপডেট
             </Link>
-            <Link
-              to="/studio/$bookSlug"
-              params={{ bookSlug: book.slug }}
-              className="pressable inline-flex h-12 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-muted hover:text-fg"
-            >
-              <PenLine className="size-4" strokeWidth={1.75} />
-              {book.origin === "studio" ? "সম্পাদনা" : "ছবি যোগ"}
-            </Link>
+            {me ? (
+              <Link
+                to="/studio/$bookSlug"
+                params={{ bookSlug: book.slug }}
+                className="pressable inline-flex h-12 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-muted hover:text-fg"
+              >
+                <PenLine className="size-4" strokeWidth={1.75} />
+                {book.origin === "studio" ? "সম্পাদনা" : "ছবি যোগ"}
+              </Link>
+            ) : null}
           </div>
 
           <div className="mt-10 flex flex-wrap gap-1.5">

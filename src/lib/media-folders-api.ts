@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql, type Sql } from "@/lib/db";
+import { assertFolderAccess, assertMediaAccess, requireMember } from "@/lib/members-core";
 import { getCanonBook } from "@/lib/book";
 import { mediaSrc, mediaThumbSrc } from "@/lib/media-url";
 
@@ -162,6 +163,7 @@ async function collectUsage(sql: Sql): Promise<Map<number, MediaUsage[]>> {
 
 /** Everything the media page needs in one round trip (no heavy blob columns). */
 export const loadVault = createServerFn({ method: "GET" }).handler(async (): Promise<Vault> => {
+    await requireMember();
   const sql = await getSql();
   const folderRows = await sql<FolderRow>`
     select f.id, f.parent_id, f.name, f.created_at,
@@ -200,13 +202,15 @@ const folderName = z
 export const createFolder = createServerFn({ method: "POST" })
   .validator(z.object({ name: folderName, parentId: z.number().int().positive().nullable() }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    if (data.parentId != null) await assertFolderAccess(me, data.parentId);
     const sql = await getSql();
     if (data.parentId != null) {
       const parent = await sql<{ id: number }>`select id from media_folders where id = ${data.parentId}`;
       if (!parent[0]) throw new Error("ফোল্ডারটি পাওয়া যায়নি");
     }
     const rows = await sql<{ id: number }>`
-      insert into media_folders (name, parent_id) values (${data.name}, ${data.parentId}) returning id
+      insert into media_folders (name, parent_id, owner_id) values (${data.name}, ${data.parentId}, ${me.id}) returning id
     `;
     return { id: rows[0].id };
   });
@@ -214,6 +218,8 @@ export const createFolder = createServerFn({ method: "POST" })
 export const renameFolder = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.number().int().positive(), name: folderName }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertFolderAccess(me, data.id);
     const sql = await getSql();
     await sql`update media_folders set name = ${data.name} where id = ${data.id}`;
     return { ok: true };
@@ -225,6 +231,9 @@ export const moveFolder = createServerFn({ method: "POST" })
     z.object({ id: z.number().int().positive(), parentId: z.number().int().positive().nullable() }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertFolderAccess(me, data.id);
+    if (data.parentId != null) await assertFolderAccess(me, data.parentId);
     const sql = await getSql();
     if (data.parentId != null) {
       if (data.parentId === data.id) throw new Error("ফোল্ডারকে নিজের ভেতরে রাখা যায় না");
@@ -251,6 +260,8 @@ export const moveFolder = createServerFn({ method: "POST" })
 export const deleteFolder = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.number().int().positive() }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertFolderAccess(me, data.id);
     const sql = await getSql();
     const found = await sql<{ parent_id: number | null }>`
       select parent_id from media_folders where id = ${data.id}
@@ -276,6 +287,9 @@ export const moveMedia = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertMediaAccess(me, data.ids);
+    if (data.folderId != null) await assertFolderAccess(me, data.folderId);
     const sql = await getSql();
     if (data.folderId == null) {
       await sql.query(`delete from media_folder_items where media_id = any($1::int[])`, [data.ids]);
@@ -295,6 +309,8 @@ export const moveMedia = createServerFn({ method: "POST" })
 export const renameMedia = createServerFn({ method: "POST" })
   .validator(z.object({ id: z.number().int().positive(), title: z.string().max(160) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertMediaAccess(me, [data.id]);
     const sql = await getSql();
     await sql`update media set title = ${data.title.trim()} where id = ${data.id}`;
     return { ok: true };
@@ -304,6 +320,7 @@ export const renameMedia = createServerFn({ method: "POST" })
 export const getMediaUsage = createServerFn({ method: "POST" })
   .validator(z.object({ ids: z.array(z.number().int().positive()).min(1).max(500) }))
   .handler(async ({ data }) => {
+    await requireMember();
     const sql = await getSql();
     const usage = await collectUsage(sql);
     const result: Record<number, MediaUsage[]> = {};
@@ -323,6 +340,8 @@ export const deleteMediaSafe = createServerFn({ method: "POST" })
     z.object({ ids: z.array(z.number().int().positive()).min(1).max(500), force: z.boolean().default(false) }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertMediaAccess(me, data.ids);
     const sql = await getSql();
     let ids = data.ids;
     let skipped: number[] = [];

@@ -11,12 +11,24 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as MangaRouteImport } from './routes/manga'
+import { Route as MediaRouteImport } from './routes/media'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as BookBookSlugRouteImport } from './routes/book.$bookSlug'
+import { Route as MangaIndexRouteImport } from './routes/manga.index'
+import { Route as MangaSeriesSlugRouteImport } from './routes/manga.$seriesSlug'
+import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
 import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
+import { Route as MangaSeriesSlugIndexRouteImport } from './routes/manga.$seriesSlug.index'
+import { Route as MangaSeriesSlugChapterSlugRouteImport } from './routes/manga.$seriesSlug.$chapterSlug'
 import { Route as ReadBookSlugSlugRouteImport } from './routes/read.$bookSlug.$slug'
+import { Route as StudioBookSlugIndexRouteImport } from './routes/studio.$bookSlug.index'
 import { Route as StudioBookSlugSlugRouteImport } from './routes/studio.$bookSlug.$slug'
+import { Route as MangaSeriesSlugChapterSlugIndexRouteImport } from './routes/manga.$seriesSlug.$chapterSlug.index'
+import { Route as MangaSeriesSlugChapterSlugEditRouteImport } from './routes/manga.$seriesSlug.$chapterSlug.edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -26,6 +38,26 @@ const IndexRoute = IndexRouteImport.update({
 const GalleryRoute = GalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MangaRoute = MangaRouteImport.update({
+  id: '/manga',
+  path: '/manga',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MediaRoute = MediaRouteImport.update({
+  id: '/media',
+  path: '/media',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioRoute = StudioRouteImport.update({
@@ -38,6 +70,21 @@ const BookBookSlugRoute = BookBookSlugRouteImport.update({
   path: '/book/$bookSlug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MangaIndexRoute = MangaIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MangaRoute,
+} as any)
+const MangaSeriesSlugRoute = MangaSeriesSlugRouteImport.update({
+  id: '/$seriesSlug',
+  path: '/$seriesSlug',
+  getParentRoute: () => MangaRoute,
+} as any)
+const StudioIndexRoute = StudioIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioRoute,
+} as any)
 const StudioBookSlugRoute = StudioBookSlugRouteImport.update({
   id: '/$bookSlug',
   path: '/$bookSlug',
@@ -48,84 +95,178 @@ const ApiMediaIdRoute = ApiMediaIdRouteImport.update({
   path: '/api/media/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MangaSeriesSlugIndexRoute = MangaSeriesSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MangaSeriesSlugRoute,
+} as any)
+const MangaSeriesSlugChapterSlugRoute =
+  MangaSeriesSlugChapterSlugRouteImport.update({
+    id: '/$chapterSlug',
+    path: '/$chapterSlug',
+    getParentRoute: () => MangaSeriesSlugRoute,
+  } as any)
 const ReadBookSlugSlugRoute = ReadBookSlugSlugRouteImport.update({
   id: '/read/$bookSlug/$slug',
   path: '/read/$bookSlug/$slug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const StudioBookSlugIndexRoute = StudioBookSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => StudioBookSlugRoute,
 } as any)
 const StudioBookSlugSlugRoute = StudioBookSlugSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
   getParentRoute: () => StudioBookSlugRoute,
 } as any)
+const MangaSeriesSlugChapterSlugIndexRoute =
+  MangaSeriesSlugChapterSlugIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => MangaSeriesSlugChapterSlugRoute,
+  } as any)
+const MangaSeriesSlugChapterSlugEditRoute =
+  MangaSeriesSlugChapterSlugEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => MangaSeriesSlugChapterSlugRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/gallery': typeof GalleryRoute
+  '/login': typeof LoginRoute
+  '/manga': typeof MangaRouteWithChildren
+  '/media': typeof MediaRoute
+  '/signup': typeof SignupRoute
   '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
+  '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
+  '/manga/': typeof MangaIndexRoute
+  '/studio/': typeof StudioIndexRoute
   '/api/media/$id': typeof ApiMediaIdRoute
+  '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
+  '/manga/$seriesSlug/': typeof MangaSeriesSlugIndexRoute
+  '/studio/$bookSlug/': typeof StudioBookSlugIndexRoute
+  '/manga/$seriesSlug/$chapterSlug/edit': typeof MangaSeriesSlugChapterSlugEditRoute
+  '/manga/$seriesSlug/$chapterSlug/': typeof MangaSeriesSlugChapterSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/gallery': typeof GalleryRoute
-  '/studio': typeof StudioRouteWithChildren
+  '/login': typeof LoginRoute
+  '/media': typeof MediaRoute
+  '/signup': typeof SignupRoute
   '/book/$bookSlug': typeof BookBookSlugRoute
-  '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
+  '/manga': typeof MangaIndexRoute
+  '/studio': typeof StudioIndexRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
+  '/manga/$seriesSlug': typeof MangaSeriesSlugIndexRoute
+  '/studio/$bookSlug': typeof StudioBookSlugIndexRoute
+  '/manga/$seriesSlug/$chapterSlug/edit': typeof MangaSeriesSlugChapterSlugEditRoute
+  '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/gallery': typeof GalleryRoute
+  '/login': typeof LoginRoute
+  '/manga': typeof MangaRouteWithChildren
+  '/media': typeof MediaRoute
+  '/signup': typeof SignupRoute
   '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
+  '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
+  '/manga/': typeof MangaIndexRoute
+  '/studio/': typeof StudioIndexRoute
   '/api/media/$id': typeof ApiMediaIdRoute
+  '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
+  '/manga/$seriesSlug/': typeof MangaSeriesSlugIndexRoute
+  '/studio/$bookSlug/': typeof StudioBookSlugIndexRoute
+  '/manga/$seriesSlug/$chapterSlug/edit': typeof MangaSeriesSlugChapterSlugEditRoute
+  '/manga/$seriesSlug/$chapterSlug/': typeof MangaSeriesSlugChapterSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/gallery'
+    | '/login'
+    | '/manga'
+    | '/media'
+    | '/signup'
     | '/studio'
     | '/book/$bookSlug'
+    | '/manga/$seriesSlug'
     | '/studio/$bookSlug'
+    | '/manga/'
+    | '/studio/'
     | '/api/media/$id'
+    | '/manga/$seriesSlug/$chapterSlug'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
+    | '/manga/$seriesSlug/'
+    | '/studio/$bookSlug/'
+    | '/manga/$seriesSlug/$chapterSlug/edit'
+    | '/manga/$seriesSlug/$chapterSlug/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/gallery'
-    | '/studio'
+    | '/login'
+    | '/media'
+    | '/signup'
     | '/book/$bookSlug'
-    | '/studio/$bookSlug'
+    | '/manga'
+    | '/studio'
     | '/api/media/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
+    | '/manga/$seriesSlug'
+    | '/studio/$bookSlug'
+    | '/manga/$seriesSlug/$chapterSlug/edit'
+    | '/manga/$seriesSlug/$chapterSlug'
   id:
     | '__root__'
     | '/'
     | '/gallery'
+    | '/login'
+    | '/manga'
+    | '/media'
+    | '/signup'
     | '/studio'
     | '/book/$bookSlug'
+    | '/manga/$seriesSlug'
     | '/studio/$bookSlug'
+    | '/manga/'
+    | '/studio/'
     | '/api/media/$id'
+    | '/manga/$seriesSlug/$chapterSlug'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
+    | '/manga/$seriesSlug/'
+    | '/studio/$bookSlug/'
+    | '/manga/$seriesSlug/$chapterSlug/edit'
+    | '/manga/$seriesSlug/$chapterSlug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   GalleryRoute: typeof GalleryRoute
+  LoginRoute: typeof LoginRoute
+  MangaRoute: typeof MangaRouteWithChildren
+  MediaRoute: typeof MediaRoute
+  SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRouteWithChildren
   BookBookSlugRoute: typeof BookBookSlugRoute
   ApiMediaIdRoute: typeof ApiMediaIdRoute
@@ -148,6 +289,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manga': {
+      id: '/manga'
+      path: '/manga'
+      fullPath: '/manga'
+      preLoaderRoute: typeof MangaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/media': {
+      id: '/media'
+      path: '/media'
+      fullPath: '/media'
+      preLoaderRoute: typeof MediaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/studio': {
       id: '/studio'
       path: '/studio'
@@ -161,6 +330,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/book/$bookSlug'
       preLoaderRoute: typeof BookBookSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/manga/': {
+      id: '/manga/'
+      path: '/'
+      fullPath: '/manga/'
+      preLoaderRoute: typeof MangaIndexRouteImport
+      parentRoute: typeof MangaRoute
+    }
+    '/manga/$seriesSlug': {
+      id: '/manga/$seriesSlug'
+      path: '/$seriesSlug'
+      fullPath: '/manga/$seriesSlug'
+      preLoaderRoute: typeof MangaSeriesSlugRouteImport
+      parentRoute: typeof MangaRoute
+    }
+    '/studio/': {
+      id: '/studio/'
+      path: '/'
+      fullPath: '/studio/'
+      preLoaderRoute: typeof StudioIndexRouteImport
+      parentRoute: typeof StudioRoute
     }
     '/studio/$bookSlug': {
       id: '/studio/$bookSlug'
@@ -176,12 +366,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMediaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/manga/$seriesSlug/': {
+      id: '/manga/$seriesSlug/'
+      path: '/'
+      fullPath: '/manga/$seriesSlug/'
+      preLoaderRoute: typeof MangaSeriesSlugIndexRouteImport
+      parentRoute: typeof MangaSeriesSlugRoute
+    }
+    '/manga/$seriesSlug/$chapterSlug': {
+      id: '/manga/$seriesSlug/$chapterSlug'
+      path: '/$chapterSlug'
+      fullPath: '/manga/$seriesSlug/$chapterSlug'
+      preLoaderRoute: typeof MangaSeriesSlugChapterSlugRouteImport
+      parentRoute: typeof MangaSeriesSlugRoute
+    }
     '/read/$bookSlug/$slug': {
       id: '/read/$bookSlug/$slug'
       path: '/read/$bookSlug/$slug'
       fullPath: '/read/$bookSlug/$slug'
       preLoaderRoute: typeof ReadBookSlugSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/studio/$bookSlug/': {
+      id: '/studio/$bookSlug/'
+      path: '/'
+      fullPath: '/studio/$bookSlug/'
+      preLoaderRoute: typeof StudioBookSlugIndexRouteImport
+      parentRoute: typeof StudioBookSlugRoute
     }
     '/studio/$bookSlug/$slug': {
       id: '/studio/$bookSlug/$slug'
@@ -190,15 +401,73 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudioBookSlugSlugRouteImport
       parentRoute: typeof StudioBookSlugRoute
     }
+    '/manga/$seriesSlug/$chapterSlug/': {
+      id: '/manga/$seriesSlug/$chapterSlug/'
+      path: '/'
+      fullPath: '/manga/$seriesSlug/$chapterSlug/'
+      preLoaderRoute: typeof MangaSeriesSlugChapterSlugIndexRouteImport
+      parentRoute: typeof MangaSeriesSlugChapterSlugRoute
+    }
+    '/manga/$seriesSlug/$chapterSlug/edit': {
+      id: '/manga/$seriesSlug/$chapterSlug/edit'
+      path: '/edit'
+      fullPath: '/manga/$seriesSlug/$chapterSlug/edit'
+      preLoaderRoute: typeof MangaSeriesSlugChapterSlugEditRouteImport
+      parentRoute: typeof MangaSeriesSlugChapterSlugRoute
+    }
   }
 }
 
+interface MangaSeriesSlugChapterSlugRouteChildren {
+  MangaSeriesSlugChapterSlugEditRoute: typeof MangaSeriesSlugChapterSlugEditRoute
+  MangaSeriesSlugChapterSlugIndexRoute: typeof MangaSeriesSlugChapterSlugIndexRoute
+}
+
+const MangaSeriesSlugChapterSlugRouteChildren: MangaSeriesSlugChapterSlugRouteChildren =
+  {
+    MangaSeriesSlugChapterSlugEditRoute: MangaSeriesSlugChapterSlugEditRoute,
+    MangaSeriesSlugChapterSlugIndexRoute: MangaSeriesSlugChapterSlugIndexRoute,
+  }
+
+const MangaSeriesSlugChapterSlugRouteWithChildren =
+  MangaSeriesSlugChapterSlugRoute._addFileChildren(
+    MangaSeriesSlugChapterSlugRouteChildren,
+  )
+
+interface MangaSeriesSlugRouteChildren {
+  MangaSeriesSlugChapterSlugRoute: typeof MangaSeriesSlugChapterSlugRouteWithChildren
+  MangaSeriesSlugIndexRoute: typeof MangaSeriesSlugIndexRoute
+}
+
+const MangaSeriesSlugRouteChildren: MangaSeriesSlugRouteChildren = {
+  MangaSeriesSlugChapterSlugRoute: MangaSeriesSlugChapterSlugRouteWithChildren,
+  MangaSeriesSlugIndexRoute: MangaSeriesSlugIndexRoute,
+}
+
+const MangaSeriesSlugRouteWithChildren = MangaSeriesSlugRoute._addFileChildren(
+  MangaSeriesSlugRouteChildren,
+)
+
+interface MangaRouteChildren {
+  MangaSeriesSlugRoute: typeof MangaSeriesSlugRouteWithChildren
+  MangaIndexRoute: typeof MangaIndexRoute
+}
+
+const MangaRouteChildren: MangaRouteChildren = {
+  MangaSeriesSlugRoute: MangaSeriesSlugRouteWithChildren,
+  MangaIndexRoute: MangaIndexRoute,
+}
+
+const MangaRouteWithChildren = MangaRoute._addFileChildren(MangaRouteChildren)
+
 interface StudioBookSlugRouteChildren {
   StudioBookSlugSlugRoute: typeof StudioBookSlugSlugRoute
+  StudioBookSlugIndexRoute: typeof StudioBookSlugIndexRoute
 }
 
 const StudioBookSlugRouteChildren: StudioBookSlugRouteChildren = {
   StudioBookSlugSlugRoute: StudioBookSlugSlugRoute,
+  StudioBookSlugIndexRoute: StudioBookSlugIndexRoute,
 }
 
 const StudioBookSlugRouteWithChildren = StudioBookSlugRoute._addFileChildren(
@@ -207,10 +476,12 @@ const StudioBookSlugRouteWithChildren = StudioBookSlugRoute._addFileChildren(
 
 interface StudioRouteChildren {
   StudioBookSlugRoute: typeof StudioBookSlugRouteWithChildren
+  StudioIndexRoute: typeof StudioIndexRoute
 }
 
 const StudioRouteChildren: StudioRouteChildren = {
   StudioBookSlugRoute: StudioBookSlugRouteWithChildren,
+  StudioIndexRoute: StudioIndexRoute,
 }
 
 const StudioRouteWithChildren =
@@ -219,6 +490,10 @@ const StudioRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   GalleryRoute: GalleryRoute,
+  LoginRoute: LoginRoute,
+  MangaRoute: MangaRouteWithChildren,
+  MediaRoute: MediaRoute,
+  SignupRoute: SignupRoute,
   StudioRoute: StudioRouteWithChildren,
   BookBookSlugRoute: BookBookSlugRoute,
   ApiMediaIdRoute: ApiMediaIdRoute,

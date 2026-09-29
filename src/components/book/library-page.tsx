@@ -31,6 +31,7 @@ import {
   type StatusFilter,
 } from "@/lib/library-store";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
+import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 const VIEWS: { id: LibView; label: string; icon: typeof Square }[] = [
@@ -116,6 +117,7 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
   const progress = useReaderStore((s) => s.progress);
   const lastByBook = useReaderStore((s) => s.lastByBook);
   const navigate = useNavigate();
+  const me = useMe();
 
   // Personal data (saved in this browser) is applied only after mount so the server HTML matches.
   const [mounted, setMounted] = useState(false);
@@ -623,20 +625,22 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
             />
           ))}
 
-          <Link
-            to="/studio"
-            style={fxIndex(filtered.length)}
-            className={cn(
-              "mf-card mf-rise pressable flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface",
-              prefs.view === "list" || prefs.view === "covers" ? "min-h-24" : "min-h-64",
-            )}
-          >
-            <Images className="size-6 text-lamp" strokeWidth={1.6} />
-            <span className="mt-3 font-display text-lg">নতুন বই</span>
-            <span className="mt-1 max-w-xs font-sans text-sm text-muted">
-              স্টুডিওতে প্রচ্ছদ, অধ্যায়, ছবি ও ভিডিও যোগ করুন। GitHub-এ ফাইল তোলার দরকার নেই।
-            </span>
-          </Link>
+          {me ? (
+            <Link
+              to="/studio"
+              style={fxIndex(filtered.length)}
+              className={cn(
+                "mf-card mf-rise pressable flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface",
+                prefs.view === "list" || prefs.view === "covers" ? "min-h-24" : "min-h-64",
+              )}
+            >
+              <Images className="size-6 text-lamp" strokeWidth={1.6} />
+              <span className="mt-3 font-display text-lg">নতুন বই</span>
+              <span className="mt-1 max-w-xs font-sans text-sm text-muted">
+                স্টুডিওতে প্রচ্ছদ, অধ্যায়, ছবি ও ভিডিও যোগ করুন। GitHub-এ ফাইল তোলার দরকার নেই।
+              </span>
+            </Link>
+          ) : null}
         </div>
       </section>
     </main>

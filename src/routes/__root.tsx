@@ -1,4 +1,5 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, redirect, Scripts } from "@tanstack/react-router";
+import { getMe } from "@/lib/members-api";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeRoot } from "@/components/book/theme-root";
@@ -7,6 +8,12 @@ import appCss from "../styles.css?url";
 const APP_NAME = "গল্প সংগ্রহ";
 
 export const Route = createRootRoute({
+  beforeLoad: async ({ location }) => {
+    const me = await getMe();
+    const authPage = location.pathname === "/login" || location.pathname === "/signup";
+    if (me && authPage) throw redirect({ to: "/" });
+    return { me };
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },

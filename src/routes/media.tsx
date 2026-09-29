@@ -8,7 +8,7 @@ import {
   type DragEvent,
   type ReactNode,
 } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import {
   ArrowUpDown,
   Check,
@@ -49,6 +49,9 @@ import { cn } from "@/lib/utils";
 import "@/components/media/media-effects.css";
 
 export const Route = createFileRoute("/media")({
+  beforeLoad: ({ context }) => {
+    if (!context.me) throw redirect({ to: "/login" });
+  },
   loader: () => loadVault(),
   component: MediaPage,
 });

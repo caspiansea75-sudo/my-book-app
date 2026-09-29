@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { BookImage, BookOpen, FolderOpen, Images, PenLine } from "lucide-react";
+import { AccountChip } from "@/components/members/account-chip";
+import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
@@ -11,6 +13,8 @@ const ITEMS = [
 ] as const;
 
 export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
+  const me = useMe();
+  const items = ITEMS.filter((item) => me || (item.id !== "studio" && item.id !== "folders"));
   return (
     <header className="relative z-20 border-b border-border/80 bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -21,7 +25,7 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
           <span className="truncate font-display text-sm tracking-wide">গল্প সংগ্রহ</span>
         </Link>
         <nav className="flex items-center gap-1">
-          {ITEMS.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
             const on = item.id === active;
             return (
@@ -39,6 +43,7 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
             );
           })}
         </nav>
+        <AccountChip />
       </div>
     </header>
   );

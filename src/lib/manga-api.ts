@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
+import { assertPanelAccess, assertSeriesAccess, requireMember } from "@/lib/members-core";
 import { slugifyTitle } from "@/lib/book";
 
 function uniqueSlug(base: string, taken: Set<string>): string {
@@ -47,6 +48,8 @@ export const updateMangaSeries = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.slug);
     const sql = await getSql();
     await sql`
       update manga_series
@@ -59,6 +62,8 @@ export const updateMangaSeries = createServerFn({ method: "POST" })
 export const setMangaCover = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().min(1), mediaId: z.number().int().positive().nullable() }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.slug);
     const sql = await getSql();
     await sql`update manga_series set cover_media_id = ${data.mediaId} where slug = ${data.slug}`;
     return { ok: true };
@@ -67,6 +72,8 @@ export const setMangaCover = createServerFn({ method: "POST" })
 export const deleteMangaSeries = createServerFn({ method: "POST" })
   .validator(z.object({ slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.slug);
     const sql = await getSql();
     await sql`delete from manga_series where slug = ${data.slug}`;
     return { ok: true };
@@ -75,6 +82,8 @@ export const deleteMangaSeries = createServerFn({ method: "POST" })
 export const deleteMangaChapter = createServerFn({ method: "POST" })
   .validator(z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.seriesSlug);
     const sql = await getSql();
     await sql`
       delete from manga_chapters c
@@ -89,6 +98,8 @@ export const updateMangaChapterTitle = createServerFn({ method: "POST" })
     z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1), title: z.string().min(1).max(160) }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.seriesSlug);
     const sql = await getSql();
     await sql`
       update manga_chapters c
@@ -133,12 +144,13 @@ export const createMangaSeries = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
     const sql = await getSql();
     const existing = await sql<{ slug: string }>`select slug from manga_series`;
     const slug = uniqueSlug(data.titleEn || data.title, new Set(existing.map((r) => r.slug)));
     const rows = await sql<{ slug: string }>`
-      insert into manga_series (slug, title, title_en, description)
-      values (${slug}, ${data.title}, ${data.titleEn ?? ""}, ${data.description ?? ""})
+      insert into manga_series (slug, title, title_en, description, owner_id)
+      values (${slug}, ${data.title}, ${data.titleEn ?? ""}, ${data.description ?? ""}, ${me.id})
       returning slug
     `;
     const created = rows[0]?.slug;
@@ -197,6 +209,8 @@ export const getMangaSeries = createServerFn({ method: "GET" })
 export const createMangaChapter = createServerFn({ method: "POST" })
   .validator(z.object({ seriesSlug: z.string().min(1), title: z.string().min(1).max(160) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.seriesSlug);
     const sql = await getSql();
     const seriesRows = await sql<{ id: number }>`select id from manga_series where slug = ${data.seriesSlug} limit 1`;
     const seriesId = seriesRows[0]?.id;
@@ -221,6 +235,7 @@ export const createMangaChapter = createServerFn({ method: "POST" })
 export const getMangaChapterForEdit = createServerFn({ method: "GET" })
   .validator(z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    await requireMember();
     const sql = await getSql();
     const rows = await sql<{
       chapter_id: number;
@@ -273,6 +288,8 @@ export const addMangaPanel = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.seriesSlug);
     const sql = await getSql();
     const rows = await sql<{ id: number }>`
       select c.id from manga_chapters c
@@ -296,6 +313,8 @@ export const addMangaPanel = createServerFn({ method: "POST" })
 export const removeMangaPanel = createServerFn({ method: "POST" })
   .validator(z.object({ panelId: z.number().int().positive() }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertPanelAccess(me, [data.panelId]);
     const sql = await getSql();
     await sql`delete from manga_panels where id = ${data.panelId}`;
     return { ok: true };
@@ -304,6 +323,8 @@ export const removeMangaPanel = createServerFn({ method: "POST" })
 export const reorderMangaPanels = createServerFn({ method: "POST" })
   .validator(z.object({ panelIds: z.array(z.number().int().positive()).min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertPanelAccess(me, data.panelIds);
     const sql = await getSql();
     for (let i = 0; i < data.panelIds.length; i += 1) {
       await sql`update manga_panels set sort_order = ${i} where id = ${data.panelIds[i]}`;

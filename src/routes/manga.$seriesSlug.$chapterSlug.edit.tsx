@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, createFileRoute, notFound, useNavigate, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, notFound, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, ChevronLeft, ImagePlus, PenLine, Trash2 } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { MediaUploader } from "@/components/studio/media-uploader";
@@ -14,6 +14,9 @@ import {
 } from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/edit")({
+  beforeLoad: ({ context }) => {
+    if (!context.me) throw redirect({ to: "/login" });
+  },
   loader: async ({ params }) => {
     const [chapter, media] = await Promise.all([
       getMangaChapterForEdit({ data: { seriesSlug: params.seriesSlug, chapterSlug: params.chapterSlug } }),

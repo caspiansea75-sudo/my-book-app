@@ -14,6 +14,7 @@ import { CoverArt } from "@/components/book/cover-art";
 import { fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
 import { SHELF_LABEL, type LibView, type Shelf } from "@/lib/library-store";
+import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 export type CardMeta = {
@@ -205,6 +206,7 @@ export function LibraryCard({
   onShelf: (s: Shelf | null) => void;
   onMove: (dir: -1 | 1) => void;
 }) {
+  const me = useMe();
   const blurred = blur && meta.sensitive;
   const vertical = view === "list";
   const cover = (aspect: string) => (
@@ -345,7 +347,7 @@ export function LibraryCard({
           <Heart className={cn("size-4", meta.fav && "fill-current")} />
         </RoundBtn>
         <ShelfMenu shelf={meta.status} onPick={onShelf} />
-        {book.origin === "studio" ? (
+        {me && book.origin === "studio" ? (
           <Link
             to="/studio/$bookSlug"
             params={{ bookSlug: book.slug }}
