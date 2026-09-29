@@ -6,7 +6,7 @@ import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { deleteMedia, listMedia, type MediaItem } from "@/lib/library-api";
-import { useMe } from "@/lib/use-me";
+import { canEditOwner, useMe } from "@/lib/use-me";
 
 export const Route = createFileRoute("/gallery")({
   loader: () => listMedia(),
@@ -119,7 +119,7 @@ function GalleryPage() {
                     </span>
                   ) : null}
                 </button>
-                {me ? (
+                {canEditOwner(me, item.ownerId) ? (
                   <button
                     type="button"
                     className="pressable absolute top-2 right-2 grid size-10 place-items-center rounded-full bg-bg/70 text-muted opacity-0 group-hover:opacity-100"

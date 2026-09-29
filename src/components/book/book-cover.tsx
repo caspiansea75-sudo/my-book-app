@@ -5,7 +5,7 @@ import { AmbientAudio } from "@/components/book/ambient-audio";
 import { WarningGate } from "@/components/book/warning-gate";
 import { formatCount, type BookIndex } from "@/lib/book";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
-import { useMe } from "@/lib/use-me";
+import { canEditOwner, useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 export function BookCoverPage({ book }: { book: BookIndex }) {
@@ -66,7 +66,7 @@ export function BookCoverPage({ book }: { book: BookIndex }) {
             >
               প্রথম আপডেট
             </Link>
-            {me ? (
+            {canEditOwner(me, book.ownerId) ? (
               <Link
                 to="/studio/$bookSlug"
                 params={{ bookSlug: book.slug }}

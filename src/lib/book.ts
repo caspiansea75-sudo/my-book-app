@@ -62,6 +62,8 @@ export type BookIndex = {
   chapters: ChapterMeta[];
   origin?: BookOrigin;
   coverUrl?: string | null;
+  /** Member who created it (null = made before accounts, or an original book). */
+  ownerId?: number | null;
 };
 
 export type LibraryBookCard = {
@@ -76,6 +78,7 @@ export type LibraryBookCard = {
   coverUrl: string | null;
   nsfwCount?: number;
   createdAt?: number;
+  ownerId?: number | null;
 };
 
 const bookModules = import.meta.glob<{ default: BookIndex }>("/src/data/books/*.json", {

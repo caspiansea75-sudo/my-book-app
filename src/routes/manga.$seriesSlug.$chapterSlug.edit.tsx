@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronLeft, ImagePlus, PenLine, Trash2 } from "luc
 import { SiteNav } from "@/components/book/site-nav";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia, type MediaItem } from "@/lib/library-api";
+import { canEditOwner } from "@/lib/use-me";
 import {
   addMangaPanel,
   deleteMangaChapter,
@@ -17,12 +18,15 @@ export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/edit")({
   beforeLoad: ({ context }) => {
     if (!context.me) throw redirect({ to: "/login" });
   },
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     const [chapter, media] = await Promise.all([
       getMangaChapterForEdit({ data: { seriesSlug: params.seriesSlug, chapterSlug: params.chapterSlug } }),
       listMedia(),
     ]);
     if (!chapter) throw notFound();
+    if (!canEditOwner(context.me, chapter.ownerId)) {
+      throw redirect({ to: "/manga/$seriesSlug", params: { seriesSlug: params.seriesSlug } });
+    }
     return { chapter, media };
   },
   component: MangaEditPage,

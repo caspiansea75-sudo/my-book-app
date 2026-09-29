@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BookImage, BookOpen, FolderOpen, Images, PenLine } from "lucide-react";
+import { BookImage, BookOpen, FolderOpen, Images, PenLine, Users } from "lucide-react";
 import { AccountChip } from "@/components/members/account-chip";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
@@ -10,11 +10,16 @@ const ITEMS = [
   { to: "/media", label: "ফোল্ডার", icon: FolderOpen, id: "folders" },
   { to: "/manga", label: "মাঙ্গা", icon: BookImage, id: "manga" },
   { to: "/studio", label: "স্টুডিও", icon: PenLine, id: "studio" },
+  { to: "/members", label: "সদস্য", icon: Users, id: "members" },
 ] as const;
 
 export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
   const me = useMe();
-  const items = ITEMS.filter((item) => me || (item.id !== "studio" && item.id !== "folders"));
+  const items = ITEMS.filter((item) => {
+    if (item.id === "members") return me?.role === "admin";
+    if (item.id === "studio" || item.id === "folders") return !!me;
+    return true;
+  });
   return (
     <header className="relative z-20 border-b border-border/80 bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">

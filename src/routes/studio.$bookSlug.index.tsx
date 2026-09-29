@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, createFileRoute, notFound, useNavigate, useRouter } from "@tanstack/react-router";
+import { Link, createFileRoute, notFound, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { ChevronLeft, ImagePlus, Plus } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
@@ -13,11 +13,13 @@ import {
   setBookCover,
   updateBook,
 } from "@/lib/library-api";
+import { canEditOwner } from "@/lib/use-me";
 
 export const Route = createFileRoute("/studio/$bookSlug/")({
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     const book = await resolveBook({ data: { slug: params.bookSlug } });
     if (!book) throw notFound();
+    if (!canEditOwner(context.me, book.ownerId)) throw redirect({ to: "/studio" });
     const media = await listMedia();
     return { book, media };
   },

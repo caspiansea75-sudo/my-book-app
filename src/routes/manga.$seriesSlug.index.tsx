@@ -7,7 +7,7 @@ import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
-import { useMe } from "@/lib/use-me";
+import { useCanEdit } from "@/lib/use-me";
 import {
   createMangaChapter,
   deleteMangaChapter,
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/manga/$seriesSlug/")({
 
 function MangaSeriesPage() {
   const { series, media } = Route.useLoaderData();
-  const me = useMe();
+  const canEdit = useCanEdit(series.ownerId);
   const router = useRouter();
   const navigate = useNavigate();
 
@@ -42,7 +42,7 @@ function MangaSeriesPage() {
   const [savingMeta, setSavingMeta] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
 
-  const [showChapterForm, setShowChapterForm] = useState(!!me && series.chapters.length === 0);
+  const [showChapterForm, setShowChapterForm] = useState(canEdit && series.chapters.length === 0);
   const [chapterTitle, setChapterTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,7 +117,7 @@ function MangaSeriesPage() {
               slug={series.slug}
               className="h-56 w-44 rounded-lg"
             />
-            {me ? (
+            {canEdit ? (
               <button
                 type="button"
                 onClick={() => setCoverOpen((v) => !v)}
@@ -167,7 +167,7 @@ function MangaSeriesPage() {
                 {series.description ? (
                   <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{series.description}</p>
                 ) : null}
-                {me ? (
+                {canEdit ? (
                   <div className="mt-5 flex flex-wrap gap-2">
                     <button
                       type="button"
@@ -200,7 +200,7 @@ function MangaSeriesPage() {
           </div>
         </div>
 
-        {me && coverOpen ? (
+        {canEdit && coverOpen ? (
           <div className="mt-6 rounded-xl border border-border bg-surface p-4">
             <p className="mb-3 font-display">প্রচ্ছদের ছবি</p>
             <MediaUploader compact onUploaded={(id) => void pickCover(id)} />
@@ -221,7 +221,7 @@ function MangaSeriesPage() {
           </div>
         ) : null}
 
-        {me && showChapterForm ? (
+        {canEdit && showChapterForm ? (
           <form
             onSubmit={(e) => void onCreateChapter(e)}
             className="mt-6 rounded-xl border border-border bg-surface p-5"
@@ -262,7 +262,7 @@ function MangaSeriesPage() {
                   <p className="font-display text-base">{c.title}</p>
                   <p className="mt-0.5 font-sans text-xs text-muted">{c.panelCount} প্যানেল</p>
                 </div>
-                {me ? (
+                {canEdit ? (
                   <Link
                     to="/manga/$seriesSlug/$chapterSlug/edit"
                     params={{ seriesSlug: series.slug, chapterSlug: c.slug }}
@@ -282,7 +282,7 @@ function MangaSeriesPage() {
                     পড়ুন
                   </Link>
                 ) : null}
-                {me ? (
+                {canEdit ? (
                   <button
                     type="button"
                     onClick={() => void removeChapter(c.slug)}

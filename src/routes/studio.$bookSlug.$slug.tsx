@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link, createFileRoute, notFound } from "@tanstack/react-router";
+import { Link, createFileRoute, notFound, redirect } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { ChapterEditor } from "@/components/studio/chapter-editor";
 import type { Chapter } from "@/lib/book";
 import { loadChapterForBook } from "@/lib/load-chapter";
 import { resolveBook } from "@/lib/library-api";
+import { canEditOwner } from "@/lib/use-me";
 
 export const Route = createFileRoute("/studio/$bookSlug/$slug")({
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     const book = await resolveBook({ data: { slug: params.bookSlug } });
     if (!book) throw notFound();
+    if (!canEditOwner(context.me, book.ownerId)) throw redirect({ to: "/studio" });
     if (params.slug === "new") {
       if (book.origin !== "studio") throw notFound();
       return { book, slug: undefined as string | undefined };

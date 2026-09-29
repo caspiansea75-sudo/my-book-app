@@ -5,6 +5,7 @@ import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { createBook, listLibrary } from "@/lib/library-api";
+import { canEditOwner, useMe } from "@/lib/use-me";
 
 export const Route = createFileRoute("/studio/")({
   loader: () => listLibrary(),
@@ -12,7 +13,8 @@ export const Route = createFileRoute("/studio/")({
 });
 
 function StudioHome() {
-  const books = Route.useLoaderData();
+  const me = useMe();
+  const books = Route.useLoaderData().filter((b) => canEditOwner(me, b.ownerId));
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");

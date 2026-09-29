@@ -14,7 +14,7 @@ import { CoverArt } from "@/components/book/cover-art";
 import { fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
 import { SHELF_LABEL, type LibView, type Shelf } from "@/lib/library-store";
-import { useMe } from "@/lib/use-me";
+import { canEditOwner, useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 export type CardMeta = {
@@ -347,7 +347,7 @@ export function LibraryCard({
           <Heart className={cn("size-4", meta.fav && "fill-current")} />
         </RoundBtn>
         <ShelfMenu shelf={meta.status} onPick={onShelf} />
-        {me && book.origin === "studio" ? (
+        {canEditOwner(me, book.ownerId) && book.origin === "studio" ? (
           <Link
             to="/studio/$bookSlug"
             params={{ bookSlug: book.slug }}

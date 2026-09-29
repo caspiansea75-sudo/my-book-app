@@ -29,6 +29,7 @@ type MediaRow = {
   width: number | null;
   height: number | null;
   bytes: number;
+  owner_id?: number | null;
   created_at: string;
 };
 
@@ -44,6 +45,7 @@ export type MediaItem = {
   width: number | null;
   height: number | null;
   bytes: number;
+  ownerId: number | null;
   createdAt: string;
 };
 
@@ -56,6 +58,7 @@ type BookRow = {
   tagline: string;
   description: string;
   cover_media_id: number | null;
+  owner_id?: number | null;
   created_at: string;
 };
 
@@ -104,6 +107,7 @@ function asMedia(row: MediaRow): MediaItem {
     width: row.width,
     height: row.height,
     bytes: row.bytes,
+    ownerId: row.owner_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -213,6 +217,7 @@ async function studioBookIndex(row: BookRow): Promise<BookIndex> {
     chapters: metas,
     origin: "studio",
     coverUrl: row.cover_media_id ? mediaSrc(row.cover_media_id) : null,
+    ownerId: row.owner_id ?? null,
   };
 }
 
@@ -233,7 +238,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
   const sql = await getSql();
   const covers = await coverMap();
   const studioRows = await sql<BookRow>`
-    select id, slug, title, title_en, author, tagline, description, cover_media_id, created_at
+    select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at
     from library_books
     order by created_at desc
   `;
@@ -253,6 +258,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     coverUrl: row.cover_media_id ? mediaSrc(row.cover_media_id) : covers.get(row.slug) ?? null,
     nsfwCount: 0,
     createdAt: toMs(row.created_at),
+    ownerId: row.owner_id ?? null,
   }));
   const canon: LibraryBookCard[] = listCanonBooks().map((book) => ({
     slug: book.slug,
@@ -266,6 +272,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     coverUrl: covers.get(book.slug) ?? null,
     nsfwCount: book.nsfwCount,
     createdAt: 0,
+    ownerId: null,
   }));
   return [...studio, ...canon];
 });
@@ -280,11 +287,12 @@ export const resolveBook = createServerFn({ method: "GET" })
         ...canon,
         origin: "canon" as const,
         coverUrl: covers.get(canon.slug) ?? null,
+        ownerId: null,
       };
     }
     const sql = await getSql();
     const rows = await sql<BookRow>`
-      select id, slug, title, title_en, author, tagline, description, cover_media_id, created_at
+      select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at
       from library_books
       where slug = ${data.slug}
       limit 1
@@ -354,7 +362,7 @@ export async function applyInserts(
 export const listMedia = createServerFn({ method: "GET" }).handler(async () => {
   const sql = await getSql();
   const rows = await sql<MediaRow>`
-    select id, kind, title, mime, source, url, thumb, width, height, bytes, created_at
+    select id, kind, title, mime, source, url, thumb, width, height, bytes, owner_id, created_at
     from media
     order by created_at desc
     limit 240

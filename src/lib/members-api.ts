@@ -79,3 +79,53 @@ export const logout = createServerFn({ method: "POST" }).handler(async () => {
   await endSession();
   return { ok: true };
 });
+
+export type MemberRow = {
+  id: number;
+  username: string;
+  displayName: string;
+  role: "admin" | "member";
+  joined: string;
+  books: number;
+  series: number;
+  media: number;
+};
+
+/** Read-only list of members. Admin only. */
+export const listMembers = createServerFn({ method: "GET" }).handler(async (): Promise<MemberRow[]> => {
+  const me = await currentMember();
+  if (!me || me.role !== "admin") throw new Error("এই পাতা শুধু অ্যাডমিনের জন্য");
+  const sql = await getSql();
+  const rows = await sql<{
+    id: number;
+    username: string;
+    display_name: string;
+    role: string;
+    joined: string;
+    books: number;
+    series: number;
+    media: number;
+  }>`
+    select
+      m.id,
+      m.username,
+      m.display_name,
+      m.role,
+      to_char(m.created_at, 'YYYY-MM-DD') as joined,
+      (select count(*) from library_books b where b.owner_id = m.id) as books,
+      (select count(*) from manga_series s where s.owner_id = m.id) as series,
+      (select count(*) from media x where x.owner_id = m.id) as media
+    from members m
+    order by m.created_at desc, m.id desc
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    displayName: r.display_name,
+    role: r.role === "admin" ? "admin" : "member",
+    joined: r.joined,
+    books: Number(r.books),
+    series: Number(r.series),
+    media: Number(r.media),
+  }));
+});

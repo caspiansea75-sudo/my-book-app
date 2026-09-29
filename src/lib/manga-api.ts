@@ -168,7 +168,8 @@ export const getMangaSeries = createServerFn({ method: "GET" })
       title: string;
       description: string;
       cover_media_id: number | null;
-    }>`select id, slug, title, description, cover_media_id from manga_series where slug = ${data.slug} limit 1`;
+      owner_id: number | null;
+    }>`select id, slug, title, description, cover_media_id, owner_id from manga_series where slug = ${data.slug} limit 1`;
     const series = seriesRows[0];
     if (!series) return null;
 
@@ -196,6 +197,7 @@ export const getMangaSeries = createServerFn({ method: "GET" })
       title: series.title,
       description: series.description,
       coverMediaId: series.cover_media_id,
+      ownerId: series.owner_id ?? null,
       chapters: chapterRows.map((r) => ({
         slug: r.slug,
         title: r.title,
@@ -241,6 +243,7 @@ export const getMangaChapterForEdit = createServerFn({ method: "GET" })
       chapter_id: number;
       chapter_title: string;
       series_title: string;
+      owner_id: number | null;
       panel_id: number | null;
       media_id: number | null;
       kind: "image" | "video" | null;
@@ -250,7 +253,7 @@ export const getMangaChapterForEdit = createServerFn({ method: "GET" })
       caption: string | null;
       sort_order: number | null;
     }>`
-      select c.id as chapter_id, c.title as chapter_title, s.title as series_title,
+      select c.id as chapter_id, c.title as chapter_title, s.title as series_title, s.owner_id,
         p.id as panel_id, p.media_id, m.kind, m.thumb, m.url, m.source,
         p.caption, p.sort_order
       from manga_chapters c
@@ -275,6 +278,7 @@ export const getMangaChapterForEdit = createServerFn({ method: "GET" })
     return {
       chapterTitle: first.chapter_title,
       seriesTitle: first.series_title,
+      ownerId: first.owner_id ?? null,
       panels,
     };
   });
