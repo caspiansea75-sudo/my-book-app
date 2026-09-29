@@ -9,6 +9,12 @@ export const Route = createFileRoute("/api/media/$id")({
         if (!Number.isFinite(id) || id <= 0) {
           return new Response("Not found", { status: 404 });
         }
+        const { memberFromCookieHeader, isHidden } = await import("@/lib/members-core");
+        const viewer = await memberFromCookieHeader(request.headers.get("cookie"));
+        if (!viewer) return new Response("Unauthorized", { status: 401 });
+        if (viewer.role !== "admin" && (await isHidden("media", String(id)))) {
+          return new Response("Not found", { status: 404 });
+        }
         const sql = await getSql();
         const rows = await sql<{
           mime: string;
@@ -31,7 +37,7 @@ export const Route = createFileRoute("/api/media/$id")({
           return new Response(bytes, {
             headers: {
               "Content-Type": "image/jpeg",
-              "Cache-Control": "public, max-age=31536000, immutable",
+              "Cache-Control": "private, max-age=31536000, immutable",
             },
           });
         }
@@ -44,7 +50,7 @@ export const Route = createFileRoute("/api/media/$id")({
         return new Response(bytes, {
           headers: {
             "Content-Type": row.mime || "application/octet-stream",
-            "Cache-Control": "public, max-age=31536000, immutable",
+            "Cache-Control": "private, max-age=31536000, immutable",
           },
         });
       },

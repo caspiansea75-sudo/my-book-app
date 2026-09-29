@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
 import { SiteNav } from "@/components/book/site-nav";
+import { HideToggle } from "@/components/members/hide-toggle";
 import { MultiUploader } from "@/components/media/multi-uploader";
 import {
   createFolder,
@@ -653,6 +654,11 @@ function MediaPage() {
                       </span>
                     </button>
 
+                    {item.hidden ? (
+                      <span className="pointer-events-none absolute bottom-11 left-2 z-10 rounded-full bg-bg/80 px-2 py-0.5 font-sans text-[0.65rem] text-lamp backdrop-blur-sm">
+                        লুকানো
+                      </span>
+                    ) : null}
                     {item.usageCount > 0 ? (
                       <span
                         title="বই, মাঙ্গা বা প্রচ্ছদে ব্যবহৃত"
@@ -677,6 +683,7 @@ function MediaPage() {
                       </span>
                     ) : (
                       <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
+                        <HideToggle kind="media" id={item.id} hidden={!!item.hidden} variant="tile" onChanged={() => void refresh()} />
                         <TileBtn label="নাম বদলান" onClick={() => setModal({ type: "rename-item", item })}>
                           <Pencil className="size-4" />
                         </TileBtn>

@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { assertPanelAccess, assertSeriesAccess, requireMember } from "@/lib/members-core";
+import { assertPanelAccess, assertSeriesAccess, hiddenSet, isHidden, requireMember } from "@/lib/members-core";
 import { slugifyTitle } from "@/lib/book";
 
 function uniqueSlug(base: string, taken: Set<string>): string {
@@ -15,6 +15,7 @@ function uniqueSlug(base: string, taken: Set<string>): string {
 }
 
 export type MangaSeriesCard = {
+  hidden?: boolean;
   slug: string;
   title: string;
   description: string;
@@ -111,6 +112,8 @@ export const updateMangaChapterTitle = createServerFn({ method: "POST" })
   });
 
 export const listMangaSeries = createServerFn({ method: "GET" }).handler(async () => {
+  const me = await requireMember();
+  const hid = await hiddenSet("manga");
   const sql = await getSql();
   const rows = await sql<{
     slug: string;
@@ -126,13 +129,15 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     group by s.id
     order by s.created_at desc
   `;
-  return rows.map((r) => ({
+  const list = rows.map((r) => ({
     slug: r.slug,
     title: r.title,
     description: r.description,
     coverMediaId: r.cover_media_id,
     chapterCount: Number(r.chapter_count),
   })) satisfies MangaSeriesCard[];
+  const shown = list.map((x) => ({ ...x, hidden: hid.has(x.slug) }));
+  return me.role === "admin" ? shown : shown.filter((x) => !x.hidden);
 });
 
 export const createMangaSeries = createServerFn({ method: "POST" })
@@ -161,6 +166,9 @@ export const createMangaSeries = createServerFn({ method: "POST" })
 export const getMangaSeries = createServerFn({ method: "GET" })
   .validator(z.object({ slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    const hiddenNow = await isHidden("manga", data.slug);
+    if (me.role !== "admin" && hiddenNow) return null;
     const sql = await getSql();
     const seriesRows = await sql<{
       id: number;
@@ -193,6 +201,7 @@ export const getMangaSeries = createServerFn({ method: "GET" })
     `;
 
     return {
+      hidden: hiddenNow,
       slug: series.slug,
       title: series.title,
       description: series.description,
@@ -237,7 +246,8 @@ export const createMangaChapter = createServerFn({ method: "POST" })
 export const getMangaChapterForEdit = createServerFn({ method: "GET" })
   .validator(z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1) }))
   .handler(async ({ data }) => {
-    await requireMember();
+    const me = await requireMember();
+    if (me.role !== "admin" && (await isHidden("manga", data.seriesSlug))) return null;
     const sql = await getSql();
     const rows = await sql<{
       chapter_id: number;
@@ -339,6 +349,8 @@ export const reorderMangaPanels = createServerFn({ method: "POST" })
 export const getMangaChapterForReading = createServerFn({ method: "GET" })
   .validator(z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    if (me.role !== "admin" && (await isHidden("manga", data.seriesSlug))) return null;
     const sql = await getSql();
     const seriesRows = await sql<{ id: number; slug: string; title: string }>`
       select id, slug, title from manga_series where slug = ${data.seriesSlug} limit 1

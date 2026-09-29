@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { assertBookAccess, assertMediaAccess, requireMember } from "@/lib/members-core";
+import { assertBookAccess, assertMediaAccess, hiddenSet, isHidden, requireMember } from "@/lib/members-core";
 import {
   emptyChapterBody,
   getCanonBook,
@@ -34,6 +34,7 @@ type MediaRow = {
 };
 
 export type MediaItem = {
+  hidden?: boolean;
   id: number;
   kind: "image" | "video";
   title: string;
@@ -235,6 +236,8 @@ function toMs(v: unknown): number {
 }
 
 export const listLibrary = createServerFn({ method: "GET" }).handler(async () => {
+  const me = await requireMember();
+  const hid = await hiddenSet("book");
   const sql = await getSql();
   const covers = await coverMap();
   const studioRows = await sql<BookRow>`
@@ -274,12 +277,15 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     createdAt: 0,
     ownerId: null,
   }));
-  return [...studio, ...canon];
+  const all = [...studio, ...canon].map((b) => ({ ...b, hidden: hid.has(b.slug) }));
+  return me.role === "admin" ? all : all.filter((b) => !b.hidden);
 });
 
 export const resolveBook = createServerFn({ method: "GET" })
   .validator(z.object({ slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    if (me.role !== "admin" && (await isHidden("book", data.slug))) return null;
     const canon = getCanonBook(data.slug);
     const covers = await coverMap();
     if (canon) {
@@ -305,6 +311,8 @@ export const resolveBook = createServerFn({ method: "GET" })
 export const loadStudioChapter = createServerFn({ method: "GET" })
   .validator(z.object({ bookSlug: z.string().min(1), slug: z.string().min(1) }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    if (me.role !== "admin" && (await isHidden("book", data.bookSlug))) return null;
     const sql = await getSql();
     const books = await sql<BookRow>`
       select id, slug, title, title_en, author, tagline, description, cover_media_id, created_at
@@ -360,6 +368,8 @@ export async function applyInserts(
 }
 
 export const listMedia = createServerFn({ method: "GET" }).handler(async () => {
+  const me = await requireMember();
+  const hid = await hiddenSet("media");
   const sql = await getSql();
   const rows = await sql<MediaRow>`
     select id, kind, title, mime, source, url, thumb, width, height, bytes, owner_id, created_at
@@ -367,12 +377,15 @@ export const listMedia = createServerFn({ method: "GET" }).handler(async () => {
     order by created_at desc
     limit 240
   `;
-  return rows.map(asMedia);
+  const all = rows.map((r) => ({ ...asMedia(r), hidden: hid.has(String(r.id)) }));
+  return me.role === "admin" ? all : all.filter((m) => !m.hidden);
 });
 
 export const getMediaRecord = createServerFn({ method: "GET" })
   .validator(z.object({ id: z.number().int().positive() }))
   .handler(async ({ data }) => {
+    const me = await requireMember();
+    if (me.role !== "admin" && (await isHidden("media", String(data.id)))) return null;
     const sql = await getSql();
     const rows = await sql<MediaRow & { data: string | null }>`
       select id, kind, title, mime, source, url, thumb, width, height, bytes, created_at, data

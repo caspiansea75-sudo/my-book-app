@@ -149,3 +149,19 @@ export async function assertPanelAccess(me: Me, panelIds: number[]): Promise<voi
   );
   if (rows.some((r) => !owns(me, r.owner_id))) throw new Error(NOT_YOURS);
 }
+
+/* ---- hidden items (admin can hide stories, manga, images/videos) ---------- */
+
+export type HiddenKind = "book" | "manga" | "media";
+
+export async function hiddenSet(kind: HiddenKind): Promise<Set<string>> {
+  const sql = await getSql();
+  const rows = await sql<{ key: string }>`select key from hidden_items where kind = ${kind}`;
+  return new Set(rows.map((r) => r.key));
+}
+
+export async function isHidden(kind: HiddenKind, key: string): Promise<boolean> {
+  const sql = await getSql();
+  const rows = await sql<{ key: string }>`select key from hidden_items where kind = ${kind} and key = ${key} limit 1`;
+  return rows.length > 0;
+}

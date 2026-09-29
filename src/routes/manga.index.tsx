@@ -101,7 +101,7 @@ function MangaHub() {
                 key={s.slug}
                 to="/manga/$seriesSlug"
                 params={{ seriesSlug: s.slug }}
-                className="mf-card mf-rise pressable group overflow-hidden rounded-xl border border-border bg-surface"
+                className={`mf-card mf-rise pressable group overflow-hidden rounded-xl border border-border bg-surface ${s.hidden ? "opacity-50" : ""}`}
                 style={fxIndex(i)}
               >
                 <CoverArt

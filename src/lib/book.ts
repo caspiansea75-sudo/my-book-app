@@ -67,6 +67,7 @@ export type BookIndex = {
 };
 
 export type LibraryBookCard = {
+  hidden?: boolean;
   slug: string;
   title: string;
   titleEn: string;

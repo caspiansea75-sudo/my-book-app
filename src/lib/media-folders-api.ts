@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql, type Sql } from "@/lib/db";
-import { assertFolderAccess, assertMediaAccess, requireMember } from "@/lib/members-core";
+import { assertFolderAccess, assertMediaAccess, hiddenSet, requireMember } from "@/lib/members-core";
 import { getCanonBook } from "@/lib/book";
 import { mediaSrc, mediaThumbSrc } from "@/lib/media-url";
 
@@ -14,6 +14,7 @@ export type VaultFolder = {
 };
 
 export type VaultItem = {
+  hidden?: boolean;
   id: number;
   kind: "image" | "video";
   title: string;
@@ -163,7 +164,8 @@ async function collectUsage(sql: Sql): Promise<Map<number, MediaUsage[]>> {
 
 /** Everything the media page needs in one round trip (no heavy blob columns). */
 export const loadVault = createServerFn({ method: "GET" }).handler(async (): Promise<Vault> => {
-    await requireMember();
+    const me = await requireMember();
+    const hid = await hiddenSet("media");
   const sql = await getSql();
   const folderRows = await sql<FolderRow>`
     select f.id, f.parent_id, f.name, f.created_at,
@@ -190,7 +192,9 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
       createdAt: iso(r.created_at),
       itemCount: Number(r.item_count),
     })),
-    items: itemRows.map((r) => asItem(r, usage.get(r.id)?.length ?? 0)),
+    items: itemRows
+      .filter((r) => me.role === "admin" || !hid.has(String(r.id)))
+      .map((r) => ({ ...asItem(r, usage.get(r.id)?.length ?? 0), hidden: hid.has(String(r.id)) })),
   };
 });
 
