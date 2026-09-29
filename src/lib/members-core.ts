@@ -5,13 +5,7 @@ import { getCanonBook } from "@/lib/book";
 
 /** Server-side helpers for members, sessions and "who may change this". */
 
-export type Me = {
-  id: number;
-  username: string;
-  displayName: string;
-  role: "admin" | "member";
-  avatarUrl: string | null;
-};
+export type Me = { id: number; username: string; displayName: string; role: "admin" | "member" };
 
 const COOKIE = "bk_session";
 const DAYS = 30;
@@ -51,27 +45,15 @@ export async function memberFromCookieHeader(header: string | null | undefined):
   const token = readCookie(header, COOKIE);
   if (!token) return null;
   const sql = await getSql();
-  const rows = await sql<{
-    id: number;
-    username: string;
-    display_name: string;
-    role: string;
-    avatar_id: number | null;
-  }>`
-    select m.id, m.username, m.display_name, m.role, m.avatar_id
+  const rows = await sql<{ id: number; username: string; display_name: string; role: string }>`
+    select m.id, m.username, m.display_name, m.role
     from member_sessions s join members m on m.id = s.member_id
     where s.token_hash = ${sha256(token)} and s.expires_at > now()
     limit 1
   `;
   const r = rows[0];
   if (!r) return null;
-  return {
-    id: r.id,
-    username: r.username,
-    displayName: r.display_name,
-    role: r.role === "admin" ? "admin" : "member",
-    avatarUrl: r.avatar_id ? `/api/chat-image/${r.avatar_id}` : null,
-  };
+  return { id: r.id, username: r.username, displayName: r.display_name, role: r.role === "admin" ? "admin" : "member" };
 }
 
 export async function currentMember(): Promise<Me | null> {

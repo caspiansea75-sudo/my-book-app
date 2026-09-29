@@ -10,13 +10,10 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ChatRouteImport } from './routes/chat'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MangaRouteImport } from './routes/manga'
 import { Route as MediaRouteImport } from './routes/media'
-import { Route as MembersRouteImport } from './routes/members'
-import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as BookBookSlugRouteImport } from './routes/book.$bookSlug'
@@ -24,8 +21,6 @@ import { Route as MangaIndexRouteImport } from './routes/manga.index'
 import { Route as MangaSeriesSlugRouteImport } from './routes/manga.$seriesSlug'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
-import { Route as UUsernameRouteImport } from './routes/u.$username'
-import { Route as ApiChatImageIdRouteImport } from './routes/api/chat-image.$id'
 import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
 import { Route as MangaSeriesSlugIndexRouteImport } from './routes/manga.$seriesSlug.index'
 import { Route as MangaSeriesSlugChapterSlugRouteImport } from './routes/manga.$seriesSlug.$chapterSlug'
@@ -38,11 +33,6 @@ import { Route as MangaSeriesSlugChapterSlugEditRouteImport } from './routes/man
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChatRoute = ChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GalleryRoute = GalleryRouteImport.update({
@@ -63,16 +53,6 @@ const MangaRoute = MangaRouteImport.update({
 const MediaRoute = MediaRouteImport.update({
   id: '/media',
   path: '/media',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MembersRoute = MembersRouteImport.update({
-  id: '/members',
-  path: '/members',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -109,16 +89,6 @@ const StudioBookSlugRoute = StudioBookSlugRouteImport.update({
   id: '/$bookSlug',
   path: '/$bookSlug',
   getParentRoute: () => StudioRoute,
-} as any)
-const UUsernameRoute = UUsernameRouteImport.update({
-  id: '/u/$username',
-  path: '/u/$username',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiChatImageIdRoute = ApiChatImageIdRouteImport.update({
-  id: '/api/chat-image/$id',
-  path: '/api/chat-image/$id',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMediaIdRoute = ApiMediaIdRouteImport.update({
   id: '/api/media/$id',
@@ -166,22 +136,17 @@ const MangaSeriesSlugChapterSlugEditRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/chat': typeof ChatRoute
   '/gallery': typeof GalleryRoute
   '/login': typeof LoginRoute
   '/manga': typeof MangaRouteWithChildren
   '/media': typeof MediaRoute
-  '/members': typeof MembersRoute
-  '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
   '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
-  '/u/$username': typeof UUsernameRoute
   '/manga/': typeof MangaIndexRoute
   '/studio/': typeof StudioIndexRoute
-  '/api/chat-image/$id': typeof ApiChatImageIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
@@ -193,18 +158,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/chat': typeof ChatRoute
   '/gallery': typeof GalleryRoute
   '/login': typeof LoginRoute
   '/media': typeof MediaRoute
-  '/members': typeof MembersRoute
-  '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/book/$bookSlug': typeof BookBookSlugRoute
-  '/u/$username': typeof UUsernameRoute
   '/manga': typeof MangaIndexRoute
   '/studio': typeof StudioIndexRoute
-  '/api/chat-image/$id': typeof ApiChatImageIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
@@ -216,22 +176,17 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/chat': typeof ChatRoute
   '/gallery': typeof GalleryRoute
   '/login': typeof LoginRoute
   '/manga': typeof MangaRouteWithChildren
   '/media': typeof MediaRoute
-  '/members': typeof MembersRoute
-  '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRouteWithChildren
   '/book/$bookSlug': typeof BookBookSlugRoute
   '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
-  '/u/$username': typeof UUsernameRoute
   '/manga/': typeof MangaIndexRoute
   '/studio/': typeof StudioIndexRoute
-  '/api/chat-image/$id': typeof ApiChatImageIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
@@ -245,22 +200,17 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/chat'
     | '/gallery'
     | '/login'
     | '/manga'
     | '/media'
-    | '/members'
-    | '/profile'
     | '/signup'
     | '/studio'
     | '/book/$bookSlug'
     | '/manga/$seriesSlug'
     | '/studio/$bookSlug'
-    | '/u/$username'
     | '/manga/'
     | '/studio/'
-    | '/api/chat-image/$id'
     | '/api/media/$id'
     | '/manga/$seriesSlug/$chapterSlug'
     | '/read/$bookSlug/$slug'
@@ -272,18 +222,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/chat'
     | '/gallery'
     | '/login'
     | '/media'
-    | '/members'
-    | '/profile'
     | '/signup'
     | '/book/$bookSlug'
-    | '/u/$username'
     | '/manga'
     | '/studio'
-    | '/api/chat-image/$id'
     | '/api/media/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
@@ -294,22 +239,17 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/chat'
     | '/gallery'
     | '/login'
     | '/manga'
     | '/media'
-    | '/members'
-    | '/profile'
     | '/signup'
     | '/studio'
     | '/book/$bookSlug'
     | '/manga/$seriesSlug'
     | '/studio/$bookSlug'
-    | '/u/$username'
     | '/manga/'
     | '/studio/'
-    | '/api/chat-image/$id'
     | '/api/media/$id'
     | '/manga/$seriesSlug/$chapterSlug'
     | '/read/$bookSlug/$slug'
@@ -322,18 +262,13 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ChatRoute: typeof ChatRoute
   GalleryRoute: typeof GalleryRoute
   LoginRoute: typeof LoginRoute
   MangaRoute: typeof MangaRouteWithChildren
   MediaRoute: typeof MediaRoute
-  MembersRoute: typeof MembersRoute
-  ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRouteWithChildren
   BookBookSlugRoute: typeof BookBookSlugRoute
-  UUsernameRoute: typeof UUsernameRoute
-  ApiChatImageIdRoute: typeof ApiChatImageIdRoute
   ApiMediaIdRoute: typeof ApiMediaIdRoute
   ReadBookSlugSlugRoute: typeof ReadBookSlugSlugRoute
 }
@@ -345,13 +280,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/chat': {
-      id: '/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gallery': {
@@ -380,20 +308,6 @@ declare module '@tanstack/react-router' {
       path: '/media'
       fullPath: '/media'
       preLoaderRoute: typeof MediaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/members': {
-      id: '/members'
-      path: '/members'
-      fullPath: '/members'
-      preLoaderRoute: typeof MembersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -444,20 +358,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/studio/$bookSlug'
       preLoaderRoute: typeof StudioBookSlugRouteImport
       parentRoute: typeof StudioRoute
-    }
-    '/u/$username': {
-      id: '/u/$username'
-      path: '/u/$username'
-      fullPath: '/u/$username'
-      preLoaderRoute: typeof UUsernameRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/chat-image/$id': {
-      id: '/api/chat-image/$id'
-      path: '/api/chat-image/$id'
-      fullPath: '/api/chat-image/$id'
-      preLoaderRoute: typeof ApiChatImageIdRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/api/media/$id': {
       id: '/api/media/$id'
@@ -589,21 +489,25 @@ const StudioRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ChatRoute: ChatRoute,
   GalleryRoute: GalleryRoute,
   LoginRoute: LoginRoute,
   MangaRoute: MangaRouteWithChildren,
   MediaRoute: MediaRoute,
-  MembersRoute: MembersRoute,
-  ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRouteWithChildren,
   BookBookSlugRoute: BookBookSlugRoute,
-  UUsernameRoute: UUsernameRoute,
-  ApiChatImageIdRoute: ApiChatImageIdRoute,
   ApiMediaIdRoute: ApiMediaIdRoute,
   ReadBookSlugSlugRoute: ReadBookSlugSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
