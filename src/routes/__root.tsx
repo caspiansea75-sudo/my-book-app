@@ -13,6 +13,7 @@ export const Route = createRootRoute({
     const me = await getMe();
     const authPage = location.pathname === "/login" || location.pathname === "/signup";
     if (me && authPage) throw redirect({ to: "/" });
+    if (!me && !authPage) throw redirect({ to: "/login" });
     return { me };
   },
   head: () => ({
