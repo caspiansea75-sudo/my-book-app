@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { BookImage, BookOpen, FolderOpen, Images, PenLine, Users } from "lucide-react";
+import { LangSwitch } from "@/components/i18n/lang-switch";
 import { AccountChip } from "@/components/members/account-chip";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,10 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] }) {
             );
           })}
         </nav>
-        <AccountChip />
+        <div className="flex items-center gap-1">
+          <LangSwitch />
+          <AccountChip />
+        </div>
       </div>
     </header>
   );

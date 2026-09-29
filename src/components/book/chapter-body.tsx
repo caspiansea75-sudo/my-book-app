@@ -41,7 +41,7 @@ export function ChapterBody({
   }, [chapter]);
 
   return (
-    <article className="chapter-body mx-auto max-w-2xl px-4 pb-24 pt-8 sm:px-6">
+    <article data-no-i18n className="chapter-body mx-auto max-w-2xl px-4 pb-24 pt-8 sm:px-6">
       <header className="stagger-in mb-10 text-center">
         <p className="ornament flicker mb-3 text-[10px]">✦</p>
         <p className="font-sans text-xs tracking-widest text-lamp">{chapter.titleEn}</p>

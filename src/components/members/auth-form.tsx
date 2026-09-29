@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { LogIn, UserPlus } from "lucide-react";
+import { LangSwitch } from "@/components/i18n/lang-switch";
 import { FxAurora, FxWords } from "@/components/media/fx";
 import { login, signup } from "@/lib/members-api";
 
@@ -35,6 +36,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   return (
     <main className="mf-page relative grid min-h-dvh place-items-center px-5 py-12">
       <FxAurora />
+      <LangSwitch className="absolute top-4 right-4 z-10" />
       <div className="w-full max-w-sm">
         <p className="mf-eyebrow mx-auto flex items-center justify-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">
           {isLogin ? <LogIn className="size-4" strokeWidth={1.6} /> : <UserPlus className="size-4" strokeWidth={1.6} />}

@@ -1,5 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, redirect, Scripts } from "@tanstack/react-router";
 import { getMe } from "@/lib/members-api";
+import { LangRuntime } from "@/components/i18n/lang-runtime";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeRoot } from "@/components/book/theme-root";
@@ -45,6 +46,7 @@ export const Route = createRootRoute({
       </head>
       <body className="antialiased">
         <PreviewHostBridge />
+        <LangRuntime />
         <AuthProvider>
           <ThemeRoot>
             <Outlet />
