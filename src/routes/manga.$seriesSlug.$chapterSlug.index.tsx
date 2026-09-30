@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { ArrowLeftRight, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
+import { Engagement } from "@/components/engagement/engagement";
 import { PageReader } from "@/components/manga/page-reader";
 import { getMangaChapterForReading } from "@/lib/manga-api";
 
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/")({
 
 function MangaReaderPage() {
   const { chapter } = Route.useLoaderData();
-  const { chapterSlug } = Route.useParams();
+  const { seriesSlug, chapterSlug } = Route.useParams();
   const [open, setOpen] = useState<number | null>(null);
   const [mode, setModeState] = useState<"scroll" | "pages">("scroll");
   const [rtl, setRtlState] = useState(false);
@@ -79,6 +80,12 @@ function MangaReaderPage() {
         caption: p.caption || undefined,
       })),
     [chapter.panels],
+  );
+
+  const social = (
+    <div className="mx-auto w-full max-w-2xl px-4">
+      <Engagement tone="dark" kind="manga" parent={seriesSlug} item={chapterSlug} />
+    </div>
   );
 
   const chapterNav = (
@@ -207,7 +214,12 @@ function MangaReaderPage() {
           rtl={rtl}
           paused={open != null}
           onZoom={setOpen}
-          end={chapterNav}
+          end={
+            <>
+              {social}
+              {chapterNav}
+            </>
+          }
         />
       ) : (
         <div className="mx-auto flex max-w-2xl flex-col">
@@ -231,7 +243,12 @@ function MangaReaderPage() {
         </div>
       )}
 
-      {mode === "scroll" || total === 0 ? chapterNav : null}
+      {mode === "scroll" || total === 0 ? (
+        <>
+          {social}
+          {chapterNav}
+        </>
+      ) : null}
 
       {open != null ? (
         <Lightbox items={lightboxItems} index={open} onClose={() => setOpen(null)} onIndex={setOpen} />

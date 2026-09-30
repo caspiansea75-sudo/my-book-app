@@ -37,6 +37,7 @@ export function PageReader({
     if (paused) return;
     const step = (d: number) => onIndex(Math.max(0, Math.min(total, index + d)));
     const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("input,textarea,select,[contenteditable]")) return;
       if (e.key === "ArrowRight") step(rtl ? -1 : 1);
       else if (e.key === "ArrowLeft") step(rtl ? 1 : -1);
     };
@@ -51,7 +52,8 @@ export function PageReader({
   }, [panels, index]);
 
   function onTap(e: MouseEvent<HTMLDivElement>) {
-    if ((e.target as HTMLElement).closest("video,a,button")) return;
+    if (!panel) return; // the last slide (comments + chapter links) is not a tap zone
+    if ((e.target as HTMLElement).closest("video,a,button,input,textarea")) return;
     const r = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     if (x < 0.3) go(rtl ? 1 : -1);
@@ -69,7 +71,8 @@ export function PageReader({
         onClick={onTap}
         onTouchStart={(e) => {
           const t = e.touches[0];
-          touch.current = t ? { x: t.clientX, y: t.clientY } : null;
+          const typing = (e.target as HTMLElement).closest("input,textarea");
+          touch.current = t && !typing ? { x: t.clientX, y: t.clientY } : null;
         }}
         onTouchEnd={(e) => {
           const s = touch.current;
@@ -95,7 +98,7 @@ export function PageReader({
               <video key={index} src={panel.src} controls playsInline className="max-h-full max-w-full" />
             )
           ) : (
-            <div className="w-full max-w-md">{end}</div>
+            <div className="w-full max-w-2xl [align-self:safe_center]">{end}</div>
           )}
         </div>
         {panel?.caption ? (

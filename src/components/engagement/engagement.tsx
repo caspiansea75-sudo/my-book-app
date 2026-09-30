@@ -10,7 +10,6 @@ import {
   type Comment,
   type Engagement as EngagementData,
 } from "@/lib/engagement-api";
-import { useLocale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -46,10 +45,10 @@ const TONES = {
 
 const MAX = 1000;
 
-function when(iso: string, locale: string): string {
+function when(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+  return d.toLocaleString("bn-BD", { dateStyle: "medium", timeStyle: "short" });
 }
 
 const msg = (e: unknown) => (e instanceof Error && e.message ? e.message : "কিছু ভুল হয়েছে");
@@ -57,7 +56,6 @@ const msg = (e: unknown) => (e instanceof Error && e.message ? e.message : "ক�
 /** Like button + comment thread for one story chapter or manga chapter. */
 export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
   const t = TONES[tone];
-  const locale = useLocale();
   const target = { kind, parent, item } as const;
   const [data, setData] = useState<EngagementData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -233,7 +231,7 @@ export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
                 >
                   {c.displayName}
                 </Link>
-                <span className={cn("shrink-0 text-[11px]", t.muted)}>{when(c.createdAt, locale)}</span>
+                <span className={cn("shrink-0 text-[11px]", t.muted)}>{when(c.createdAt)}</span>
                 {c.canDelete ? (
                   <button
                     type="button"

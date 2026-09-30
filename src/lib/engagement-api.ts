@@ -44,7 +44,7 @@ async function assertTarget(me: Me, t: Target): Promise<void> {
   if (t.kind === "story") {
     if (me.role !== "admin" && (await isHidden("book", t.parent))) throw new Error(NOT_FOUND);
     if (getCanonBook(t.parent)) return;
-    const r = await sql<{ x: number }>`select 1 as x from library_books where slug = ${t.parent} and deleted_at is null limit 1`;
+    const r = await sql<{ x: number }>`select 1 as x from library_books where slug = ${t.parent} limit 1`;
     if (!r[0]) throw new Error(NOT_FOUND);
     return;
   }
