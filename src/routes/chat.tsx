@@ -4,7 +4,9 @@ import {
   EllipsisVertical,
   Flag,
   Forward,
+  BellOff,
   ImagePlus,
+  Info,
   MessageCircle,
   Pin,
   PinOff,
@@ -40,6 +42,9 @@ import {
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n/locale";
+import { ChatInfoPanel } from "@/components/chat/chat-info";
+import { EFFECTS, MsgText, heartAt, reactToText } from "@/components/chat/chat-fx";
+import { CHAT_THEMES, useChatPrefs } from "@/lib/chat-prefs";
 
 type Member = NonNullable<ReturnType<typeof useMe>>;
 
@@ -252,6 +257,16 @@ function Thread({
   const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
   const [reporting, setReporting] = useState<ChatMessage | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [flying, setFlying] = useState(false);
+  const [prefs, updatePrefs] = useChatPrefs(me.id, peerId);
+  const primed = useRef(false);
+  const seenMax = useRef(0);
+  const nick = (id: number, name: string) => prefs.nicknames[String(id)] || name;
+  const title = prefs.name || (peer ? peer.displayName : "সবার চ্যাট");
+  const photo = prefs.photo || null;
+  const theme = CHAT_THEMES.find((t) => t.id === prefs.theme) ?? CHAT_THEMES[0];
+  const themeStyle = (theme.from ? { ["--cx-from" as string]: theme.from, ["--cx-to" as string]: theme.to } : {}) as React.CSSProperties;
   const lastId = useRef(0);
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -296,6 +311,22 @@ function Thread({
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
 
+  // Fire confetti / hearts when a NEW message arrives (not for old history)
+  useEffect(() => {
+    if (loading) return;
+    const max = messages.reduce((a, m) => Math.max(a, m.id), 0);
+    if (!primed.current) {
+      primed.current = true;
+      seenMax.current = max;
+      return;
+    }
+    const fresh = messages.filter((m) => m.id > seenMax.current);
+    seenMax.current = Math.max(seenMax.current, max);
+    const last = fresh[fresh.length - 1];
+    if (last && last.body && (last.senderId === me.id || !prefs.muted)) reactToText(last.body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, loading]);
+
   function onScroll() {
     const el = box.current;
     if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
@@ -331,6 +362,22 @@ function Thread({
       setPending(null);
       setReplyTo(null);
       if (areaRef.current) areaRef.current.style.height = "auto";
+      stick.current = true;
+      setFlying(true);
+      window.setTimeout(() => setFlying(false), 700);
+      await fetchNew();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "বার্তা যায়নি");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function sendQuick() {
+    if (sending) return;
+    setSending(true);
+    try {
+      await sendMessage({ data: { peerId, body: prefs.emoji, imageId: null, replyToId: null } });
       stick.current = true;
       await fetchNew();
     } catch (err) {
@@ -459,35 +506,48 @@ function Thread({
   const pinShown = pins.length ? pins[pinIdx % pins.length] : null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface">
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        {peer ? (
-          <>
+        {photo ? (
+          <img src={photo} alt="" className="cx-breathe size-9 shrink-0 rounded-full object-cover" />
+        ) : peer ? (
+          <span className="cx-breathe shrink-0">
             <Avatar name={peer.displayName} url={peer.avatarUrl} size={36} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-display text-base">{peer.displayName}</p>
-              <p className="font-sans text-xs text-muted">@{peer.username} · ব্যক্তিগত কথোপকথন</p>
-            </div>
-            <Link
-              to="/u/$username"
-              params={{ username: peer.username }}
-              className="pressable inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-sans text-xs text-muted hover:bg-surface-2 hover:text-fg"
-            >
-              <User className="size-3.5" strokeWidth={1.75} />
-              প্রোফাইল
-            </Link>
-          </>
+          </span>
         ) : (
-          <>
-            <span className="grid size-9 place-items-center rounded-full bg-accent text-accent-fg">
-              <MessageCircle className="size-4" strokeWidth={1.75} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="font-display text-base">সবার চ্যাট</p>
-              <p className="font-sans text-xs text-muted">সব সদস্য এখানে একসাথে কথা বলতে পারেন</p>
-            </div>
-          </>
+          <span className="cx-breathe grid size-9 shrink-0 place-items-center rounded-full bg-accent text-accent-fg">
+            <MessageCircle className="size-4" strokeWidth={1.75} />
+          </span>
         )}
+        <div className="min-w-0 flex-1">
+          <p className="cx-title flex items-center gap-1.5 truncate font-display text-base">
+            <span className="truncate">{title}</span>
+            {prefs.muted ? <BellOff className="size-3.5 shrink-0 text-muted" strokeWidth={1.75} /> : null}
+          </p>
+          <p className="truncate font-sans text-xs text-muted">
+            {peer ? `@${peer.username} · ব্যক্তিগত কথোপকথন` : "সব সদস্য এখানে একসাথে কথা বলতে পারেন"}
+          </p>
+        </div>
+        {peer ? (
+          <Link
+            to="/u/$username"
+            params={{ username: peer.username }}
+            className="pressable inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-sans text-xs text-muted hover:bg-surface-2 hover:text-fg"
+          >
+            <User className="size-3.5" strokeWidth={1.75} />
+            প্রোফাইল
+          </Link>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => setInfoOpen((v) => !v)}
+          data-open={infoOpen}
+          aria-label="চ্যাটের তথ্য"
+          title="চ্যাটের তথ্য"
+          className="cx-info-btn pressable grid size-9 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg"
+        >
+          <Info className="size-5" strokeWidth={1.75} />
+        </button>
       </header>
 
       {pinShown ? (
@@ -538,7 +598,7 @@ function Thread({
               <div
                 className={cn(
                   "group flex items-end gap-2 rounded-xl transition-colors duration-500",
-                  mine ? "flex-row-reverse" : "",
+                  mine ? "cx-msg-right flex-row-reverse" : "cx-msg-left",
                   flashId === m.id ? "bg-lamp/15" : "",
                 )}
               >
@@ -554,7 +614,7 @@ function Thread({
                       params={{ username: m.senderUsername }}
                       className="mb-0.5 px-1 font-sans text-[11px] text-muted hover:text-fg"
                     >
-                      {m.senderName}
+                      {nick(m.senderId, m.senderName)}
                     </Link>
                   ) : null}
                   <div className="relative">
@@ -595,9 +655,14 @@ function Thread({
                     </div>
                     <div
                       onClick={() => setActiveId((cur) => (cur === m.id ? null : m.id))}
+                      onDoubleClick={(e) => {
+                        heartAt(e.clientX, e.clientY);
+                        if (!st?.reactions.some((r) => r.emoji === "❤️" && r.mine)) void react(m, "❤️");
+                      }}
+                      style={mine ? themeStyle : undefined}
                       className={cn(
                         "rounded-2xl px-3 py-2 font-sans text-sm leading-relaxed",
-                        mine ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg",
+                        mine ? "cx-mine" : "cx-theirs bg-surface-2 text-fg",
                       )}
                     >
                       {m.forwarded ? (
@@ -635,18 +700,22 @@ function Thread({
                           />
                         </a>
                       ) : null}
-                      {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
+                      {m.body ? (
+                        <p className="whitespace-pre-wrap break-words">
+                          <MsgText body={m.body} />
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   {st && st.reactions.length ? (
                     <div className={cn("mt-1 flex flex-wrap gap-1", mine ? "justify-end" : "")}>
                       {st.reactions.map((r) => (
                         <button
-                          key={r.emoji}
+                          key={`${r.emoji}-${r.count}`}
                           type="button"
                           onClick={() => void react(m, r.emoji)}
                           className={cn(
-                            "pressable inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs",
+                            "cx-chip pressable inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs",
                             r.mine ? "border-lamp bg-lamp/20 text-fg" : "border-border bg-surface-2 text-muted",
                           )}
                         >
@@ -712,6 +781,23 @@ function Thread({
             </button>
           </div>
         ) : null}
+        {/^\/[a-z]*$/.test(text) ? (
+          <div className="cx-slash mb-2 flex flex-wrap gap-1.5 rounded-lg border border-border bg-surface-2 p-2 font-sans text-xs">
+            {EFFECTS.filter((f) => f.cmd.startsWith(text.slice(1))).map((f) => (
+              <button
+                key={f.cmd}
+                type="button"
+                onClick={() => {
+                  setText(`/${f.cmd} `);
+                  areaRef.current?.focus();
+                }}
+                className="pressable rounded-full border border-border px-2.5 py-1 text-muted hover:text-fg"
+              >
+                <span className="text-lamp">/{f.cmd}</span> · {f.hint}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex items-end gap-2">
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void onPick(e)} />
           <button
@@ -738,16 +824,42 @@ function Thread({
             placeholder={uploading ? "ছবি প্রস্তুত হচ্ছে…" : "বার্তা লিখুন…"}
             className="field-input max-h-32 min-h-11 flex-1 resize-none"
           />
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={sending || uploading || (!text.trim() && !pending)}
-            aria-label="পাঠান"
-            title="পাঠান"
-            className="pressable grid size-11 shrink-0 place-items-center rounded-lg bg-accent text-accent-fg disabled:opacity-50"
-          >
-            <Send className="size-5" strokeWidth={1.75} />
-          </button>
+          {!text.trim() && !pending ? (
+            <button
+              type="button"
+              onClick={() => void sendQuick()}
+              disabled={sending || uploading}
+              aria-label="ইমোজি পাঠান"
+              title="ইমোজি পাঠান"
+              className="cx-quick pressable grid size-11 shrink-0 place-items-center rounded-lg border border-border text-2xl disabled:opacity-50"
+            >
+              {prefs.emoji}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void send()}
+              disabled={sending || uploading}
+              aria-label="পাঠান"
+              title="পাঠান"
+              style={themeStyle}
+              className={cn(
+                "pressable grid size-11 shrink-0 place-items-center rounded-lg text-accent-fg disabled:opacity-50",
+                theme.from ? "cx-send-themed text-white" : "bg-accent",
+                flying && "cx-fly",
+              )}
+            >
+              {sending ? (
+                <span className="cx-dots" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              ) : (
+                <Send className="size-5" strokeWidth={1.75} />
+              )}
+            </button>
+          )}
         </div>
       </div>
       {pop && popMsg && pop.kind === "react" ? (
@@ -846,6 +958,22 @@ function Thread({
             ) : null}
           </div>
         </Popover>
+      ) : null}
+
+      {infoOpen ? (
+        <ChatInfoPanel
+          onClose={() => setInfoOpen(false)}
+          me={me as never}
+          peer={peer}
+          people={people}
+          prefs={prefs}
+          update={updatePrefs}
+          messages={messages}
+          pins={pins}
+          displayTitle={title}
+          displayPhoto={photo}
+          onJump={jumpTo}
+        />
       ) : null}
 
       {forwarding ? (

@@ -1,0 +1,134 @@
+/* ---------- Chat animations & gimmicks ---------- */
+
+/* Messages spring in from their own side */
+@keyframes cx-in-left { from { opacity: 0; transform: translateX(-18px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes cx-in-right { from { opacity: 0; transform: translateX(18px) scale(.9); } to { opacity: 1; transform: none; } }
+.cx-msg-left { animation: cx-in-left 380ms cubic-bezier(.34,1.56,.64,1) both; }
+.cx-msg-right { animation: cx-in-right 380ms cubic-bezier(.34,1.56,.64,1) both; }
+
+/* My bubbles: theme gradient + slow shimmer */
+.cx-mine {
+  background: linear-gradient(135deg, var(--cx-from, var(--color-accent)), var(--cx-to, var(--color-accent)));
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 16px -8px var(--cx-from, var(--color-accent));
+}
+.cx-mine::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,.22) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: cx-shimmer 6s ease-in-out infinite;
+}
+@keyframes cx-shimmer { 0%, 70% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+.cx-theirs { transition: transform 200ms ease, box-shadow 200ms ease; }
+.cx-theirs:hover, .cx-mine:hover { transform: translateY(-1px) scale(1.01); }
+
+/* Big emoji-only messages bounce */
+@keyframes cx-bounce { 0%,100% { transform: translateY(0) scale(1); } 30% { transform: translateY(-10px) scale(1.15); } 60% { transform: translateY(0) scale(.95,1.05); } }
+.cx-bigemoji { font-size: 2.6rem; line-height: 1.1; display: inline-block; animation: cx-bounce 1.6s ease-in-out 2; }
+.cx-bigemoji:hover { animation: cx-bounce 700ms ease-in-out; }
+
+/* Text effects  (type /shake hello, /rainbow hello ...) */
+@keyframes cx-shake { 0%,100% { transform: translate(0); } 20% { transform: translate(-2px,1px) rotate(-1deg); } 40% { transform: translate(2px,-1px) rotate(1deg); } 60% { transform: translate(-1px,-1px); } 80% { transform: translate(1px,1px); } }
+.fx-shake { display: inline-block; animation: cx-shake .45s linear infinite; }
+
+@keyframes cx-rainbow { to { background-position: 200% 0; } }
+.fx-rainbow {
+  background: linear-gradient(90deg,#ff5f6d,#ffc371,#fff56b,#6dff9a,#5fc3ff,#b67bff,#ff5f6d);
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent; font-weight: 700;
+  animation: cx-rainbow 3s linear infinite;
+}
+@keyframes cx-glow { 0%,100% { text-shadow: 0 0 4px #fff, 0 0 10px var(--color-lamp); } 50% { text-shadow: 0 0 8px #fff, 0 0 22px var(--color-lamp), 0 0 34px var(--color-lamp); } }
+.fx-glow { animation: cx-glow 2s ease-in-out infinite; font-weight: 600; }
+
+@keyframes cx-wave { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.fx-wave span { display: inline-block; animation: cx-wave 1.1s ease-in-out infinite; animation-delay: calc(var(--k) * 70ms); }
+
+@keyframes cx-spin { to { transform: rotate(360deg); } }
+.fx-spin { display: inline-block; animation: cx-spin 2.4s linear infinite; }
+
+@keyframes cx-blink { 50% { opacity: .15; } }
+.fx-blink { animation: cx-blink 1s steps(2) infinite; }
+
+.fx-big { font-size: 1.6rem; line-height: 1.2; font-weight: 700; }
+.fx-tiny { font-size: .7rem; opacity: .75; letter-spacing: .02em; }
+.fx-whisper { opacity: .7; font-style: italic; font-size: .8rem; }
+
+@keyframes cx-type { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.fx-type { display: inline-block; animation: cx-type 1.6s steps(24) both; border-right: 2px solid currentColor; }
+
+/* Spoiler: blurred until you click it */
+.fx-spoiler { filter: blur(6px); cursor: pointer; transition: filter .3s; user-select: none; }
+.fx-spoiler[data-open="true"] { filter: none; user-select: text; }
+
+/* Header title shimmer */
+@keyframes cx-title { to { background-position: 200% 0; } }
+.cx-title {
+  background: linear-gradient(90deg, var(--color-fg), var(--color-lamp), var(--color-fg));
+  background-size: 200% 100%; -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+  animation: cx-title 6s linear infinite;
+}
+
+/* Header avatar breathes */
+@keyframes cx-breathe { 0%,100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-lamp) 45%, transparent); } 50% { box-shadow: 0 0 0 7px transparent; } }
+.cx-breathe { animation: cx-breathe 3s ease-out infinite; border-radius: 9999px; }
+
+/* The "i" button */
+.cx-info-btn { transition: transform 400ms cubic-bezier(.34,1.56,.64,1), background-color 150ms, color 150ms; }
+.cx-info-btn[data-open="true"] { transform: rotate(360deg) scale(1.1); background: var(--color-accent); color: var(--color-accent-fg); }
+
+/* Info panel slides in */
+@keyframes cx-panel-in { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+.cx-panel { animation: cx-panel-in 300ms cubic-bezier(.22,1,.36,1) both; }
+@keyframes cx-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.cx-rise { animation: cx-rise 380ms cubic-bezier(.22,1,.36,1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+.cx-collapse { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 300ms ease; }
+.cx-collapse[data-open="true"] { grid-template-rows: 1fr; }
+.cx-collapse > div { overflow: hidden; }
+
+/* Send button: paper plane takes off */
+@keyframes cx-fly { 0% { transform: none; opacity: 1; } 45% { transform: translate(18px,-14px) rotate(-20deg) scale(.8); opacity: 0; } 46% { transform: translate(-18px,14px); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.cx-fly svg { animation: cx-fly 650ms ease-in-out; }
+
+/* Quick-emoji button pulses gently, grows while held */
+@keyframes cx-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+.cx-quick { animation: cx-pulse 2.4s ease-in-out infinite; }
+.cx-quick:active { transform: scale(1.5); }
+
+/* "sending" dots */
+@keyframes cx-dot { 0%,80%,100% { transform: scale(.5); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+.cx-dots i { display: inline-block; width: 5px; height: 5px; margin: 0 2px; border-radius: 50%; background: currentColor; animation: cx-dot 1s infinite; }
+.cx-dots i:nth-child(2) { animation-delay: .15s; } .cx-dots i:nth-child(3) { animation-delay: .3s; }
+
+/* Reaction chips pop */
+@keyframes cx-pop { 0% { transform: scale(.3); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.cx-chip { animation: cx-pop 350ms cubic-bezier(.34,1.56,.64,1); }
+
+/* Flying particles (confetti / hearts / emoji rain) */
+.cx-fly-layer { position: fixed; inset: 0; pointer-events: none; z-index: 60; overflow: hidden; }
+@keyframes cx-fall { from { transform: translate(0,-8vh) rotate(0); opacity: 1; } to { transform: translate(var(--dx), 108vh) rotate(var(--rot)); opacity: .9; } }
+@keyframes cx-float { from { transform: translate(0,0) scale(.6); opacity: 1; } to { transform: translate(var(--dx), -55vh) scale(1.4); opacity: 0; } }
+.cx-p { position: absolute; top: 0; left: var(--x); font-size: var(--s); animation: cx-fall var(--d) ease-in forwards; }
+.cx-h { position: absolute; bottom: var(--by, 20%); left: var(--x); font-size: var(--s); animation: cx-float var(--d) ease-out forwards; }
+
+/* Double-tap heart */
+@keyframes cx-heart { 0% { transform: translate(-50%,-50%) scale(0); opacity: 0; } 30% { transform: translate(-50%,-70%) scale(1.5); opacity: 1; } 100% { transform: translate(-50%,-160%) scale(1); opacity: 0; } }
+.cx-heart { position: fixed; z-index: 70; pointer-events: none; font-size: 2.2rem; animation: cx-heart 900ms ease-out forwards; }
+
+/* Search hit */
+mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+
+/* Slash-command menu */
+.cx-slash { animation: cx-rise 200ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-msg-left, .cx-msg-right, .cx-mine::after, .cx-title, .cx-breathe, .cx-quick, .cx-bigemoji,
+  .fx-shake, .fx-rainbow, .fx-glow, .fx-wave span, .fx-spin, .fx-blink, .fx-type, .cx-chip, .cx-panel, .cx-rise { animation: none !important; }
+  .cx-fly-layer, .cx-heart { display: none; }
+  .fx-type { clip-path: none; }
+}
+
+.cx-send-themed { background: linear-gradient(135deg, var(--cx-from), var(--cx-to)); }
