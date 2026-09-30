@@ -278,7 +278,6 @@ export const getMangaChapterForEdit = createServerFn({ method: "GET" })
       from manga_chapters c
       join manga_series s on s.id = c.series_id
       left join manga_panels p on p.chapter_id = c.id
-        and not exists (select 1 from media d where d.id = p.media_id and d.deleted_at is not null)
       left join media m on m.id = p.media_id
       where s.slug = ${data.seriesSlug} and c.slug = ${data.chapterSlug}
       order by p.sort_order asc nulls last
@@ -388,7 +387,7 @@ export const getMangaChapterForReading = createServerFn({ method: "GET" })
     }>`
       select m.id as media_id, m.kind, m.thumb, m.url, m.source, p.caption, p.sort_order
       from manga_panels p
-      join media m on m.id = p.media_id and m.deleted_at is null
+      join media m on m.id = p.media_id
       where p.chapter_id = ${current.id}
       order by p.sort_order asc
     `;
@@ -439,7 +438,7 @@ export const addMangaPanels = createServerFn({ method: "POST" })
       `insert into manga_panels (chapter_id, media_id, sort_order)
        select $1::int, t.id, $2::int + t.ord::int - 1
        from unnest($3::int[]) with ordinality as t(id, ord)
-       join media m on m.id = t.id and m.deleted_at is null
+       join media m on m.id = t.id
        order by t.ord`,
       [chapterId, base, data.mediaIds],
     );

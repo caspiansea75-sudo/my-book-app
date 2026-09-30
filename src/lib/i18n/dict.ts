@@ -1,73 +1,6 @@
 // Generated: Bengali UI text -> English. Add a line here to translate more of the interface.
 // Stories, titles and anything members write are never translated.
 export const EXACT: Record<string, string> = {
- "চ্যাট": "Chat",
- "সবার চ্যাট": "Everyone's chat",
- "সব সদস্য এখানে একসাথে কথা বলতে পারেন": "All members can talk together here",
- "কার সাথে কথা বলবেন": "Who to talk to",
- "বার্তা লোড": "Loading messages",
- "বার্তা লোড হয়নি": "Couldn't load messages",
- "ছবি দেওয়া যায়নি": "Couldn't attach the image",
- "বার্তা যায়নি": "Message wasn't sent",
- "এই বার্তাটি মুছবেন?": "Delete this message?",
- "মোছা যায়নি": "Couldn't delete",
- "পাঠানো ছবি": "Sent image",
- "বার্তা মুছুন": "Delete message",
- "পাঠাতে যাওয়া ছবি": "Image to send",
- "ছবি বাদ দিন": "Remove image",
- "ছবি যোগ করুন": "Add image",
- "ছবি পাঠান": "Send image",
- "ছবি প্রস্তুত হচ্ছে…": "Preparing image…",
- "বার্তা লিখুন…": "Type a message…",
- "পাঠান": "Send",
- "এখনো আর কেউ যোগ দেয়নি।": "No one else has joined yet.",
- "প্রোফাইল": "Profile",
- "লোড হচ্ছে…": "Loading…",
- "এখনো কোনো বার্তা নেই। প্রথম বার্তাটি আপনিই পাঠান।": "No messages yet. Send the first one.",
- "আমার প্রোফাইল": "My profile",
- "ছবি বদলানো যায়নি": "Couldn't change the picture",
- "ছবি সরানো যায়নি": "Couldn't remove the picture",
- "অপেক্ষা করুন…": "Please wait…",
- "ছবি বদলান": "Change picture",
- "ছবি দিন": "Add picture",
- "দু-এক লাইনে নিজের কথা লিখুন": "Write a line or two about yourself",
- "সংরক্ষণ করুন": "Save",
- "ছবি সরান": "Remove picture",
- "অন্যরা যেভাবে দেখে": "How others see it",
- "এখনো নিজের সম্পর্কে কিছু লেখেননি।": "Hasn't written anything about themselves yet.",
- "প্রোফাইল বদলান": "Edit profile",
- "বার্তা পাঠান": "Send message",
- "নাম ৪০ অক্ষরের মধ্যে রাখুন": "Keep the name within 40 characters",
- "পরিচয় ৩০০ অক্ষরের মধ্যে রাখুন": "Keep the bio within 300 characters",
- "ছবিটি সঠিক নয়": "The image isn't valid",
- "ছবি সংরক্ষণ হয়নি": "The image wasn't saved",
- "ছবি পাওয়া যায়নি": "Image not found",
- "নিজেকে বার্তা পাঠানো যায় না": "You can't message yourself",
- "সদস্য পাওয়া যায়নি": "Member not found",
- "বার্তা অনেক বড়": "Message is too long",
- "কিছু লিখুন বা ছবি দিন": "Write something or add an image",
- "এই বার্তা মোছার অনুমতি নেই": "You can't delete this message",
- "ছবিটি পড়া যায়নি": "Couldn't read the image",
- "শুধু ছবি বেছে নিন": "Please choose an image",
- "ছবিটি প্রস্তুত করা যায়নি": "Couldn't prepare the image",
- "ছবিটি অনেক বড় — একটু ছোট ছবি বেছে নিন": "The image is too large — pick a smaller one",
- "এই বইয়ে প্রাপ্তবয়স্কদের জন্য সংবেদনশীল দৃশ্য আছে। সেগুলো ডিফল্টে লুকানো থাকে। চাইলে এক ক্লিকে সব দেখান — তখন লেখা লাল রঙে আসবে। কোনো অংশ কাটা হয়নি।": "This book contains sensitive scenes for adults. They are hidden by default. If you like, show everything in one click — the text will then appear in red. Nothing has been cut.",
- "মন্তব্য ও লাইক": "Comments and likes",
- "পছন্দ": "Like",
- "পছন্দ করেছেন": "Liked",
- "মন্তব্য": "Comments",
- "আপনার মন্তব্য লিখুন…": "Write a comment…",
- "মন্তব্য পাঠান": "Post comment",
- "মন্তব্য মুছুন": "Delete comment",
- "মন্তব্যটি মুছে ফেলবেন?": "Delete this comment?",
- "এখনো কোনো মন্তব্য নেই। প্রথম মন্তব্যটি আপনিই করুন।": "No comments yet. Be the first to comment.",
- "শুধু সাম্প্রতিক মন্তব্যগুলো দেখানো হচ্ছে।": "Showing only the most recent comments.",
- "কিছু লিখুন": "Write something",
- "মন্তব্য অনেক বড়": "Comment is too long",
- "এই মন্তব্য মোছার অনুমতি নেই": "You can't delete this comment",
- "পাওয়া যায়নি": "Not found",
- "একটু ধীরে — কিছুক্ষণ পরে আবার চেষ্টা করুন": "Slow down a little — try again in a moment",
- "কিছু ভুল হয়েছে": "Something went wrong",
  "যেখানে ছিলেন": "Where you left off",
  "পড়া শুরু করুন": "Start reading",
  "সম্পাদনা": "Edit",
@@ -548,41 +481,5 @@ export const PATTERNS: [string, string][] = [
  [
   "^শুধু\\ অব্যবহৃত\\ (.+?)\\ টি\\ মুছুন$",
   "Delete only the {1} unused"
- ],
- [
-  "^“(.+?)”\\ ফোল্ডার\\ মুছবেন\\?$",
-  "Delete folder “{1}”?"
- ],
- [
-  "^(.+?)\\ টি\\ ফাইল\\ মুছবেন\\?$",
-  "Delete {1} files?"
- ],
- [
-  "^(.+?)\\ কেবি$",
-  "{1} KB"
- ],
- [
-  "^(.+?)\\ এমবি$",
-  "{1} MB"
- ],
- [
-  "^মাঙ্গা:\\ (.+)$",
-  "Manga: {1}"
- ],
- [
-  "^মাঙ্গার\\ প্রচ্ছদ:\\ (.+)$",
-  "Manga cover: {1}"
- ],
- [
-  "^বইয়ের\\ প্রচ্ছদ:\\ (.+)$",
-  "Book cover: {1}"
- ],
- [
-  "^গল্প:\\ (.+)$",
-  "Story: {1}"
- ],
- [
-  "^বার্তা\\ লোড\\ হয়নি:\\ (.+)$",
-  "Couldn't load messages: {1}"
  ]
 ];
