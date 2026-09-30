@@ -169,7 +169,8 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
   const sql = await getSql();
   const folderRows = await sql<FolderRow>`
     select f.id, f.parent_id, f.name, f.created_at,
-      (select count(*) from media_folder_items i where i.folder_id = f.id) as item_count
+      (select count(*) from media_folder_items i join media x on x.id = i.media_id
+        where i.folder_id = f.id and x.deleted_at is null) as item_count
     from media_folders f
     order by lower(f.name), f.id
   `;
@@ -180,6 +181,7 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
       m.width, m.height, m.bytes, m.created_at, i.folder_id
     from media m
     left join media_folder_items i on i.media_id = m.id
+    where m.deleted_at is null
     order by m.created_at desc, m.id desc
     limit 2000
   `;
@@ -355,7 +357,11 @@ export const deleteMediaSafe = createServerFn({ method: "POST" })
       ids = ids.filter((id) => !skipped.includes(id));
     }
     if (ids.length > 0) {
-      await sql.query(`delete from media where id = any($1::int[])`, [ids]);
+      // Into the trash, not gone: Studio › Trash (or the gallery's Trash button) brings them back.
+      await sql.query(
+        `update media set deleted_at = now(), deleted_by = $2 where id = any($1::int[]) and deleted_at is null`,
+        [ids, me.id],
+      );
     }
     return { deleted: ids.length, skipped };
   });

@@ -31,6 +31,7 @@ import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
 import { SiteNav } from "@/components/book/site-nav";
 import { HideToggle } from "@/components/members/hide-toggle";
 import { MultiUploader } from "@/components/media/multi-uploader";
+import { TrashDialog } from "@/components/studio/trash-dialog";
 import {
   createFolder,
   deleteFolder,
@@ -126,6 +127,7 @@ function MediaPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [modal, setModal] = useState<Modal | null>(null);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<number | "home" | null>(null);
@@ -350,6 +352,14 @@ function MediaPage() {
           ফোল্ডার বানিয়ে ছবি ও ভিডিও গুছিয়ে রাখুন। সাজান, খুঁজুন, একসাথে অনেকগুলো বেছে সরান — ফাইল টেনে ফোল্ডারে
           ছেড়েও দেওয়া যায়।
         </p>
+        <button
+          type="button"
+          onClick={() => setTrashOpen(true)}
+          className="pressable mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-fg hover:bg-surface-2"
+        >
+          <Trash2 className="size-4" strokeWidth={1.75} />
+          ট্রাশ
+        </button>
 
         {/* Where am I */}
         <nav aria-label="ফোল্ডার পথ" className="mt-8 flex flex-wrap items-center gap-1 font-sans text-sm">
@@ -791,6 +801,7 @@ function MediaPage() {
           onClose={() => setModal(null)}
         />
       ) : null}
+      {trashOpen ? <TrashDialog onClose={() => setTrashOpen(false)} onChanged={() => void refresh()} /> : null}
       {modal?.type === "delete-items" ? (
         <DeleteItemsDialog
           ids={modal.ids}
@@ -1016,7 +1027,7 @@ function DeleteItemsDialog({
         <p className="mt-3 font-sans text-sm text-muted">কোথায় ব্যবহৃত দেখা হচ্ছে…</p>
       ) : usedIds.length === 0 ? (
         <p className="mt-3 font-sans text-sm leading-relaxed text-muted">
-          কোনো বই, মাঙ্গা বা প্রচ্ছদে এগুলো ব্যবহার হচ্ছে না। ফাইল স্থায়ীভাবে মুছে যাবে।
+          কোনো বই, মাঙ্গা বা প্রচ্ছদে এগুলো ব্যবহার হচ্ছে না। ফাইলগুলো ট্রাশে যাবে — দরকার হলে ট্রাশ থেকে ফেরত আনা যাবে।
         </p>
       ) : (
         <>
@@ -1041,6 +1052,9 @@ function DeleteItemsDialog({
             {kinds.has("manga") ? ` ${USAGE_NOTE.manga};` : ""}
             {kinds.has("cover") ? ` ${USAGE_NOTE.cover};` : ""}
             {kinds.has("story") ? ` ${USAGE_NOTE.story} (আগে স্টুডিও থেকে ছবিটি সরিয়ে নিন)` : ""}
+          </p>
+          <p className="mt-2 font-sans text-xs leading-relaxed text-subtle">
+            ফাইল ট্রাশে যাবে — ফেরত আনলে সব আগের মতো হয়ে যাবে।
           </p>
         </>
       )}

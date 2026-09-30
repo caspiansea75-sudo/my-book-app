@@ -61,6 +61,7 @@ type BookRow = {
   description: string;
   cover_media_id: number | null;
   owner_id?: number | null;
+  owner_name?: string | null;
   created_at: string;
 };
 
@@ -73,6 +74,7 @@ type ChapterRow = {
   excerpt: string;
   sort_order: number;
   body: unknown;
+  status?: string;
 };
 
 type InsertRow = {
@@ -129,6 +131,7 @@ function metaFromBody(
   titleEn: string,
   excerpt: string,
   body: { sections: Section[] },
+  status: "draft" | "published" = "published",
 ): ChapterMeta {
   const stats = summarizeBody(body.sections);
   return {
@@ -141,6 +144,7 @@ function metaFromBody(
     nsfwCount: stats.nsfwCount,
     chars: stats.chars,
     hasNsfw: stats.hasNsfw,
+    status,
   };
 }
 
@@ -190,16 +194,24 @@ function uniqueSlug(base: string, taken: Set<string>): string {
   return `${root}-${Date.now().toString(36)}`;
 }
 
-async function studioBookIndex(row: BookRow): Promise<BookIndex> {
+async function studioBookIndex(row: BookRow, drafts = false): Promise<BookIndex> {
   const sql = await getSql();
   const chapters = await sql<ChapterRow>`
-    select id, book_id, slug, title, title_en, excerpt, sort_order, body
+    select id, book_id, slug, title, title_en, excerpt, sort_order, body, status
     from library_chapters
-    where book_id = ${row.id}
+    where book_id = ${row.id} and deleted_at is null and (${drafts}::boolean or status = 'published')
     order by sort_order asc, id asc
   `;
   const metas = chapters.map((ch) =>
-    metaFromBody(ch.id, ch.slug, ch.title, ch.title_en, ch.excerpt, parseBody(ch.body)),
+    metaFromBody(
+      ch.id,
+      ch.slug,
+      ch.title,
+      ch.title_en,
+      ch.excerpt,
+      parseBody(ch.body),
+      ch.status === "draft" ? "draft" : "published",
+    ),
   );
   const paraCount = metas.reduce((n, c) => n + c.paraCount, 0);
   const nsfwCount = metas.reduce((n, c) => n + c.nsfwCount, 0);
@@ -258,26 +270,39 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at,
       (select m.display_name from members m where m.id = library_books.owner_id) as owner_name
     from library_books
+    where deleted_at is null
     order by created_at desc
   `;
-  const counts = await sql<{ book_id: number; n: number }>`
-    select book_id, count(*)::int as n from library_chapters group by book_id
+  const counts = await sql<{ book_id: number; pub: number; total: number }>`
+    select book_id,
+      (count(*) filter (where status = 'published'))::int as pub,
+      count(*)::int as total
+    from library_chapters
+    where deleted_at is null
+    group by book_id
   `;
-  const countMap = new Map(counts.map((c) => [c.book_id, c.n]));
-  const studio: LibraryBookCard[] = studioRows.map((row) => ({
-    slug: row.slug,
-    title: row.title,
-    titleEn: row.title_en,
-    author: row.author || row.owner_name || "",
-    tagline: row.tagline,
-    description: row.description,
-    chapterCount: countMap.get(row.id) ?? 0,
-    origin: "studio",
-    coverUrl: row.cover_media_id ? mediaSrc(row.cover_media_id) : covers.get(row.slug) ?? null,
-    nsfwCount: 0,
-    createdAt: toMs(row.created_at),
-    ownerId: row.owner_id ?? null,
-  }));
+  const countMap = new Map(counts.map((c) => [c.book_id, c]));
+  const studio: LibraryBookCard[] = studioRows.flatMap((row) => {
+    const c = countMap.get(row.id) ?? { pub: 0, total: 0 };
+    const mine = me.role === "admin" || row.owner_id === me.id;
+    // Nobody but the author and the admin sees a book whose chapters are all still drafts.
+    if (!mine && c.total > 0 && c.pub === 0) return [];
+    const card: LibraryBookCard = {
+      slug: row.slug,
+      title: row.title,
+      titleEn: row.title_en,
+      author: row.author || row.owner_name || "",
+      tagline: row.tagline,
+      description: row.description,
+      chapterCount: mine ? c.total : c.pub,
+      origin: "studio",
+      coverUrl: row.cover_media_id ? mediaSrc(row.cover_media_id) : covers.get(row.slug) ?? null,
+      nsfwCount: 0,
+      createdAt: toMs(row.created_at),
+      ownerId: row.owner_id ?? null,
+    };
+    return [card];
+  });
   const canon: LibraryBookCard[] = listCanonBooks().map((book) => ({
     slug: book.slug,
     title: book.title,
@@ -297,7 +322,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
 });
 
 export const resolveBook = createServerFn({ method: "GET" })
-  .validator(z.object({ slug: z.string().min(1) }))
+  .validator(z.object({ slug: z.string().min(1), drafts: z.boolean().optional() }))
   .handler(async ({ data }) => {
     const me = await requireMember();
     if (me.role !== "admin" && (await isHidden("book", data.slug))) return null;
@@ -318,12 +343,14 @@ export const resolveBook = createServerFn({ method: "GET" })
       select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at,
       (select m.display_name from members m where m.id = library_books.owner_id) as owner_name
       from library_books
-      where slug = ${data.slug}
+      where slug = ${data.slug} and deleted_at is null
       limit 1
     `;
     const row = rows[0];
     if (!row) return null;
-    return studioBookIndex(row);
+    // Drafts are only ever listed for the author and the admin, and only when asked for (the studio).
+    const withDrafts = Boolean(data.drafts) && (me.role === "admin" || row.owner_id === me.id);
+    return studioBookIndex(row, withDrafts);
   });
 
 export const loadStudioChapter = createServerFn({ method: "GET" })
@@ -333,19 +360,21 @@ export const loadStudioChapter = createServerFn({ method: "GET" })
     if (me.role !== "admin" && (await isHidden("book", data.bookSlug))) return null;
     const sql = await getSql();
     const books = await sql<BookRow>`
-      select id, slug, title, title_en, author, tagline, description, cover_media_id, created_at
-      from library_books where slug = ${data.bookSlug} limit 1
+      select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at
+      from library_books where slug = ${data.bookSlug} and deleted_at is null limit 1
     `;
     const book = books[0];
     if (!book) return null;
     const chapters = await sql<ChapterRow>`
-      select id, book_id, slug, title, title_en, excerpt, sort_order, body
+      select id, book_id, slug, title, title_en, excerpt, sort_order, body, status
       from library_chapters
-      where book_id = ${book.id} and slug = ${data.slug}
+      where book_id = ${book.id} and slug = ${data.slug} and deleted_at is null
       limit 1
     `;
     const row = chapters[0];
     if (!row) return null;
+    const isDraft = row.status === "draft";
+    if (isDraft && me.role !== "admin" && book.owner_id !== me.id) return null;
     const body = parseBody(row.body);
     const stats = summarizeBody(body.sections);
     const chapter: Chapter = {
@@ -358,6 +387,7 @@ export const loadStudioChapter = createServerFn({ method: "GET" })
       nsfwCount: stats.nsfwCount,
       chars: stats.chars,
       sections: body.sections,
+      status: isDraft ? "draft" : "published",
     };
     return chapter;
   });
@@ -392,6 +422,7 @@ export const listMedia = createServerFn({ method: "GET" }).handler(async () => {
   const rows = await sql<MediaRow>`
     select id, kind, title, mime, source, url, thumb, width, height, bytes, owner_id, created_at
     from media
+    where deleted_at is null
     order by created_at desc
     limit 240
   `;
@@ -407,7 +438,7 @@ export const getMediaRecord = createServerFn({ method: "GET" })
     const sql = await getSql();
     const rows = await sql<MediaRow & { data: string | null }>`
       select id, kind, title, mime, source, url, thumb, width, height, bytes, created_at, data
-      from media where id = ${data.id} limit 1
+      from media where id = ${data.id} and deleted_at is null limit 1
     `;
     const row = rows[0];
     if (!row) return null;
@@ -517,7 +548,7 @@ export const deleteMedia = createServerFn({ method: "POST" })
     const me = await requireMember();
     await assertMediaAccess(me, [data.id]);
     const sql = await getSql();
-    await sql`delete from media where id = ${data.id}`;
+    await sql`update media set deleted_at = now(), deleted_by = ${me.id} where id = ${data.id} and deleted_at is null`;
     return { ok: true };
   });
 
@@ -614,6 +645,8 @@ const chapterSchema = z.object({
   title: z.string().min(1).max(160),
   titleEn: z.string().max(160).optional(),
   excerpt: z.string().max(400).optional(),
+  /** Omit to leave an existing chapter's status as it is (new chapters then start published). */
+  status: z.enum(["draft", "published"]).optional(),
   sections: z.array(
     z.object({
       id: z.string(),
@@ -655,7 +688,9 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
     const me = await requireMember();
     await assertBookAccess(me, data.bookSlug);
     const sql = await getSql();
-    const books = await sql<{ id: number }>`select id from library_books where slug = ${data.bookSlug} limit 1`;
+    const books = await sql<{ id: number }>`
+      select id from library_books where slug = ${data.bookSlug} and deleted_at is null limit 1
+    `;
     const book = books[0];
     if (!book) throw new Error("বই পাওয়া যায়নি");
     const sections: Section[] = data.sections.map((section) => ({
@@ -677,30 +712,32 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
     }));
     const stats = summarizeBody(sections);
     const excerpt = data.excerpt || stats.excerpt;
-    const existing = await sql<{ slug: string; sort_order: number }>`
-      select slug, sort_order from library_chapters where book_id = ${book.id}
+    // Chapters in the trash still hold their slug (so a restore never collides with a new chapter).
+    const existing = await sql<{ slug: string; sort_order: number; deleted_at: string | null }>`
+      select slug, sort_order, deleted_at from library_chapters where book_id = ${book.id}
     `;
+    const live = existing.filter((c) => !c.deleted_at);
     const slug =
-      data.slug && existing.some((c) => c.slug === data.slug)
+      data.slug && live.some((c) => c.slug === data.slug)
         ? data.slug
         : uniqueSlug(
             data.slug || String(existing.length + 1).padStart(2, "0"),
             new Set(existing.map((c) => c.slug)),
           );
-    const sortOrder =
-      existing.find((c) => c.slug === slug)?.sort_order ?? existing.length + 1;
+    const sortOrder = live.find((c) => c.slug === slug)?.sort_order ?? existing.length + 1;
     const body = JSON.stringify({ sections });
     await sql.query(
-      `insert into library_chapters (book_id, slug, title, title_en, excerpt, sort_order, body)
-       values ($1,$2,$3,$4,$5,$6,$7::jsonb)
+      `insert into library_chapters (book_id, slug, title, title_en, excerpt, sort_order, body, status)
+       values ($1,$2,$3,$4,$5,$6,$7::jsonb, coalesce($8::text, 'published'))
        on conflict (book_id, slug) do update set
          title = excluded.title,
          title_en = excluded.title_en,
          excerpt = excluded.excerpt,
-         body = excluded.body`,
-      [book.id, slug, data.title, data.titleEn ?? "", excerpt, sortOrder, body],
+         body = excluded.body,
+         status = coalesce($8::text, library_chapters.status)`,
+      [book.id, slug, data.title, data.titleEn ?? "", excerpt, sortOrder, body, data.status ?? null],
     );
-    return { slug };
+    return { slug, status: data.status ?? null };
   });
 
 const insertSchema = z.object({
@@ -743,7 +780,11 @@ export const deleteStudioChapter = createServerFn({ method: "POST" })
     const books = await sql<{ id: number }>`select id from library_books where slug = ${data.bookSlug} limit 1`;
     const book = books[0];
     if (!book) throw new Error("বই পাওয়া যায়নি");
-    await sql`delete from library_chapters where book_id = ${book.id} and slug = ${data.slug}`;
+    // Goes to the trash — it can be restored from Studio › Trash.
+    await sql`
+      update library_chapters set deleted_at = now(), deleted_by = ${me.id}
+      where book_id = ${book.id} and slug = ${data.slug} and deleted_at is null
+    `;
     return { ok: true };
   });
 
@@ -753,7 +794,125 @@ export const deleteStudioBook = createServerFn({ method: "POST" })
     const me = await requireMember();
     await assertBookAccess(me, data.slug);
     const sql = await getSql();
-    await sql`delete from library_books where slug = ${data.slug}`;
+    await sql`update library_books set deleted_at = now(), deleted_by = ${me.id} where slug = ${data.slug} and deleted_at is null`;
+    return { ok: true };
+  });
+
+/* ---------------------------------------------------------------- trash */
+
+export type TrashItem = {
+  kind: "book" | "chapter" | "media";
+  id: number;
+  title: string;
+  /** Where it came from: the book of a chapter, or "image"/"video" for media. */
+  sub: string;
+  deletedAt: string;
+  thumbSrc: string | null;
+};
+
+const trashKind = z.enum(["book", "chapter", "media"]);
+
+/** What the member has deleted (the admin sees everyone's), newest first. */
+export const listTrash = createServerFn({ method: "GET" }).handler(async (): Promise<TrashItem[]> => {
+  const me = await requireMember();
+  const admin = me.role === "admin";
+  const sql = await getSql();
+  const out: TrashItem[] = [];
+
+  const books = await sql<{ id: number; title: string; author: string; deleted_at: string }>`
+    select id, title, author, deleted_at from library_books
+    where deleted_at is not null and (${admin}::boolean or owner_id = ${me.id})
+    order by deleted_at desc
+  `;
+  for (const b of books) {
+    out.push({ kind: "book", id: b.id, title: b.title, sub: b.author, deletedAt: new Date(b.deleted_at).toISOString(), thumbSrc: null });
+  }
+
+  const chapters = await sql<{ id: number; title: string; book_title: string; deleted_at: string }>`
+    select c.id, c.title, b.title as book_title, c.deleted_at
+    from library_chapters c
+    join library_books b on b.id = c.book_id
+    where c.deleted_at is not null and b.deleted_at is null
+      and (${admin}::boolean or b.owner_id = ${me.id})
+    order by c.deleted_at desc
+  `;
+  for (const c of chapters) {
+    out.push({ kind: "chapter", id: c.id, title: c.title, sub: c.book_title, deletedAt: new Date(c.deleted_at).toISOString(), thumbSrc: null });
+  }
+
+  const media = await sql<{
+    id: number;
+    kind: "image" | "video";
+    title: string;
+    source: "upload" | "url";
+    url: string | null;
+    has_thumb: boolean;
+    deleted_at: string;
+  }>`
+    select id, kind, title, source, url, (thumb is not null) as has_thumb, deleted_at
+    from media
+    where deleted_at is not null and (${admin}::boolean or owner_id = ${me.id})
+    order by deleted_at desc
+    limit 500
+  `;
+  for (const m of media) {
+    out.push({
+      kind: "media",
+      id: m.id,
+      title: m.title || (m.kind === "image" ? "ছবি" : "ভিডিও"),
+      sub: m.kind === "image" ? "ছবি" : "ভিডিও",
+      deletedAt: new Date(m.deleted_at).toISOString(),
+      thumbSrc: m.kind === "image" && (m.source === "upload" || m.has_thumb) ? mediaThumbSrc(m.id) : null,
+    });
+  }
+  return out.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+});
+
+async function assertTrashAccess(me: { id: number; role: string }, kind: "book" | "chapter" | "media", id: number) {
+  const sql = await getSql();
+  const rows =
+    kind === "book"
+      ? await sql<{ owner_id: number | null; deleted_at: string | null; book_deleted: string | null }>`
+          select owner_id, deleted_at, null::timestamptz as book_deleted from library_books where id = ${id} limit 1`
+      : kind === "chapter"
+        ? await sql<{ owner_id: number | null; deleted_at: string | null; book_deleted: string | null }>`
+            select b.owner_id, c.deleted_at, b.deleted_at as book_deleted
+            from library_chapters c join library_books b on b.id = c.book_id where c.id = ${id} limit 1`
+        : await sql<{ owner_id: number | null; deleted_at: string | null; book_deleted: string | null }>`
+            select owner_id, deleted_at, null::timestamptz as book_deleted from media where id = ${id} limit 1`;
+  const row = rows[0];
+  if (!row || !row.deleted_at) throw new Error("ট্রাশে পাওয়া যায়নি");
+  if (me.role !== "admin" && row.owner_id !== me.id) throw new Error("এটি আপনার তৈরি নয়");
+  return row;
+}
+
+export const restoreTrash = createServerFn({ method: "POST" })
+  .validator(z.object({ kind: trashKind, id: z.number().int().positive() }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    const row = await assertTrashAccess(me, data.kind, data.id);
+    const sql = await getSql();
+    if (data.kind === "book") {
+      await sql`update library_books set deleted_at = null, deleted_by = null where id = ${data.id}`;
+    } else if (data.kind === "chapter") {
+      if (row.book_deleted) throw new Error("আগে বইটি ট্রাশ থেকে ফেরত আনুন");
+      await sql`update library_chapters set deleted_at = null, deleted_by = null where id = ${data.id}`;
+    } else {
+      await sql`update media set deleted_at = null, deleted_by = null where id = ${data.id}`;
+    }
+    return { ok: true };
+  });
+
+/** The only place anything is really erased. Only works on things already in the trash. */
+export const purgeTrash = createServerFn({ method: "POST" })
+  .validator(z.object({ kind: trashKind, id: z.number().int().positive() }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertTrashAccess(me, data.kind, data.id);
+    const sql = await getSql();
+    if (data.kind === "book") await sql`delete from library_books where id = ${data.id} and deleted_at is not null`;
+    else if (data.kind === "chapter") await sql`delete from library_chapters where id = ${data.id} and deleted_at is not null`;
+    else await sql`delete from media where id = ${data.id} and deleted_at is not null`;
     return { ok: true };
   });
 

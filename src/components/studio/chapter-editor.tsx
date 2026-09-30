@@ -28,6 +28,7 @@ import {
   Plus,
   Quote,
   Redo2,
+  Save,
   Search,
   StickyNote,
   Trash2,
@@ -253,6 +254,8 @@ export function ChapterEditor({
   const [status, setStatus] = useState("");
   const [pendingDraft, setPendingDraft] = useState<Draft | null>(null);
   const [hist, setHist] = useState({ u: 0, r: 0 });
+  // Draft = only the author and the admin can read it. New chapters start as drafts.
+  const [pubStatus, setPubStatus] = useState<"draft" | "published">(chapter?.status ?? (slug ? "published" : "draft"));
 
   const handles = useRef(new Map<string, RichHandle>());
   const pendingFocus = useRef<{ key: string; pos: "start" | "end" | number } | null>(null);
@@ -264,7 +267,21 @@ export function ChapterEditor({
   const skipHist = useRef(false);
   const savedSig = useRef("");
   if (!savedSig.current) savedSig.current = sigOf(title, titleEn, excerpt, blocks);
+  const savedStatus = useRef<"draft" | "published">(pubStatus);
   const firstDraftRun = useRef(true);
+  const sigNow = useMemo(() => sigOf(title, titleEn, excerpt, blocks), [title, titleEn, excerpt, blocks]);
+  const dirty = sigNow !== savedSig.current || (!canon && pubStatus !== savedStatus.current);
+
+  // Closing the tab or reloading with unsaved changes asks first.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 
   const mediaIds = useMemo(
     () => new Set(blocks.flatMap((b) => (b.type === "image" || b.type === "video" ? [b.mediaId] : []))),
@@ -641,7 +658,8 @@ export function ChapterEditor({
 
   /* ---------- save / delete ---------- */
 
-  async function save() {
+  async function save(nextStatus?: "draft" | "published") {
+    const target = nextStatus ?? pubStatus;
     setBusy(true);
     setError(null);
     try {
@@ -672,6 +690,7 @@ export function ChapterEditor({
             title,
             titleEn,
             excerpt,
+            status: target,
             sections: toSections(blocks),
           },
         });
@@ -687,8 +706,18 @@ export function ChapterEditor({
         }
       }
       savedSig.current = sigOf(title, titleEn, excerpt, blocks);
+      if (!canon) {
+        savedStatus.current = target;
+        setPubStatus(target);
+      }
       removeKey(dKey);
-      setStatus(`সংরক্ষিত ${timeLabel()}`);
+      setStatus(
+        !canon && nextStatus
+          ? nextStatus === "published"
+            ? `প্রকাশিত ${timeLabel()}`
+            : `খসড়ায় নেওয়া হয়েছে ${timeLabel()}`
+          : `সংরক্ষিত ${timeLabel()}`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "সংরক্ষণ ব্যর্থ");
     } finally {
@@ -698,7 +727,7 @@ export function ChapterEditor({
 
   async function removeChapter() {
     if (canon || !slug) return;
-    if (!window.confirm("এই অধ্যায় মুছে ফেলবেন?")) return;
+    if (!window.confirm("এই অধ্যায় ট্রাশে পাঠাবেন? (স্টুডিও › ট্রাশ থেকে ফেরত আনা যাবে)")) return;
     await deleteStudioChapter({ data: { bookSlug: book.slug, slug } });
     await navigate({ to: "/studio/$bookSlug", params: { bookSlug: book.slug } });
   }
@@ -805,11 +834,32 @@ export function ChapterEditor({
               </TopBtn>
             </>
           ) : null}
-          <span className="ml-auto flex items-center gap-1">
-            {focus ? (
-              <TopBtn label="সংরক্ষণ" onClick={() => void save()} disabled={busy || !title.trim()}>
-                <span className="text-xs">💾</span>
-              </TopBtn>
+          <span className="ml-auto flex items-center gap-1.5">
+            {!canon ? <StatusPill status={pubStatus} /> : null}
+            {dirty ? <span className="hidden font-sans text-[11px] text-lamp sm:inline">অসংরক্ষিত</span> : null}
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={busy || !title.trim()}
+              title={title.trim() ? "সংরক্ষণ (Ctrl+S)" : "আগে শিরোনাম লিখুন"}
+              className={cn(
+                "pressable inline-flex h-9 items-center gap-1.5 rounded-full px-4 font-sans text-xs disabled:opacity-50",
+                dirty ? "bg-accent text-accent-fg" : "border border-border text-muted",
+              )}
+            >
+              <Save className="size-3.5" />
+              {busy ? "সংরক্ষণ হচ্ছে…" : "সংরক্ষণ"}
+            </button>
+            {!canon ? (
+              <button
+                type="button"
+                onClick={() => void save(pubStatus === "published" ? "draft" : "published")}
+                disabled={busy || !title.trim()}
+                title={pubStatus === "published" ? "সংরক্ষণ করে খসড়ায় ফেরান — পাঠকেরা আর দেখবেন না" : "সংরক্ষণ করে সবার জন্য প্রকাশ করুন"}
+                className="pressable hidden h-9 items-center rounded-full border border-border px-3 font-sans text-xs text-fg hover:bg-surface-2 disabled:opacity-50 sm:inline-flex"
+              >
+                {pubStatus === "published" ? "খসড়ায় ফেরান" : "প্রকাশ করুন"}
+              </button>
             ) : null}
             <TopBtn label={focus ? "ফোকাস বন্ধ" : "ফোকাস"} onClick={() => setFocus((v) => !v)} active={focus}>
               {focus ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
@@ -1132,6 +1182,16 @@ export function ChapterEditor({
             >
               {busy ? "সংরক্ষণ হচ্ছে…" : "সংরক্ষণ"}
             </button>
+            {!canon ? (
+              <button
+                type="button"
+                disabled={busy || !title.trim()}
+                onClick={() => void save(pubStatus === "published" ? "draft" : "published")}
+                className="pressable inline-flex h-12 items-center rounded-lg border border-border px-4 font-sans text-sm text-fg disabled:opacity-50"
+              >
+                {pubStatus === "published" ? "খসড়ায় ফেরান" : "সংরক্ষণ ও প্রকাশ"}
+              </button>
+            ) : null}
             {slug && !canon ? (
               <button
                 type="button"
@@ -1160,6 +1220,19 @@ export function ChapterEditor({
         </div>
       </div>
     </div>
+  );
+}
+
+function StatusPill({ status }: { status: "draft" | "published" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-7 items-center rounded-full px-2.5 font-sans text-[11px]",
+        status === "published" ? "bg-lamp/15 text-lamp" : "border border-border bg-surface-2 text-muted",
+      )}
+    >
+      {status === "published" ? "প্রকাশিত" : "খসড়া"}
+    </span>
   );
 }
 

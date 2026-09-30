@@ -17,7 +17,7 @@ import { canEditOwner } from "@/lib/use-me";
 
 export const Route = createFileRoute("/studio/$bookSlug/")({
   loader: async ({ params, context }) => {
-    const book = await resolveBook({ data: { slug: params.bookSlug } });
+    const book = await resolveBook({ data: { slug: params.bookSlug, drafts: true } });
     if (!book) throw notFound();
     if (!canEditOwner(context.me, book.ownerId)) throw redirect({ to: "/studio" });
     const media = await listMedia();
@@ -72,7 +72,7 @@ function StudioBookPage() {
 
   async function remove() {
     if (canon) return;
-    if (!window.confirm("এই বই মুছে ফেলবেন?")) return;
+    if (!window.confirm("এই বই ট্রাশে পাঠাবেন? (স্টুডিও › ট্রাশ থেকে সব অধ্যায়সহ ফেরত আনা যাবে)")) return;
     await deleteStudioBook({ data: { slug: book.slug } });
     await navigate({ to: "/studio" });
   }
@@ -113,6 +113,9 @@ function StudioBookPage() {
             <h1 className="mt-2 font-display text-3xl font-semibold sm:text-4xl"><FxWords text={book.title} /></h1>
             <p className="mt-2 font-sans text-sm text-muted">
               {formatCount(book.chapterCount)} অধ্যায়
+              {!canon && book.chapters.some((c: { status?: string }) => c.status === "draft")
+                ? ` · ${formatCount(book.chapters.filter((c: { status?: string }) => c.status === "draft").length)} টি খসড়া`
+                : ""}
             </p>
 
             {canon ? (
@@ -197,7 +200,14 @@ function StudioBookPage() {
                 className="pressable flex items-start justify-between gap-3 rounded-lg border border-border bg-surface p-4 hover:bg-surface-2"
               >
                 <span>
-                  <span className="block font-display text-base">{ch.title}</span>
+                  <span className="flex items-center gap-2 font-display text-base">
+                    {ch.title}
+                    {!canon && ch.status === "draft" ? (
+                      <span className="rounded-full border border-border bg-surface-2 px-2 py-0.5 font-sans text-[10px] text-muted">
+                        খসড়া
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="mt-1 block font-sans text-xs text-muted">{ch.excerpt}</span>
                 </span>
                 <span className="shrink-0 font-sans text-xs text-lamp">

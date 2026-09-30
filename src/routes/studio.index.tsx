@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { PenLine } from "lucide-react";
+import { Link, createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { Download, PenLine, Trash2 } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
+import { TrashDialog } from "@/components/studio/trash-dialog";
 import { createBook, listLibrary } from "@/lib/library-api";
 import { canEditOwner, useMe } from "@/lib/use-me";
 
@@ -16,6 +17,8 @@ function StudioHome() {
   const me = useMe();
   const books = Route.useLoaderData().filter((b) => canEditOwner(me, b.ownerId));
   const navigate = useNavigate();
+  const router = useRouter();
+  const [trashOpen, setTrashOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
   const [tagline, setTagline] = useState("");
@@ -52,6 +55,39 @@ function StudioHome() {
           নতুন বই লিখুন, প্রচ্ছদ তুলুন, অধ্যায়ে ছবি ও ভিডিও বসান। সবকিছু সাইটেই থাকে — Vercel ডিপ্লয়ের সাথে
           সংরক্ষিত, GitHub-এ মিডিয়া কমিট করতে হয় না।
         </p>
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setTrashOpen(true)}
+            className="pressable inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-fg hover:bg-surface-2"
+          >
+            <Trash2 className="size-4" strokeWidth={1.75} />
+            ট্রাশ
+          </button>
+          {me?.role === "admin" ? (
+            <>
+              <a
+                href="/api/backup"
+                download
+                title="সব লেখা, ছবি ও ভিডিওসহ পুরো ডাটাবেস একটি ফাইলে (বড় হতে পারে)"
+                className="pressable inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-fg hover:bg-surface-2"
+              >
+                <Download className="size-4" strokeWidth={1.75} />
+                ব্যাকআপ (সবকিছু)
+              </a>
+              <a
+                href="/api/backup?media=0"
+                download
+                title="ছবি ও ভিডিও ছাড়া শুধু লেখা, মন্তব্য, চ্যাট — ছোট ও দ্রুত"
+                className="pressable inline-flex h-10 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-fg hover:bg-surface-2"
+              >
+                <Download className="size-4" strokeWidth={1.75} />
+                ব্যাকআপ (শুধু লেখা)
+              </a>
+            </>
+          ) : null}
+        </div>
 
         <form
           onSubmit={(e) => void onCreate(e)}
@@ -126,6 +162,7 @@ function StudioHome() {
           ))}
         </div>
       </section>
+      {trashOpen ? <TrashDialog onClose={() => setTrashOpen(false)} onChanged={() => void router.invalidate()} /> : null}
     </main>
   );
 }

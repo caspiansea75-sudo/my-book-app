@@ -112,9 +112,9 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async (): P
       m.display_name,
       m.role,
       to_char(m.created_at, 'YYYY-MM-DD') as joined,
-      (select count(*) from library_books b where b.owner_id = m.id) as books,
+      (select count(*) from library_books b where b.owner_id = m.id and b.deleted_at is null) as books,
       (select count(*) from manga_series s where s.owner_id = m.id) as series,
-      (select count(*) from media x where x.owner_id = m.id) as media
+      (select count(*) from media x where x.owner_id = m.id and x.deleted_at is null) as media
     from members m
     order by m.created_at desc, m.id desc
   `;

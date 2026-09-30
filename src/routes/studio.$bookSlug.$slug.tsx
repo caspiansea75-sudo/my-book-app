@@ -10,7 +10,7 @@ import { canEditOwner } from "@/lib/use-me";
 
 export const Route = createFileRoute("/studio/$bookSlug/$slug")({
   loader: async ({ params, context }) => {
-    const book = await resolveBook({ data: { slug: params.bookSlug } });
+    const book = await resolveBook({ data: { slug: params.bookSlug, drafts: true } });
     if (!book) throw notFound();
     if (!canEditOwner(context.me, book.ownerId)) throw redirect({ to: "/studio" });
     if (params.slug === "new") {

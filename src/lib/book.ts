@@ -41,6 +41,8 @@ export type Chapter = {
   nsfwCount: number;
   chars: number;
   sections: Section[];
+  /** Studio chapters only: a draft is visible to its author and the admin, nobody else. */
+  status?: "draft" | "published";
 };
 
 export type ChapterMeta = Omit<Chapter, "sections"> & { hasNsfw: boolean };

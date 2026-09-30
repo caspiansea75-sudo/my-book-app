@@ -22,11 +22,17 @@ export const Route = createFileRoute("/api/media/$id")({
           url: string | null;
           data: string | null;
           thumb: string | null;
+          owner_id: number | null;
+          deleted_at: string | null;
         }>`
-          select mime, source, url, data, thumb from media where id = ${id} limit 1
+          select mime, source, url, data, thumb, owner_id, deleted_at from media where id = ${id} limit 1
         `;
         const row = rows[0];
         if (!row) return new Response("Not found", { status: 404 });
+        // Files in the trash are only shown to their owner and the admin (for the Trash page).
+        if (row.deleted_at && viewer.role !== "admin" && row.owner_id !== viewer.id) {
+          return new Response("Not found", { status: 404 });
+        }
 
         const wantThumb = new URL(request.url).searchParams.get("thumb") === "1";
         if (wantThumb && row.thumb) {

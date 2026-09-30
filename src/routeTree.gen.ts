@@ -26,6 +26,7 @@ import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
 import { Route as UUsernameRouteImport } from './routes/u.$username'
 import { Route as ApiChatImageIdRouteImport } from './routes/api/chat-image.$id'
+import { Route as ApiBackupRouteImport } from './routes/api/backup'
 import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
 import { Route as MangaSeriesSlugIndexRouteImport } from './routes/manga.$seriesSlug.index'
 import { Route as MangaSeriesSlugChapterSlugRouteImport } from './routes/manga.$seriesSlug.$chapterSlug'
@@ -120,6 +121,11 @@ const ApiChatImageIdRoute = ApiChatImageIdRouteImport.update({
   path: '/api/chat-image/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBackupRoute = ApiBackupRouteImport.update({
+  id: '/api/backup',
+  path: '/api/backup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMediaIdRoute = ApiMediaIdRouteImport.update({
   id: '/api/media/$id',
   path: '/api/media/$id',
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/manga/': typeof MangaIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
+  '/api/backup': typeof ApiBackupRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
@@ -205,6 +212,7 @@ export interface FileRoutesByTo {
   '/manga': typeof MangaIndexRoute
   '/studio': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
+  '/api/backup': typeof ApiBackupRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
@@ -232,6 +240,7 @@ export interface FileRoutesById {
   '/manga/': typeof MangaIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
+  '/api/backup': typeof ApiBackupRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
@@ -261,6 +270,7 @@ export interface FileRouteTypes {
     | '/manga/'
     | '/studio/'
     | '/api/chat-image/$id'
+    | '/api/backup'
     | '/api/media/$id'
     | '/manga/$seriesSlug/$chapterSlug'
     | '/read/$bookSlug/$slug'
@@ -284,6 +294,7 @@ export interface FileRouteTypes {
     | '/manga'
     | '/studio'
     | '/api/chat-image/$id'
+    | '/api/backup'
     | '/api/media/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/manga/'
     | '/studio/'
     | '/api/chat-image/$id'
+    | '/api/backup'
     | '/api/media/$id'
     | '/manga/$seriesSlug/$chapterSlug'
     | '/read/$bookSlug/$slug'
@@ -334,6 +346,7 @@ export interface RootRouteChildren {
   BookBookSlugRoute: typeof BookBookSlugRoute
   UUsernameRoute: typeof UUsernameRoute
   ApiChatImageIdRoute: typeof ApiChatImageIdRoute
+  ApiBackupRoute: typeof ApiBackupRoute
   ApiMediaIdRoute: typeof ApiMediaIdRoute
   ReadBookSlugSlugRoute: typeof ReadBookSlugSlugRoute
 }
@@ -457,6 +470,13 @@ declare module '@tanstack/react-router' {
       path: '/api/chat-image/$id'
       fullPath: '/api/chat-image/$id'
       preLoaderRoute: typeof ApiChatImageIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/backup': {
+      id: '/api/backup'
+      path: '/api/backup'
+      fullPath: '/api/backup'
+      preLoaderRoute: typeof ApiBackupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/media/$id': {
@@ -601,6 +621,7 @@ const rootRouteChildren: RootRouteChildren = {
   BookBookSlugRoute: BookBookSlugRoute,
   UUsernameRoute: UUsernameRoute,
   ApiChatImageIdRoute: ApiChatImageIdRoute,
+  ApiBackupRoute: ApiBackupRoute,
   ApiMediaIdRoute: ApiMediaIdRoute,
   ReadBookSlugSlugRoute: ReadBookSlugSlugRoute,
 }
