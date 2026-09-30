@@ -1,18 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { ImagePlus, MessageCircle, Send, Trash2, User, Users, X } from "lucide-react";
+import {
+  EllipsisVertical,
+  Flag,
+  Forward,
+  ImagePlus,
+  MessageCircle,
+  Pin,
+  PinOff,
+  Plus,
+  Reply,
+  Send,
+  Smile,
+  Trash2,
+  User,
+  Users,
+  X,
+} from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { Avatar } from "@/components/members/avatar";
 import { FxAurora } from "@/components/media/fx";
 import { resizeToJpeg } from "@/lib/image-resize";
+import { MORE_REACTIONS, QUICK_REACTIONS, REPORT_REASONS } from "@/lib/chat-emoji";
 import {
   deleteMessage,
+  forwardMessage,
   listConversations,
   loadThread,
+  reportMessage,
   sendMessage,
+  togglePin,
+  toggleReaction,
   uploadChatImage,
   type ChatMessage,
   type Conversation,
+  type MessageState,
   type ThreadResult,
 } from "@/lib/social-api";
 import { useMe } from "@/lib/use-me";
@@ -137,7 +159,7 @@ function ChatShell({ me }: { me: Member }) {
               </option>
             ))}
           </select>
-          <Thread key={peerId ?? "group"} me={me} peer={peer} onSeen={markSeen} />
+          <Thread key={peerId ?? "group"} me={me} peer={peer} people={people} onSeen={markSeen} />
         </div>
       </section>
     </main>
@@ -158,13 +180,56 @@ function mergeThread(prev: ChatMessage[], res: ThreadResult): ChatMessage[] {
   return fresh.length ? [...next, ...fresh] : next;
 }
 
+type Pop = { id: number; kind: "react" | "more"; rect: DOMRect };
+
+/** Small floating panel that stays on screen and is never clipped by the scrolling thread. */
+function Popover({ rect, onClose, children }: { rect: DOMRect; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const down = (e: PointerEvent) => {
+      if (!(e.target as Element | null)?.closest("[data-chat-pop]")) onClose();
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    window.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+
+  const above = rect.top > 280;
+  const width = Math.min(340, window.innerWidth - 16);
+  const left = Math.max(8, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 8));
+  const style: React.CSSProperties = above
+    ? { left, width, bottom: window.innerHeight - rect.top + 8 }
+    : { left, width, top: rect.bottom + 8 };
+  return (
+    <div
+      data-chat-pop
+      style={style}
+      className="fixed z-50 flex flex-col items-center rounded-2xl border border-border bg-surface-2 p-1.5 shadow-xl"
+    >
+      {children}
+    </div>
+  );
+}
+
+const snippet = (m: { body: string; imageUrl?: string | null; hasImage?: boolean }) =>
+  m.body ? m.body : m.imageUrl || m.hasImage ? "📷 ছবি" : "";
+
 function Thread({
   me,
   peer,
+  people,
   onSeen,
 }: {
   me: Member;
   peer: Conversation | null;
+  people: Conversation[];
   onSeen: (id: number | null) => void;
 }) {
   const locale = useLocale();
@@ -176,6 +241,17 @@ function Thread({
   const [pending, setPending] = useState<{ id: number; url: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [states, setStates] = useState<Record<number, MessageState>>({});
+  const [pins, setPins] = useState<ChatMessage[]>([]);
+  const [pinIdx, setPinIdx] = useState(0);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [pop, setPop] = useState<Pop | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [activeId, setActiveId] = useState<number | null>(null);
+  const [flashId, setFlashId] = useState<number | null>(null);
+  const [forwarding, setForwarding] = useState<ChatMessage | null>(null);
+  const [reporting, setReporting] = useState<ChatMessage | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const lastId = useRef(0);
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -189,6 +265,8 @@ function Thread({
       const res = await loadThread({ data: { peerId, afterId: lastId.current } });
       for (const m of res.messages) if (m.id > lastId.current) lastId.current = m.id;
       setMessages((prev) => mergeThread(prev, res));
+      setStates(res.states);
+      setPins(res.pins);
       setError((e) => (e && e.startsWith("বার্তা লোড") ? null : e));
     } catch (err) {
       setError(err instanceof Error ? `বার্তা লোড হয়নি: ${err.message}` : "বার্তা লোড হয়নি");
@@ -246,9 +324,12 @@ function Thread({
     setSending(true);
     setError(null);
     try {
-      await sendMessage({ data: { peerId, body, imageId: pending ? pending.id : null } });
+      await sendMessage({
+        data: { peerId, body, imageId: pending ? pending.id : null, replyToId: replyTo ? replyTo.id : null },
+      });
       setText("");
       setPending(null);
+      setReplyTo(null);
       if (areaRef.current) areaRef.current.style.height = "auto";
       stick.current = true;
       await fetchNew();
@@ -264,8 +345,104 @@ function Thread({
     try {
       await deleteMessage({ data: { id } });
       setMessages((prev) => prev.filter((m) => m.id !== id));
+      setPins((prev) => prev.filter((m) => m.id !== id));
+      setReplyTo((r) => (r && r.id === id ? null : r));
     } catch (err) {
       setError(err instanceof Error ? err.message : "মোছা যায়নি");
+    }
+  }
+
+  const closePop = useCallback(() => {
+    setPop(null);
+    setShowMore(false);
+  }, []);
+
+  function flash(msg: string) {
+    setNotice(msg);
+    window.setTimeout(() => setNotice((n) => (n === msg ? null : n)), 2500);
+  }
+
+  function jumpTo(id: number) {
+    const el = document.getElementById(`msg-${id}`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setFlashId(id);
+    window.setTimeout(() => setFlashId((f) => (f === id ? null : f)), 1400);
+  }
+
+  function openPop(e: React.MouseEvent<HTMLButtonElement>, id: number, kind: Pop["kind"]) {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setShowMore(false);
+    setPop((cur) => (cur && cur.id === id && cur.kind === kind ? null : { id, kind, rect }));
+  }
+
+  async function react(m: ChatMessage, emoji: string) {
+    closePop();
+    setActiveId(null);
+    // Show it straight away, then let the server have the last word.
+    setStates((prev) => {
+      const cur = prev[m.id] ?? { reactions: [], reports: 0 };
+      const had = cur.reactions.find((r) => r.mine);
+      let list = cur.reactions
+        .map((r) => (r.mine ? { ...r, count: r.count - 1, mine: false } : r))
+        .filter((r) => r.count > 0);
+      if (had?.emoji !== emoji) {
+        const hit = list.find((r) => r.emoji === emoji);
+        list = hit
+          ? list.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1, mine: true } : r))
+          : [...list, { emoji, count: 1, mine: true }];
+      }
+      return { ...prev, [m.id]: { ...cur, reactions: list } };
+    });
+    try {
+      await toggleReaction({ data: { messageId: m.id, emoji } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "প্রতিক্রিয়া দেওয়া যায়নি");
+    }
+    await fetchNew();
+  }
+
+  function startReply(m: ChatMessage) {
+    closePop();
+    setActiveId(null);
+    setReplyTo(m);
+    areaRef.current?.focus();
+  }
+
+  async function pin(m: ChatMessage, pinned: boolean) {
+    closePop();
+    setActiveId(null);
+    try {
+      await togglePin({ data: { id: m.id } });
+      await fetchNew();
+      flash(pinned ? "পিন সরানো হয়েছে" : "পিন করা হয়েছে");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "পিন করা যায়নি");
+    }
+  }
+
+  async function forwardTo(m: ChatMessage, dest: number | null) {
+    setForwarding(null);
+    try {
+      await forwardMessage({ data: { id: m.id, peerId: dest } });
+      if (dest === peerId) {
+        stick.current = true;
+        await fetchNew();
+      }
+      flash("ফরওয়ার্ড করা হয়েছে");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "ফরওয়ার্ড করা যায়নি");
+    }
+  }
+
+  async function report(m: ChatMessage, reason: (typeof REPORT_REASONS)[number]) {
+    setReporting(null);
+    try {
+      await reportMessage({ data: { id: m.id, reason } });
+      flash("রিপোর্ট পাঠানো হয়েছে");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "রিপোর্ট পাঠানো যায়নি");
     }
   }
 
@@ -277,6 +454,9 @@ function Thread({
   }
 
   let lastDay = "";
+  const popMsg = pop ? (messages.find((m) => m.id === pop.id) ?? pins.find((m) => m.id === pop.id) ?? null) : null;
+  const pinnedIds = new Set(pins.map((p) => p.id));
+  const pinShown = pins.length ? pins[pinIdx % pins.length] : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-surface">
@@ -310,7 +490,29 @@ function Thread({
         )}
       </header>
 
-      <div ref={box} onScroll={onScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-4">
+      {pinShown ? (
+        <button
+          type="button"
+          onClick={() => {
+            jumpTo(pinShown.id);
+            setPinIdx((i) => i + 1);
+          }}
+          className="pressable flex items-center gap-2 border-b border-border bg-surface-2/60 px-4 py-2 text-left font-sans text-xs"
+        >
+          <Pin className="size-3.5 shrink-0 text-lamp" strokeWidth={1.75} />
+          <span className="shrink-0 text-lamp">পিন করা বার্তা</span>
+          <span className="min-w-0 flex-1 truncate text-muted">
+            {pinShown.senderName}: {snippet(pinShown)}
+          </span>
+          {pins.length > 1 ? (
+            <span className="shrink-0 text-subtle">
+              {formatCount((pinIdx % pins.length) + 1)}/{formatCount(pins.length)}
+            </span>
+          ) : null}
+        </button>
+      ) : null}
+
+      <div ref={box} onScroll={() => { onScroll(); if (pop) closePop(); }} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-4">
         {loading ? <p className="text-center font-sans text-sm text-muted">লোড হচ্ছে…</p> : null}
         {!loading && messages.length === 0 ? (
           <p className="py-10 text-center font-sans text-sm text-muted">
@@ -324,14 +526,22 @@ function Thread({
           const showDay = day !== lastDay;
           lastDay = day;
           const canDelete = mine || (me.role === "admin" && m.isGroup);
+          const st = states[m.id];
+          const toolsOn = activeId === m.id || pop?.id === m.id;
           return (
-            <div key={m.id}>
+            <div key={m.id} id={`msg-${m.id}`}>
               {showDay ? (
                 <p className="my-3 text-center font-sans text-[11px] text-subtle">
                   {when.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}
                 </p>
               ) : null}
-              <div className={cn("group flex items-end gap-2", mine ? "flex-row-reverse" : "")}>
+              <div
+                className={cn(
+                  "group flex items-end gap-2 rounded-xl transition-colors duration-500",
+                  mine ? "flex-row-reverse" : "",
+                  flashId === m.id ? "bg-lamp/15" : "",
+                )}
+              >
                 {!mine ? (
                   <Link to="/u/$username" params={{ username: m.senderUsername }} className="shrink-0">
                     <Avatar name={m.senderName} url={m.senderAvatarUrl} size={30} />
@@ -347,36 +557,113 @@ function Thread({
                       {m.senderName}
                     </Link>
                   ) : null}
-                  <div
-                    className={cn(
-                      "rounded-2xl px-3 py-2 font-sans text-sm leading-relaxed",
-                      mine ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg",
-                    )}
-                  >
-                    {m.imageUrl ? (
-                      <a href={m.imageUrl} target="_blank" rel="noreferrer" className="block">
-                        <img
-                          src={m.imageUrl}
-                          alt="পাঠানো ছবি"
-                          loading="lazy"
-                          className={cn("max-h-72 max-w-full rounded-lg object-cover", m.body ? "mb-2" : "")}
-                        />
-                      </a>
-                    ) : null}
-                    {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-2 px-1 font-sans text-[10px] text-subtle">
-                    <span>{when.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}</span>
-                    {canDelete ? (
+                  <div className="relative">
+                    <div
+                      className={cn(
+                        "absolute -top-4 z-10 items-center gap-0.5 rounded-full border border-border bg-surface-2 p-0.5 shadow-lg",
+                        mine ? "right-2" : "left-2",
+                        toolsOn ? "flex" : "hidden sm:group-hover:flex sm:group-focus-within:flex",
+                      )}
+                    >
                       <button
                         type="button"
-                        onClick={() => void remove(m.id)}
-                        aria-label="বার্তা মুছুন"
-                        title="মুছুন"
-                        className="opacity-60 hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-70"
+                        onClick={(e) => openPop(e, m.id, "react")}
+                        aria-label="প্রতিক্রিয়া"
+                        title="প্রতিক্রিয়া"
+                        className="pressable grid size-7 place-items-center rounded-full text-muted hover:bg-surface hover:text-fg"
                       >
-                        <Trash2 className="size-3" strokeWidth={1.75} />
+                        <Smile className="size-4" strokeWidth={1.75} />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => startReply(m)}
+                        aria-label="উত্তর দিন"
+                        title="উত্তর দিন"
+                        className="pressable grid size-7 place-items-center rounded-full text-muted hover:bg-surface hover:text-fg"
+                      >
+                        <Reply className="size-4" strokeWidth={1.75} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => openPop(e, m.id, "more")}
+                        aria-label="আরও"
+                        title="আরও"
+                        className="pressable grid size-7 place-items-center rounded-full text-muted hover:bg-surface hover:text-fg"
+                      >
+                        <EllipsisVertical className="size-4" strokeWidth={1.75} />
+                      </button>
+                    </div>
+                    <div
+                      onClick={() => setActiveId((cur) => (cur === m.id ? null : m.id))}
+                      className={cn(
+                        "rounded-2xl px-3 py-2 font-sans text-sm leading-relaxed",
+                        mine ? "bg-accent text-accent-fg" : "bg-surface-2 text-fg",
+                      )}
+                    >
+                      {m.forwarded ? (
+                        <p className="mb-1 flex items-center gap-1 text-[11px] italic opacity-70">
+                          <Forward className="size-3" strokeWidth={1.75} />
+                          <span>ফরওয়ার্ড করা</span>
+                        </p>
+                      ) : null}
+                      {m.replyTo ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!m.replyTo?.deleted) jumpTo(m.replyTo!.id);
+                          }}
+                          className="mb-1.5 block w-full rounded-lg border-l-2 border-lamp bg-black/20 px-2 py-1 text-left text-xs"
+                        >
+                          {m.replyTo.deleted ? (
+                            <span className="italic opacity-70">মূল বার্তাটি মুছে ফেলা হয়েছে</span>
+                          ) : (
+                            <>
+                              <span className="block font-medium text-lamp">{m.replyTo.senderName}</span>
+                              <span className="line-clamp-2 break-words opacity-80">{snippet(m.replyTo)}</span>
+                            </>
+                          )}
+                        </button>
+                      ) : null}
+                      {m.imageUrl ? (
+                        <a href={m.imageUrl} target="_blank" rel="noreferrer" className="block">
+                          <img
+                            src={m.imageUrl}
+                            alt="পাঠানো ছবি"
+                            loading="lazy"
+                            className={cn("max-h-72 max-w-full rounded-lg object-cover", m.body ? "mb-2" : "")}
+                          />
+                        </a>
+                      ) : null}
+                      {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
+                    </div>
+                  </div>
+                  {st && st.reactions.length ? (
+                    <div className={cn("mt-1 flex flex-wrap gap-1", mine ? "justify-end" : "")}>
+                      {st.reactions.map((r) => (
+                        <button
+                          key={r.emoji}
+                          type="button"
+                          onClick={() => void react(m, r.emoji)}
+                          className={cn(
+                            "pressable inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs",
+                            r.mine ? "border-lamp bg-lamp/20 text-fg" : "border-border bg-surface-2 text-muted",
+                          )}
+                        >
+                          <span>{r.emoji}</span>
+                          <span className="font-sans">{formatCount(r.count)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div className="mt-0.5 flex items-center gap-2 px-1 font-sans text-[10px] text-subtle">
+                    <span>{when.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}</span>
+                    {pinnedIds.has(m.id) ? <Pin className="size-3 text-lamp" strokeWidth={1.75} /> : null}
+                    {me.role === "admin" && st && st.reports > 0 ? (
+                      <span className="inline-flex items-center gap-0.5 text-nsfw" title="রিপোর্ট">
+                        <Flag className="size-3" strokeWidth={1.75} />
+                        {formatCount(st.reports)}
+                      </span>
                     ) : null}
                   </div>
                 </div>
@@ -391,6 +678,26 @@ function Thread({
           <p role="alert" className="mb-2 font-sans text-xs text-nsfw">
             {error}
           </p>
+        ) : null}
+        {notice ? <p className="mb-2 font-sans text-xs text-lamp">{notice}</p> : null}
+        {replyTo ? (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border-l-2 border-lamp bg-surface-2 px-3 py-1.5 font-sans text-xs">
+            <Reply className="size-3.5 shrink-0 text-lamp" strokeWidth={1.75} />
+            <div className="min-w-0 flex-1">
+              <p className="text-lamp">
+                <span>উত্তর দিচ্ছেন</span> <span>{replyTo.senderName}</span>
+              </p>
+              <p className="truncate text-muted">{snippet(replyTo)}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyTo(null)}
+              aria-label="উত্তর বাতিল"
+              className="grid size-6 shrink-0 place-items-center rounded-full text-muted hover:text-fg"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
         ) : null}
         {pending ? (
           <div className="relative mb-2 inline-block">
@@ -442,6 +749,175 @@ function Thread({
             <Send className="size-5" strokeWidth={1.75} />
           </button>
         </div>
+      </div>
+      {pop && popMsg && pop.kind === "react" ? (
+        <Popover rect={pop.rect} onClose={closePop}>
+          <div className="flex items-center gap-1">
+            {QUICK_REACTIONS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => void react(popMsg, e)}
+                className="pressable grid size-10 place-items-center rounded-full text-2xl transition-transform hover:scale-125"
+              >
+                {e}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setShowMore((v) => !v)}
+              aria-label="আরও প্রতিক্রিয়া"
+              className="pressable grid size-9 place-items-center rounded-full bg-surface text-muted hover:text-fg"
+            >
+              <Plus className="size-5" strokeWidth={1.75} />
+            </button>
+          </div>
+          {showMore ? (
+            <div className="mt-1.5 grid max-h-52 grid-cols-8 gap-0.5 overflow-y-auto border-t border-border pt-1.5">
+              {MORE_REACTIONS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => void react(popMsg, e)}
+                  className="pressable grid size-9 place-items-center rounded-lg text-xl hover:bg-surface"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </Popover>
+      ) : null}
+
+      {pop && popMsg && pop.kind === "more" ? (
+        <Popover rect={pop.rect} onClose={closePop}>
+          <div className="w-44 py-1 font-sans text-sm">
+            {popMsg.senderId === me.id || (me.role === "admin" && popMsg.isGroup) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = popMsg.id;
+                  closePop();
+                  void remove(id);
+                }}
+                className="pressable flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface"
+              >
+                <Trash2 className="size-4" strokeWidth={1.75} />
+                <span>মুছুন</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                const m = popMsg;
+                closePop();
+                setForwarding(m);
+              }}
+              className="pressable flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface"
+            >
+              <Forward className="size-4" strokeWidth={1.75} />
+              <span>ফরওয়ার্ড</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void pin(popMsg, pinnedIds.has(popMsg.id))}
+              className="pressable flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-surface"
+            >
+              {pinnedIds.has(popMsg.id) ? (
+                <PinOff className="size-4" strokeWidth={1.75} />
+              ) : (
+                <Pin className="size-4" strokeWidth={1.75} />
+              )}
+              <span>{pinnedIds.has(popMsg.id) ? "পিন সরান" : "পিন করুন"}</span>
+            </button>
+            {popMsg.senderId !== me.id ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const m = popMsg;
+                  closePop();
+                  setReporting(m);
+                }}
+                className="pressable flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-nsfw hover:bg-surface"
+              >
+                <Flag className="size-4" strokeWidth={1.75} />
+                <span>রিপোর্ট</span>
+              </button>
+            ) : null}
+          </div>
+        </Popover>
+      ) : null}
+
+      {forwarding ? (
+        <PickDialog title="কাকে ফরওয়ার্ড করবেন?" onClose={() => setForwarding(null)}>
+          <button
+            type="button"
+            onClick={() => void forwardTo(forwarding, null)}
+            className="pressable flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-surface-2"
+          >
+            <span className="grid size-9 place-items-center rounded-full bg-accent text-accent-fg">
+              <Users className="size-4" strokeWidth={1.75} />
+            </span>
+            <span>সবার চ্যাট</span>
+          </button>
+          {people.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => void forwardTo(forwarding, p.id)}
+              className="pressable flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left font-sans text-sm hover:bg-surface-2"
+            >
+              <Avatar name={p.displayName} url={p.avatarUrl} size={36} />
+              <span className="min-w-0 flex-1 truncate">{p.displayName}</span>
+            </button>
+          ))}
+        </PickDialog>
+      ) : null}
+
+      {reporting ? (
+        <PickDialog title="কেন রিপোর্ট করছেন?" onClose={() => setReporting(null)}>
+          {REPORT_REASONS.map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => void report(reporting, r)}
+              className="pressable w-full rounded-lg px-3 py-2.5 text-left font-sans text-sm hover:bg-surface-2"
+            >
+              {r}
+            </button>
+          ))}
+        </PickDialog>
+      ) : null}
+    </div>
+  );
+}
+
+function PickDialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+      <button
+        type="button"
+        aria-label="বন্ধ"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+      />
+      <div className="relative flex max-h-[80dvh] w-full max-w-sm flex-col rounded-xl border border-border bg-surface p-4 shadow-xl">
+        <h2 className="mb-2 font-display text-lg">{title}</h2>
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="pressable mt-3 h-10 rounded-lg border border-border font-sans text-sm text-fg"
+        >
+          থাক
+        </button>
       </div>
     </div>
   );
