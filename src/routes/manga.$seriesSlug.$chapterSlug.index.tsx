@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
+import { Engagement } from "@/components/engagement/engagement";
 import { getMangaChapterForReading } from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/")({
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/")({
 
 function MangaReaderPage() {
   const { chapter } = Route.useLoaderData();
+  const { seriesSlug, chapterSlug } = Route.useParams();
   const [open, setOpen] = useState<number | null>(null);
 
   const lightboxItems: LightboxItem[] = useMemo(
@@ -102,6 +104,10 @@ function MangaReaderPage() {
           ))}
         </div>
       )}
+
+      <div className="mx-auto max-w-2xl px-4">
+        <Engagement tone="dark" kind="manga" parent={seriesSlug} item={chapterSlug} />
+      </div>
 
       <nav className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-10">
         {chapter.prevSlug ? (

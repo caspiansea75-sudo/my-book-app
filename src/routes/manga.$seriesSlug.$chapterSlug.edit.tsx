@@ -2,11 +2,12 @@ import { useState, type FormEvent } from "react";
 import { Link, createFileRoute, notFound, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, ChevronLeft, ImagePlus, PenLine, Trash2 } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
-import { MediaUploader } from "@/components/studio/media-uploader";
+import { MultiUploader } from "@/components/media/multi-uploader";
 import { listMedia, type MediaItem } from "@/lib/library-api";
 import { canEditOwner } from "@/lib/use-me";
 import {
   addMangaPanel,
+  addMangaPanels,
   deleteMangaChapter,
   getMangaChapterForEdit,
   removeMangaPanel,
@@ -72,6 +73,15 @@ function MangaEditPage() {
       await refresh();
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleAddMany(mediaIds: number[]) {
+    try {
+      await addMangaPanels({ data: { seriesSlug, chapterSlug, mediaIds } });
+      await refresh();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "প্যানেল যোগ হয়নি");
     }
   }
 
@@ -222,7 +232,7 @@ function MangaEditPage() {
 
         {pickerOpen ? (
           <div className="mt-5 rounded-xl border border-border bg-surface p-4">
-            <MediaUploader onUploaded={(id) => void handleAdd(id)} />
+            <MultiUploader targetLabel="এই অধ্যায়" onUploaded={handleAddMany} />
             {images.length === 0 ? (
               <p className="mt-4 font-sans text-sm text-muted">চিত্রশালায় এখনো কোনো ছবি নেই।</p>
             ) : (

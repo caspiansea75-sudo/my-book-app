@@ -10,6 +10,7 @@ import { ChapterBody } from "@/components/book/chapter-body";
 import { ReaderBar } from "@/components/book/reader-bar";
 import { TocDrawer, TocList } from "@/components/book/toc";
 import { WarningGate } from "@/components/book/warning-gate";
+import { Engagement } from "@/components/engagement/engagement";
 
 export const Route = createFileRoute("/read/$bookSlug/$slug")({
   loader: async ({ params }) => {
@@ -103,6 +104,9 @@ function ReaderPage() {
           ) : (
             <>
               <ChapterBody chapter={chapter} fontSize={fontSize} bookSlug={book.slug} />
+              <div className="mx-auto max-w-2xl px-4 pb-10">
+                <Engagement kind="story" parent={book.slug} item={slug} />
+              </div>
               <nav className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 pb-16">
                 {nav.prev ? (
                   <Link

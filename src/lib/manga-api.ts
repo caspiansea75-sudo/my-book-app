@@ -408,3 +408,39 @@ export const getMangaChapterForReading = createServerFn({ method: "GET" })
       })),
     };
   });
+
+/** Add several panels at once, keeping the order given. */
+export const addMangaPanels = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      seriesSlug: z.string().min(1),
+      chapterSlug: z.string().min(1),
+      mediaIds: z.array(z.number().int().positive()).min(1).max(200),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertSeriesAccess(me, data.seriesSlug);
+    const sql = await getSql();
+    const rows = await sql<{ id: number }>`
+      select c.id from manga_chapters c
+      join manga_series s on s.id = c.series_id
+      where s.slug = ${data.seriesSlug} and c.slug = ${data.chapterSlug}
+      limit 1
+    `;
+    const chapterId = rows[0]?.id;
+    if (!chapterId) throw new Error("অধ্যায় পাওয়া যায়নি");
+    const maxRows = await sql<{ max: number | null }>`
+      select max(sort_order) as max from manga_panels where chapter_id = ${chapterId}
+    `;
+    const base = (maxRows[0]?.max ?? -1) + 1;
+    await sql.query(
+      `insert into manga_panels (chapter_id, media_id, sort_order)
+       select $1::int, t.id, $2::int + t.ord::int - 1
+       from unnest($3::int[]) with ordinality as t(id, ord)
+       join media m on m.id = t.id
+       order by t.ord`,
+      [chapterId, base, data.mediaIds],
+    );
+    return { ok: true, added: data.mediaIds.length };
+  });
