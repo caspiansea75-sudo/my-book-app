@@ -1,4 +1,5 @@
 import { EXACT, PATTERNS } from "@/lib/i18n/dict";
+import { CHAT_EXACT } from "@/lib/i18n/dict-chat";
 
 const PATTERN_LIST = PATTERNS.map(([src, en]) => [new RegExp(src), en] as const);
 const BN_DIGITS = "০১২৩৪৫৬৭৮৯";
@@ -17,6 +18,7 @@ export function translateText(text: string): string | null {
 }
 
 function lookup(core: string): string | null {
+  if (core in CHAT_EXACT) return CHAT_EXACT[core];
   if (core in EXACT) return EXACT[core];
   // "…;" "…," "…:" after a translated phrase
   const last = core.slice(-1);

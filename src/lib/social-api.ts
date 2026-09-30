@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { requireMember } from "@/lib/members-core";
+import { ALL_REACTIONS, REPORT_REASONS } from "@/lib/chat-emoji";
 
 /** Profiles, direct messages, the group chat and private chat pictures. Members only. */
 
@@ -19,6 +20,9 @@ export type Profile = Person & {
   isMe: boolean;
 };
 export type Conversation = Person & { unread: number; hasChat: boolean };
+export type ReplyPreview = { id: number; senderName: string; body: string; hasImage: boolean; deleted: boolean };
+export type Reaction = { emoji: string; count: number; mine: boolean };
+export type MessageState = { reactions: Reaction[]; reports: number };
 export type ChatMessage = {
   id: number;
   senderId: number;
@@ -29,8 +33,16 @@ export type ChatMessage = {
   body: string;
   imageUrl: string | null;
   createdAt: string;
+  replyTo: ReplyPreview | null;
+  forwarded: boolean;
 };
-export type ThreadResult = { messages: ChatMessage[]; latestIds: number[] };
+export type ThreadResult = {
+  messages: ChatMessage[];
+  latestIds: number[];
+  /** Reactions (and, for the admin, report counts) for every message still on screen. */
+  states: Record<number, MessageState>;
+  pins: ChatMessage[];
+};
 
 type MsgRow = {
   id: number;
@@ -42,7 +54,31 @@ type MsgRow = {
   username: string;
   display_name: string;
   avatar_id: number | null;
+  reply_to_id: number | null;
+  forwarded: boolean;
+  reply_id: number | null;
+  reply_body: string | null;
+  reply_image_id: number | null;
+  reply_sender: string | null;
 };
+
+const MSG_SELECT = `
+  select c.id, c.sender_id, c.recipient_id, c.body, c.image_id, c.reply_to_id, c.forwarded,
+    to_char(c.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
+    s.username, s.display_name, s.avatar_id,
+    r.id as reply_id, r.body as reply_body, r.image_id as reply_image_id, rs.display_name as reply_sender
+  from chat_messages c
+  join members s on s.id = c.sender_id
+  left join chat_messages r on r.id = c.reply_to_id
+  left join members rs on rs.id = r.sender_id`;
+
+/** $1 = me, $2 = peer id (null = group chat). */
+const THREAD_WHERE = `(
+  ($2::int is null and c.recipient_id is null)
+  or ($2::int is not null and (
+    (c.sender_id = $1 and c.recipient_id = $2) or (c.sender_id = $2 and c.recipient_id = $1)
+  ))
+)`;
 
 function toMessage(r: MsgRow): ChatMessage {
   return {
@@ -55,6 +91,17 @@ function toMessage(r: MsgRow): ChatMessage {
     body: r.body,
     imageUrl: imageUrl(r.image_id),
     createdAt: r.created_at,
+    forwarded: r.forwarded,
+    replyTo:
+      r.reply_to_id == null
+        ? null
+        : {
+            id: r.reply_to_id,
+            senderName: r.reply_sender ?? "",
+            body: (r.reply_body ?? "").slice(0, 160),
+            hasImage: r.reply_image_id != null,
+            deleted: r.reply_id == null,
+          },
   };
 }
 
@@ -254,53 +301,56 @@ export const loadThread = createServerFn({ method: "POST" })
 
     const rows =
       afterId > 0
-        ? await sql<MsgRow>`
-            select c.id, c.sender_id, c.recipient_id, c.body, c.image_id,
-              to_char(c.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
-              s.username, s.display_name, s.avatar_id
-            from chat_messages c
-            join members s on s.id = c.sender_id
-            where (
-              (${peerId}::int is null and c.recipient_id is null)
-              or (${peerId}::int is not null and (
-                (c.sender_id = ${me.id} and c.recipient_id = ${peerId})
-                or (c.sender_id = ${peerId} and c.recipient_id = ${me.id})
-              ))
-            ) and c.id > ${afterId}
-            order by c.id asc
-            limit 200
-          `
+        ? await sql.query<MsgRow>(
+            `${MSG_SELECT} where ${THREAD_WHERE} and c.id > $3 order by c.id asc limit 200`,
+            [me.id, peerId, afterId],
+          )
         : (
-            await sql<MsgRow>`
-              select c.id, c.sender_id, c.recipient_id, c.body, c.image_id,
-                to_char(c.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
-                s.username, s.display_name, s.avatar_id
-              from chat_messages c
-              join members s on s.id = c.sender_id
-              where (
-                (${peerId}::int is null and c.recipient_id is null)
-                or (${peerId}::int is not null and (
-                  (c.sender_id = ${me.id} and c.recipient_id = ${peerId})
-                  or (c.sender_id = ${peerId} and c.recipient_id = ${me.id})
-                ))
-              )
-              order by c.id desc
-              limit 100
-            `
+            await sql.query<MsgRow>(`${MSG_SELECT} where ${THREAD_WHERE} order by c.id desc limit 100`, [
+              me.id,
+              peerId,
+            ])
           ).reverse();
 
-    const latest = await sql<{ id: number }>`
-      select c.id from chat_messages c
-      where (
-        (${peerId}::int is null and c.recipient_id is null)
-        or (${peerId}::int is not null and (
-          (c.sender_id = ${me.id} and c.recipient_id = ${peerId})
-          or (c.sender_id = ${peerId} and c.recipient_id = ${me.id})
-        ))
-      )
-      order by c.id desc
-      limit 100
-    `;
+    const latest = await sql.query<{ id: number }>(
+      `select c.id from chat_messages c where ${THREAD_WHERE} order by c.id desc limit 100`,
+      [me.id, peerId],
+    );
+    const oldest = latest.length ? Math.min(...latest.map((r) => r.id)) : 0;
+
+    const pins = await sql.query<MsgRow>(
+      `${MSG_SELECT} where ${THREAD_WHERE} and c.pinned_at is not null order by c.pinned_at desc limit 20`,
+      [me.id, peerId],
+    );
+
+    const states: Record<number, MessageState> = {};
+    const reactionRows = await sql.query<{ message_id: number; emoji: string; n: number; mine: boolean }>(
+      `select x.message_id, x.emoji, count(*)::int as n, bool_or(x.member_id = $1) as mine
+       from chat_reactions x
+       join chat_messages c on c.id = x.message_id
+       where ${THREAD_WHERE} and (c.id >= $3 or c.pinned_at is not null)
+       group by x.message_id, x.emoji
+       order by min(x.created_at)`,
+      [me.id, peerId, oldest],
+    );
+    for (const r of reactionRows) {
+      (states[r.message_id] ??= { reactions: [], reports: 0 }).reactions.push({
+        emoji: r.emoji,
+        count: r.n,
+        mine: r.mine,
+      });
+    }
+    if (me.role === "admin") {
+      const reportRows = await sql.query<{ message_id: number; n: number }>(
+        `select p.message_id, count(*)::int as n
+         from chat_reports p
+         join chat_messages c on c.id = p.message_id
+         where ${THREAD_WHERE} and (c.id >= $3 or c.pinned_at is not null)
+         group by p.message_id`,
+        [me.id, peerId, oldest],
+      );
+      for (const r of reportRows) (states[r.message_id] ??= { reactions: [], reports: 0 }).reports = r.n;
+    }
 
     if (peerId != null) {
       await sql`
@@ -313,7 +363,7 @@ export const loadThread = createServerFn({ method: "POST" })
       `;
     }
 
-    return { messages: rows.map(toMessage), latestIds: latest.map((r) => r.id) };
+    return { messages: rows.map(toMessage), latestIds: latest.map((r) => r.id), states, pins: pins.map(toMessage) };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })
@@ -322,6 +372,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       peerId: z.number().int().positive().nullable(),
       body: z.string().max(2000, "বার্তা অনেক বড়"),
       imageId: z.number().int().positive().nullable(),
+      replyToId: z.number().int().positive().nullable().optional(),
     }),
   )
   .handler(async ({ data }) => {
@@ -348,9 +399,19 @@ export const sendMessage = createServerFn({ method: "POST" })
       if (!own[0]) throw new Error("ছবি পাওয়া যায়নি");
     }
 
+    let replyToId: number | null = null;
+    if (data.replyToId != null) {
+      const target = await sql.query<{ id: number }>(
+        `select c.id from chat_messages c where c.id = $3 and ${THREAD_WHERE} limit 1`,
+        [me.id, data.peerId, data.replyToId],
+      );
+      // If the original vanished meanwhile, just send it as a normal message.
+      replyToId = target[0] ? data.replyToId : null;
+    }
+
     const rows = await sql<{ id: number }>`
-      insert into chat_messages (sender_id, recipient_id, body, image_id)
-      values (${me.id}, ${data.peerId}, ${body}, ${data.imageId})
+      insert into chat_messages (sender_id, recipient_id, body, image_id, reply_to_id)
+      values (${me.id}, ${data.peerId}, ${body}, ${data.imageId}, ${replyToId})
       returning id
     `;
     return { id: rows[0]?.id ?? 0 };
@@ -380,4 +441,109 @@ export const deleteMessage = createServerFn({ method: "POST" })
       `;
     }
     return { ok: true };
+  });
+
+/* ------------------------------------------------------------ message actions */
+
+type Visible = {
+  id: number;
+  sender_id: number;
+  recipient_id: number | null;
+  body: string;
+  image_id: number | null;
+  pinned_at: string | null;
+};
+
+/** The message, but only if this member is allowed to see it. */
+async function visibleMessage(memberId: number, id: number): Promise<Visible> {
+  const sql = await getSql();
+  const rows = await sql<Visible>`
+    select id, sender_id, recipient_id, body, image_id, pinned_at
+    from chat_messages
+    where id = ${id} and (recipient_id is null or sender_id = ${memberId} or recipient_id = ${memberId})
+    limit 1
+  `;
+  if (!rows[0]) throw new Error("বার্তা পাওয়া যায়নি");
+  return rows[0];
+}
+
+/** Tap an emoji to react; tap the same one again to take it back; a different one replaces it. */
+export const toggleReaction = createServerFn({ method: "POST" })
+  .validator(z.object({ messageId: z.number().int().positive(), emoji: z.string().max(16) }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    if (!ALL_REACTIONS.includes(data.emoji)) throw new Error("এই ইমোজি ব্যবহার করা যায় না");
+    await visibleMessage(me.id, data.messageId);
+    const sql = await getSql();
+    const cur = await sql<{ emoji: string }>`
+      select emoji from chat_reactions where message_id = ${data.messageId} and member_id = ${me.id}
+    `;
+    if (cur[0]?.emoji === data.emoji) {
+      await sql`delete from chat_reactions where message_id = ${data.messageId} and member_id = ${me.id}`;
+      return { emoji: null as string | null };
+    }
+    await sql`
+      insert into chat_reactions (message_id, member_id, emoji)
+      values (${data.messageId}, ${me.id}, ${data.emoji})
+      on conflict (message_id, member_id) do update set emoji = excluded.emoji, created_at = now()
+    `;
+    return { emoji: data.emoji as string | null };
+  });
+
+/** Pin or unpin. Everyone in the conversation can pin; the pin is shared. */
+export const togglePin = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int().positive() }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    const msg = await visibleMessage(me.id, data.id);
+    const sql = await getSql();
+    if (msg.pinned_at) {
+      await sql`update chat_messages set pinned_at = null, pinned_by = null where id = ${data.id}`;
+      return { pinned: false };
+    }
+    await sql`update chat_messages set pinned_at = now(), pinned_by = ${me.id} where id = ${data.id}`;
+    return { pinned: true };
+  });
+
+export const reportMessage = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int().positive(), reason: z.enum(REPORT_REASONS) }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    const msg = await visibleMessage(me.id, data.id);
+    if (msg.sender_id === me.id) throw new Error("নিজের বার্তা রিপোর্ট করা যায় না");
+    const sql = await getSql();
+    await sql`
+      insert into chat_reports (message_id, reporter_id, reason)
+      values (${data.id}, ${me.id}, ${data.reason})
+      on conflict (message_id, reporter_id) do nothing
+    `;
+    return { ok: true };
+  });
+
+/** Copy a message (text and picture) into another conversation, marked as forwarded. */
+export const forwardMessage = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int().positive(), peerId: z.number().int().positive().nullable() }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    const msg = await visibleMessage(me.id, data.id);
+    const sql = await getSql();
+
+    const recent = await sql<{ n: number }>`
+      select count(*)::int as n from chat_messages
+      where sender_id = ${me.id} and created_at > now() - interval '1 minute'
+    `;
+    if ((recent[0]?.n ?? 0) >= 20) throw new Error(TOO_FAST);
+
+    if (data.peerId != null) {
+      if (data.peerId === me.id) throw new Error("নিজেকে বার্তা পাঠানো যায় না");
+      const peer = await sql<{ id: number }>`select id from members where id = ${data.peerId} limit 1`;
+      if (!peer[0]) throw new Error("সদস্য পাওয়া যায়নি");
+    }
+
+    const rows = await sql<{ id: number }>`
+      insert into chat_messages (sender_id, recipient_id, body, image_id, forwarded)
+      values (${me.id}, ${data.peerId}, ${msg.body}, ${msg.image_id}, true)
+      returning id
+    `;
+    return { id: rows[0]?.id ?? 0 };
   });
