@@ -9,6 +9,8 @@ import { translateText } from "@/lib/i18n/translate";
  */
 const ATTRS = ["placeholder", "aria-label", "title", "alt"] as const;
 const SKIP = "[data-no-i18n],[contenteditable='true'],script,style,textarea,noscript";
+// Attributes (placeholder, aria-label…) are safe to translate on a <textarea>; only its content is not.
+const SKIP_ATTR = "[data-no-i18n],[contenteditable='true'],script,style,noscript";
 type Rec = { orig: string; out: string };
 const texts = new Map<Text, Rec>();
 const attrs = new Map<Element, Map<string, Rec>>();
@@ -27,7 +29,7 @@ function doText(node: Text) {
 }
 
 function doAttr(el: Element, name: string) {
-  if (el.closest(SKIP)) return;
+  if (el.closest(SKIP_ATTR)) return;
   const recs = attrs.get(el) ?? new Map<string, Rec>();
   const rec = recs.get(name);
   let orig = el.getAttribute(name) ?? "";

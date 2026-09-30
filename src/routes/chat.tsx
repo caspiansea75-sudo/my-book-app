@@ -17,6 +17,7 @@ import {
 } from "@/lib/social-api";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n/locale";
 
 type Member = NonNullable<ReturnType<typeof useMe>>;
 
@@ -166,6 +167,7 @@ function Thread({
   peer: Conversation | null;
   onSeen: (id: number | null) => void;
 }) {
+  const locale = useLocale();
   const peerId = peer ? peer.id : null;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,7 +328,7 @@ function Thread({
             <div key={m.id}>
               {showDay ? (
                 <p className="my-3 text-center font-sans text-[11px] text-subtle">
-                  {when.toLocaleDateString("bn-BD", { day: "numeric", month: "long", year: "numeric" })}
+                  {when.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}
                 </p>
               ) : null}
               <div className={cn("group flex items-end gap-2", mine ? "flex-row-reverse" : "")}>
@@ -364,7 +366,7 @@ function Thread({
                     {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 px-1 font-sans text-[10px] text-subtle">
-                    <span>{when.toLocaleTimeString("bn-BD", { hour: "numeric", minute: "2-digit" })}</span>
+                    <span>{when.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" })}</span>
                     {canDelete ? (
                       <button
                         type="button"
