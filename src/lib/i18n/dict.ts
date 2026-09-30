@@ -1,6 +1,22 @@
 // Generated: Bengali UI text -> English. Add a line here to translate more of the interface.
 // Stories, titles and anything members write are never translated.
 export const EXACT: Record<string, string> = {
+ "মন্তব্য ও লাইক": "Comments and likes",
+ "পছন্দ": "Like",
+ "পছন্দ করেছেন": "Liked",
+ "মন্তব্য": "Comments",
+ "আপনার মন্তব্য লিখুন…": "Write a comment…",
+ "মন্তব্য পাঠান": "Post comment",
+ "মন্তব্য মুছুন": "Delete comment",
+ "মন্তব্যটি মুছে ফেলবেন?": "Delete this comment?",
+ "এখনো কোনো মন্তব্য নেই। প্রথম মন্তব্যটি আপনিই করুন।": "No comments yet. Be the first to comment.",
+ "শুধু সাম্প্রতিক মন্তব্যগুলো দেখানো হচ্ছে।": "Showing only the most recent comments.",
+ "কিছু লিখুন": "Write something",
+ "মন্তব্য অনেক বড়": "Comment is too long",
+ "এই মন্তব্য মোছার অনুমতি নেই": "You can't delete this comment",
+ "পাওয়া যায়নি": "Not found",
+ "একটু ধীরে — কিছুক্ষণ পরে আবার চেষ্টা করুন": "Slow down a little — try again in a moment",
+ "কিছু ভুল হয়েছে": "Something went wrong",
  "যেখানে ছিলেন": "Where you left off",
  "পড়া শুরু করুন": "Start reading",
  "সম্পাদনা": "Edit",
