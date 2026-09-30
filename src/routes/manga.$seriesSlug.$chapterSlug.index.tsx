@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, createFileRoute, notFound } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ArrowLeftRight, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
-import { Engagement } from "@/components/engagement/engagement";
+import { PageReader } from "@/components/manga/page-reader";
 import { getMangaChapterForReading } from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/")({
@@ -18,8 +18,57 @@ export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/")({
 
 function MangaReaderPage() {
   const { chapter } = Route.useLoaderData();
-  const { seriesSlug, chapterSlug } = Route.useParams();
+  const { chapterSlug } = Route.useParams();
   const [open, setOpen] = useState<number | null>(null);
+  const [mode, setModeState] = useState<"scroll" | "pages">("scroll");
+  const [rtl, setRtlState] = useState(false);
+  const [page, setPage] = useState(0);
+  const total = chapter.panels.length;
+  const pageKey = `manga-page:${chapter.seriesSlug}/${chapterSlug}`;
+
+  useEffect(() => {
+    try {
+      const p = JSON.parse(window.localStorage.getItem("manga-reader") ?? "{}") as { mode?: string; rtl?: boolean };
+      if (p.mode === "pages") setModeState("pages");
+      if (p.rtl) setRtlState(true);
+    } catch {
+      // no saved preference
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const n = Number(window.localStorage.getItem(pageKey));
+      setPage(Number.isFinite(n) && n > 0 && n < total ? n : 0);
+    } catch {
+      setPage(0);
+    }
+  }, [pageKey, total]);
+
+  function savePrefs(m: "scroll" | "pages", r: boolean) {
+    try {
+      window.localStorage.setItem("manga-reader", JSON.stringify({ mode: m, rtl: r }));
+    } catch {
+      // ignore
+    }
+  }
+  function setMode(m: "scroll" | "pages") {
+    setModeState(m);
+    savePrefs(m, rtl);
+  }
+  function toggleRtl() {
+    setRtlState(!rtl);
+    savePrefs(mode, !rtl);
+  }
+  function goPage(n: number) {
+    setPage(n);
+    try {
+      if (n > 0 && n < total) window.localStorage.setItem(pageKey, String(n));
+      else window.localStorage.removeItem(pageKey);
+    } catch {
+      // ignore
+    }
+  }
 
   const lightboxItems: LightboxItem[] = useMemo(
     () =>
@@ -30,6 +79,39 @@ function MangaReaderPage() {
         caption: p.caption || undefined,
       })),
     [chapter.panels],
+  );
+
+  const chapterNav = (
+    <nav className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-10">
+        {chapter.prevSlug ? (
+          <Link
+            to="/manga/$seriesSlug/$chapterSlug"
+            params={{ seriesSlug: chapter.seriesSlug, chapterSlug: chapter.prevSlug }}
+            className="pressable inline-flex h-12 items-center rounded-lg border border-white/15 px-4 font-sans text-sm text-white"
+          >
+            আগের অধ্যায়
+          </Link>
+        ) : (
+          <span />
+        )}
+        {chapter.nextSlug ? (
+          <Link
+            to="/manga/$seriesSlug/$chapterSlug"
+            params={{ seriesSlug: chapter.seriesSlug, chapterSlug: chapter.nextSlug }}
+            className="pressable inline-flex h-12 items-center rounded-lg bg-white px-4 font-sans text-sm text-[#0a0a0a]"
+          >
+            পরের অধ্যায়
+          </Link>
+        ) : (
+          <Link
+            to="/manga/$seriesSlug"
+            params={{ seriesSlug: chapter.seriesSlug }}
+            className="pressable inline-flex h-12 items-center rounded-lg border border-white/15 px-4 font-sans text-sm text-white"
+          >
+            সিরিজে ফিরুন
+          </Link>
+        )}
+      </nav>
   );
 
   return (
@@ -79,10 +161,54 @@ function MangaReaderPage() {
             )}
           </div>
         </div>
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-2 px-3 pb-2">
+          <div role="group" className="inline-flex rounded-full border border-white/15 p-0.5 font-sans text-xs">
+            {(
+              [
+                ["scroll", "স্ক্রোল"],
+                ["pages", "পাতা"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={mode === id}
+                onClick={() => setMode(id)}
+                className={
+                  mode === id
+                    ? "pressable h-8 rounded-full bg-white px-3 text-[#0a0a0a]"
+                    : "pressable h-8 rounded-full px-3 text-white/60"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {mode === "pages" ? (
+            <button
+              type="button"
+              onClick={toggleRtl}
+              className="pressable inline-flex h-8 items-center gap-1.5 rounded-full border border-white/15 px-3 font-sans text-xs text-white/80"
+            >
+              <ArrowLeftRight className="size-3.5" strokeWidth={1.75} />
+              {rtl ? "ডান থেকে বাঁয়ে" : "বাঁ থেকে ডানে"}
+            </button>
+          ) : null}
+        </div>
       </header>
 
       {chapter.panels.length === 0 ? (
         <p className="px-6 py-24 text-center font-sans text-sm text-white/50">এই অধ্যায়ে এখনো কোনো প্যানেল নেই।</p>
+      ) : mode === "pages" ? (
+        <PageReader
+          panels={chapter.panels}
+          index={page}
+          onIndex={goPage}
+          rtl={rtl}
+          paused={open != null}
+          onZoom={setOpen}
+          end={chapterNav}
+        />
       ) : (
         <div className="mx-auto flex max-w-2xl flex-col">
           {chapter.panels.map((p, i) => (
@@ -105,40 +231,7 @@ function MangaReaderPage() {
         </div>
       )}
 
-      <div className="mx-auto max-w-2xl px-4">
-        <Engagement tone="dark" kind="manga" parent={seriesSlug} item={chapterSlug} />
-      </div>
-
-      <nav className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 py-10">
-        {chapter.prevSlug ? (
-          <Link
-            to="/manga/$seriesSlug/$chapterSlug"
-            params={{ seriesSlug: chapter.seriesSlug, chapterSlug: chapter.prevSlug }}
-            className="pressable inline-flex h-12 items-center rounded-lg border border-white/15 px-4 font-sans text-sm text-white"
-          >
-            আগের অধ্যায়
-          </Link>
-        ) : (
-          <span />
-        )}
-        {chapter.nextSlug ? (
-          <Link
-            to="/manga/$seriesSlug/$chapterSlug"
-            params={{ seriesSlug: chapter.seriesSlug, chapterSlug: chapter.nextSlug }}
-            className="pressable inline-flex h-12 items-center rounded-lg bg-white px-4 font-sans text-sm text-[#0a0a0a]"
-          >
-            পরের অধ্যায়
-          </Link>
-        ) : (
-          <Link
-            to="/manga/$seriesSlug"
-            params={{ seriesSlug: chapter.seriesSlug }}
-            className="pressable inline-flex h-12 items-center rounded-lg border border-white/15 px-4 font-sans text-sm text-white"
-          >
-            সিরিজে ফিরুন
-          </Link>
-        )}
-      </nav>
+      {mode === "scroll" || total === 0 ? chapterNav : null}
 
       {open != null ? (
         <Lightbox items={lightboxItems} index={open} onClose={() => setOpen(null)} onIndex={setOpen} />
