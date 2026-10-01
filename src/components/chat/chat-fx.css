@@ -173,3 +173,12 @@ mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent
 @media (prefers-reduced-motion: reduce) {
   .cx-toast, .cx-toast-bell { animation: none !important; }
 }
+
+/* ---------- Online / offline dots (admin) ---------- */
+.pr-dot { position: relative; display: inline-block; width: 10px; height: 10px; border-radius: 9999px; flex-shrink: 0; }
+.pr-on { background: #34d399; box-shadow: 0 0 8px #34d399; }
+.pr-off { background: #6b7280; }
+@keyframes pr-ping { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.8); opacity: 0; } }
+.pr-on::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: #34d399; animation: pr-ping 1.8s ease-out infinite; }
+.pr-badge { position: absolute; right: -2px; bottom: -2px; border: 2px solid var(--color-surface); width: 13px; height: 13px; box-sizing: border-box; }
+@media (prefers-reduced-motion: reduce) { .pr-on::after { animation: none; display: none; } }

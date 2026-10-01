@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeRoot } from "@/components/book/theme-root";
 import { MessageToasts } from "@/components/chat/message-toasts";
+import { PresenceHeartbeat } from "@/components/presence/presence";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "গল্প সংগ্রহ";
@@ -53,6 +54,7 @@ export const Route = createRootRoute({
           <ThemeRoot>
             <Outlet />
             <MessageToasts />
+            <PresenceHeartbeat />
           </ThemeRoot>
         </AuthProvider>
         <Scripts />

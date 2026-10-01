@@ -43,6 +43,7 @@ import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n/locale";
 import { ChatInfoPanel } from "@/components/chat/chat-info";
+import { PresenceDot, PresenceLabel, usePresence, type PresenceMap } from "@/components/presence/presence";
 import { EFFECTS, MsgText, heartAt, reactToText } from "@/components/chat/chat-fx";
 import { CHAT_THEMES, useChatPrefs } from "@/lib/chat-prefs";
 
@@ -73,6 +74,7 @@ function ChatShell({ me }: { me: Member }) {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [people, setPeople] = useState<Conversation[]>(initial);
+  const presence = usePresence(me.role === "admin");
 
   const peer = search.with != null ? (people.find((p) => p.id === search.with) ?? null) : null;
   const peerId = peer ? peer.id : null;
@@ -137,7 +139,10 @@ function ChatShell({ me }: { me: Member }) {
                   peerId === p.id ? "bg-surface-2 text-fg" : "text-muted hover:bg-surface-2 hover:text-fg",
                 )}
               >
-                <Avatar name={p.displayName} url={p.avatarUrl} size={36} />
+                <span className="relative shrink-0">
+                  <Avatar name={p.displayName} url={p.avatarUrl} size={36} />
+                  <PresenceDot row={presence.get(p.id)} className="pr-badge" />
+                </span>
                 <span className="min-w-0 flex-1 truncate">{p.displayName}</span>
                 {p.unread > 0 ? (
                   <span className="grid min-w-5 place-items-center rounded-full bg-lamp px-1.5 text-[11px] leading-5 text-bg">
@@ -164,7 +169,7 @@ function ChatShell({ me }: { me: Member }) {
               </option>
             ))}
           </select>
-          <Thread key={peerId ?? "group"} me={me} peer={peer} people={people} onSeen={markSeen} />
+          <Thread key={peerId ?? "group"} me={me} peer={peer} people={people} onSeen={markSeen} presence={presence} />
         </div>
       </section>
     </main>
@@ -231,11 +236,13 @@ function Thread({
   peer,
   people,
   onSeen,
+  presence,
 }: {
   me: Member;
   peer: Conversation | null;
   people: Conversation[];
   onSeen: (id: number | null) => void;
+  presence: PresenceMap;
 }) {
   const locale = useLocale();
   const peerId = peer ? peer.id : null;
@@ -527,6 +534,12 @@ function Thread({
           <p className="truncate font-sans text-xs text-muted">
             {peer ? `@${peer.username} · ব্যক্তিগত কথোপকথন` : "সব সদস্য এখানে একসাথে কথা বলতে পারেন"}
           </p>
+          {peer && presence.has(peer.id) ? (
+            <p className="flex items-center gap-1.5 truncate font-sans text-xs">
+              <PresenceDot row={presence.get(peer.id)} />
+              <PresenceLabel row={presence.get(peer.id)} />
+            </p>
+          ) : null}
         </div>
         {peer ? (
           <Link

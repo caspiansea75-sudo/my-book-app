@@ -73,4 +73,9 @@ export const CHAT_EXACT: Record<string, string> = {
   "ছবি সরান": "Remove photo",
   "নতুন বার্তা": "New message",
   "সবার চ্যাটে নতুন বার্তা": "New message in Everyone's chat",
+  "অনলাইন": "Online",
+  "অফলাইন": "Offline",
+  "শেষ দেখা": "Last seen",
+  "এইমাত্র": "just now",
+  "কখনো আসেননি": "Never visited",
 };
