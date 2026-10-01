@@ -100,3 +100,88 @@ export const getStorageReport = createServerFn({ method: "GET" }).handler(async 
     checkedAt: new Date().toISOString(),
   };
 });
+
+export type BlobReport = {
+  /** False when no Blob store is attached to this deployment (neither BLOB_READ_WRITE_TOKEN nor BLOB_STORE_ID). */
+  connected: boolean;
+  count: number;
+  bytes: number;
+  /** True if the store has more files than we were willing to count (the numbers are a floor). */
+  truncated: boolean;
+  /** Top-level folders, biggest first ("(root)" holds files with no folder). */
+  folders: { name: string; count: number; bytes: number }[];
+  biggest: { pathname: string; url: string; bytes: number; uploadedAt: string }[];
+  error: string | null;
+  checkedAt: string;
+};
+
+const BLOB_PAGE = 1000;
+const BLOB_MAX_PAGES = 30; // up to 30,000 files; far beyond a 1 GB hobby store
+
+/** Admin only: how much of the Vercel Blob store is used. Separate from the DB report so a slow or missing store never blocks it. */
+export const getBlobReport = createServerFn({ method: "GET" }).handler(async (): Promise<BlobReport> => {
+  const me = await requireMember();
+  if (me.role !== "admin") throw new Error("শুধু অ্যাডমিন দেখতে পারবেন");
+
+  const empty: BlobReport = {
+    connected: false,
+    count: 0,
+    bytes: 0,
+    truncated: false,
+    folders: [],
+    biggest: [],
+    error: null,
+    checkedAt: new Date().toISOString(),
+  };
+  const { blobEnabled } = await import("@/lib/blob-store.server");
+  if (!blobEnabled()) return empty;
+
+  try {
+    const { list } = await import("@vercel/blob");
+    const folders = new Map<string, { count: number; bytes: number }>();
+    const top: BlobReport["biggest"] = [];
+    let count = 0;
+    let bytes = 0;
+    let cursor: string | undefined;
+    let truncated = false;
+
+    for (let page = 0; ; page += 1) {
+      if (page >= BLOB_MAX_PAGES) {
+        truncated = true;
+        break;
+      }
+      const res = await list({ limit: BLOB_PAGE, cursor });
+      for (const b of res.blobs) {
+        count += 1;
+        bytes += b.size;
+        const slash = b.pathname.indexOf("/");
+        const folder = slash === -1 ? "(root)" : b.pathname.slice(0, slash);
+        const f = folders.get(folder) ?? { count: 0, bytes: 0 };
+        f.count += 1;
+        f.bytes += b.size;
+        folders.set(folder, f);
+        top.push({ pathname: b.pathname, url: b.url, bytes: b.size, uploadedAt: new Date(b.uploadedAt).toISOString() });
+      }
+      // keep only the 12 biggest so memory stays small
+      top.sort((a, b) => b.bytes - a.bytes);
+      top.length = Math.min(top.length, 12);
+      if (!res.hasMore || !res.cursor) break;
+      cursor = res.cursor;
+    }
+
+    return {
+      ...empty,
+      connected: true,
+      count,
+      bytes,
+      truncated,
+      folders: [...folders.entries()]
+        .map(([name, v]) => ({ name, ...v }))
+        .sort((a, b) => b.bytes - a.bytes)
+        .slice(0, 10),
+      biggest: top,
+    };
+  } catch (e) {
+    return { ...empty, connected: true, error: e instanceof Error ? e.message : "ব্লব স্টোরের হিসাব আনা যায়নি" };
+  }
+});
