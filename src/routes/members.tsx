@@ -3,6 +3,7 @@ import { ShieldCheck, Users } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { listMembers } from "@/lib/members-api";
+import { StoryExport } from "@/components/members/story-export";
 import { PresenceDot, PresenceLabel, usePresence } from "@/components/presence/presence";
 
 export const Route = createFileRoute("/members")({
@@ -69,6 +70,8 @@ function MembersPage() {
             ))}
           </div>
         )}
+
+        <StoryExport />
       </section>
     </main>
   );
