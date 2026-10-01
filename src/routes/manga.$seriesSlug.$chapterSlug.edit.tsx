@@ -1,18 +1,19 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, createFileRoute, notFound, redirect, useNavigate, useRouter } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ChevronLeft, ImagePlus, PenLine, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, GripVertical, ImagePlus, PenLine, Trash2 } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { MultiUploader } from "@/components/media/multi-uploader";
-import { listMedia, type MediaItem } from "@/lib/library-api";
+import { PanelPicker } from "@/components/manga/panel-picker";
+import { loadVault } from "@/lib/media-folders-api";
 import { canEditOwner } from "@/lib/use-me";
 import {
-  addMangaPanel,
   addMangaPanels,
   deleteMangaChapter,
   getMangaChapterForEdit,
   removeMangaPanel,
   reorderMangaPanels,
   updateMangaChapterTitle,
+  type MangaPanel,
 } from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/edit")({
@@ -20,29 +21,34 @@ export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/edit")({
     if (!context.me) throw redirect({ to: "/login" });
   },
   loader: async ({ params, context }) => {
-    const [chapter, media] = await Promise.all([
+    const [chapter, vault] = await Promise.all([
       getMangaChapterForEdit({ data: { seriesSlug: params.seriesSlug, chapterSlug: params.chapterSlug } }),
-      listMedia(),
+      loadVault(),
     ]);
     if (!chapter) throw notFound();
     if (!canEditOwner(context.me, chapter.ownerId)) {
       throw redirect({ to: "/manga/$seriesSlug", params: { seriesSlug: params.seriesSlug } });
     }
-    return { chapter, media };
+    return { chapter, vault };
   },
   component: MangaEditPage,
 });
 
 function MangaEditPage() {
-  const { chapter, media } = Route.useLoaderData();
+  const { chapter, vault } = Route.useLoaderData();
   const { seriesSlug, chapterSlug } = Route.useParams();
   const router = useRouter();
   const navigate = useNavigate();
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(chapter.panels.length === 0);
   const [titleEditOpen, setTitleEditOpen] = useState(false);
   const [title, setTitle] = useState(chapter.chapterTitle);
   const [savingTitle, setSavingTitle] = useState(false);
+
+  const [panels, setPanels] = useState<MangaPanel[]>(chapter.panels);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+  useEffect(() => setPanels(chapter.panels), [chapter.panels]);
 
   async function refresh() {
     await router.invalidate();
@@ -66,22 +72,13 @@ function MangaEditPage() {
     await navigate({ to: "/manga/$seriesSlug", params: { seriesSlug } });
   }
 
-  async function handleAdd(mediaId: number) {
-    setBusyId(mediaId);
-    try {
-      await addMangaPanel({ data: { seriesSlug, chapterSlug, mediaId } });
-      await refresh();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function handleAddMany(mediaIds: number[]) {
     try {
       await addMangaPanels({ data: { seriesSlug, chapterSlug, mediaIds } });
       await refresh();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "প্যানেল যোগ হয়নি");
+      throw err;
     }
   }
 
@@ -95,18 +92,35 @@ function MangaEditPage() {
     }
   }
 
-  async function handleMove(index: number, dir: -1 | 1) {
-    const next = [...chapter.panels];
-    const target = index + dir;
-    if (target < 0 || target >= next.length) return;
-    const tmp = next[index];
-    next[index] = next[target]!;
-    next[target] = tmp!;
-    await reorderMangaPanels({ data: { panelIds: next.map((p) => p.id) } });
-    await refresh();
+  async function applyOrder(next: typeof panels) {
+    setPanels(next); // show the new order immediately
+    try {
+      await reorderMangaPanels({ data: { panelIds: next.map((p) => p.id) } });
+    } finally {
+      await refresh();
+    }
   }
 
-  const images: MediaItem[] = media.filter((m) => m.kind === "image");
+  async function handleMove(index: number, dir: -1 | 1) {
+    const target = index + dir;
+    if (target < 0 || target >= panels.length) return;
+    const next = [...panels];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    await applyOrder(next);
+  }
+
+  async function handleDrop(to: number) {
+    const from = dragIndex;
+    setDragIndex(null);
+    setOverIndex(null);
+    if (from == null || from === to) return;
+    const next = [...panels];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved!);
+    await applyOrder(next);
+  }
+
+  const usedIds = new Set(panels.map((p) => p.mediaId));
 
   return (
     <main className="relative min-h-dvh">
@@ -171,16 +185,33 @@ function MangaEditPage() {
           প্যানেল যোগ করুন, উপরে-নিচে সাজান। উপরের প্যানেলটাই প্রথমে দেখা যাবে।
         </p>
 
-        <h2 className="mt-10 font-display text-xl">প্যানেলসমূহ ({chapter.panels.length})</h2>
-        {chapter.panels.length === 0 ? (
+        <h2 className="mt-10 font-display text-xl">প্যানেলসমূহ ({panels.length})</h2>
+        {panels.length === 0 ? (
           <p className="mt-3 font-sans text-sm text-muted">এখনো কোনো প্যানেল যোগ হয়নি — নিচ থেকে ছবি বেছে নিন।</p>
         ) : (
           <ol className="mt-4 space-y-3">
-            {chapter.panels.map((p, i) => (
+            {panels.map((p, i) => (
               <li
                 key={p.id}
-                className="flex items-center gap-3 rounded-lg border border-border bg-surface p-2.5"
+                draggable
+                onDragStart={() => setDragIndex(i)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (overIndex !== i) setOverIndex(i);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setOverIndex(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void handleDrop(i);
+                }}
+                className={`flex items-center gap-3 rounded-lg border bg-surface p-2.5 ${
+                  overIndex === i && dragIndex !== null && dragIndex !== i ? "border-lamp" : "border-border"
+                } ${dragIndex === i ? "opacity-40" : ""}`}
               >
+                <GripVertical className="hidden size-4 shrink-0 cursor-grab text-subtle sm:block" strokeWidth={1.75} />
                 <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface-2 font-sans text-xs text-muted">
                   {i + 1}
                 </span>
@@ -197,7 +228,7 @@ function MangaEditPage() {
                   </button>
                   <button
                     type="button"
-                    disabled={i === chapter.panels.length - 1}
+                    disabled={i === panels.length - 1}
                     onClick={() => void handleMove(i, 1)}
                     className="pressable grid size-9 place-items-center rounded-full text-muted hover:text-fg disabled:opacity-30"
                     aria-label="নিচে সরান"
@@ -223,6 +254,7 @@ function MangaEditPage() {
           <button
             type="button"
             onClick={() => setPickerOpen((v) => !v)}
+            aria-expanded={pickerOpen}
             className="pressable inline-flex h-11 items-center gap-1.5 rounded-lg bg-accent px-4 font-sans text-sm text-accent-fg"
           >
             <ImagePlus className="size-4" strokeWidth={1.75} />
@@ -232,27 +264,13 @@ function MangaEditPage() {
 
         {pickerOpen ? (
           <div className="mt-5 rounded-xl border border-border bg-surface p-4">
-            <MultiUploader targetLabel="এই অধ্যায়" onUploaded={handleAddMany} />
-            {images.length === 0 ? (
-              <p className="mt-4 font-sans text-sm text-muted">চিত্রশালায় এখনো কোনো ছবি নেই।</p>
-            ) : (
-              <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                {images.map((img) => (
-                  <button
-                    key={img.id}
-                    type="button"
-                    disabled={busyId === img.id}
-                    onClick={() => void handleAdd(img.id)}
-                    className="pressable group relative aspect-square overflow-hidden rounded-lg border border-border disabled:opacity-50"
-                  >
-                    <img src={img.thumbSrc || img.src} alt="" className="h-full w-full object-cover" />
-                    <span className="absolute inset-0 grid place-items-center bg-bg/0 opacity-0 transition-opacity group-hover:bg-bg/40 group-hover:opacity-100">
-                      <ImagePlus className="size-5 text-fg" strokeWidth={1.75} />
-                    </span>
-                  </button>
-                ))}
+            <PanelPicker folders={vault.folders} items={vault.items} usedIds={usedIds} onAdd={handleAddMany} />
+            <details className="mt-6 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer font-sans text-sm text-muted">নতুন ছবি আপলোড করে সরাসরি যোগ করুন</summary>
+              <div className="mt-3">
+                <MultiUploader targetLabel="এই অধ্যায়" onUploaded={handleAddMany} />
               </div>
-            )}
+            </details>
           </div>
         ) : null}
       </section>
