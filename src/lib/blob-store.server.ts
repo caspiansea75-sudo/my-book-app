@@ -3,11 +3,12 @@ import { del, get, put } from "@vercel/blob";
 /**
  * Vercel Blob (PRIVATE store) storage for uploaded media (images / videos).
  * Neon keeps the text data; big files go here so both quotas are used.
- * If BLOB_READ_WRITE_TOKEN is missing or Blob fails (e.g. full), the caller
+ * If neither BLOB_READ_WRITE_TOKEN nor BLOB_STORE_ID is set or Blob fails (e.g. full), the caller
  * falls back to saving the file inside Neon, so uploads never just break.
  */
 export function blobEnabled(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim());
+  // Older stores use BLOB_READ_WRITE_TOKEN; new private stores use BLOB_STORE_ID + Vercel's automatic login (OIDC).
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN?.trim() || process.env.BLOB_STORE_ID?.trim());
 }
 
 export function isBlobUrl(url: string | null | undefined): boolean {
