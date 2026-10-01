@@ -519,6 +519,9 @@ export const createMedia = createServerFn({ method: "POST" })
     const bytes = data.bytes ?? Math.ceil((payload.length * 3) / 4);
     if (data.kind === "image" && bytes > IMAGE_MAX) throw new Error("ছবিটি অনেক বড়");
     if (data.kind === "video" && bytes > VIDEO_MAX) throw new Error("ভিডিওটি অনেক বড়");
+    // Big file -> Vercel Blob (url saved in Neon). If Blob is off or fails, keep it in Neon.
+    const { putMedia } = await import("@/lib/blob-store.server");
+    const blobUrl = await putMedia(payload, data.mime);
     const sql = await getSql();
     const rows = await sql<{ id: number }>`
       insert into media (kind, title, mime, source, url, data, thumb, width, height, bytes)
@@ -527,8 +530,8 @@ export const createMedia = createServerFn({ method: "POST" })
         ${data.title || (data.kind === "image" ? "ছবি" : "ভিডিও")},
         ${data.mime},
         ${"upload"},
-        ${null},
-        ${payload},
+        ${blobUrl},
+        ${blobUrl ? null : payload},
         ${data.thumb ?? null},
         ${data.width ?? null},
         ${data.height ?? null},
@@ -912,7 +915,11 @@ export const purgeTrash = createServerFn({ method: "POST" })
     const sql = await getSql();
     if (data.kind === "book") await sql`delete from library_books where id = ${data.id} and deleted_at is not null`;
     else if (data.kind === "chapter") await sql`delete from library_chapters where id = ${data.id} and deleted_at is not null`;
-    else await sql`delete from media where id = ${data.id} and deleted_at is not null`;
+    else {
+      const gone = await sql<{ url: string | null }>`delete from media where id = ${data.id} and deleted_at is not null returning url`;
+      const { deleteMediaFile } = await import("@/lib/blob-store.server");
+      await deleteMediaFile(gone[0]?.url);
+    }
     return { ok: true };
   });
 

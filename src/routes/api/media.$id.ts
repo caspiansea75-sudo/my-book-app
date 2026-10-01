@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
+import { getMediaFile, isBlobUrl } from "@/lib/blob-store.server";
 
 export const Route = createFileRoute("/api/media/$id")({
   server: {
@@ -48,6 +49,17 @@ export const Route = createFileRoute("/api/media/$id")({
           });
         }
 
+        if (row.url && isBlobUrl(row.url)) {
+          // Private Blob: viewer was already checked above, so stream it through the server.
+          const file = await getMediaFile(row.url);
+          if (!file) return new Response("Not found", { status: 404 });
+          return new Response(file.stream, {
+            headers: {
+              "Content-Type": row.mime || file.contentType || "application/octet-stream",
+              "Cache-Control": "private, max-age=31536000, immutable",
+            },
+          });
+        }
         if (row.source === "url" && row.url) {
           return Response.redirect(row.url, 302);
         }
