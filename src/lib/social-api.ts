@@ -241,6 +241,53 @@ export const removeAvatar = createServerFn({ method: "POST" }).handler(async () 
 
 /* --------------------------------------------------------------------- chat */
 
+export type InboxItem = {
+  id: number;
+  senderId: number;
+  senderName: string;
+  senderUsername: string;
+  senderAvatarUrl: string | null;
+  isGroup: boolean;
+  body: string;
+  hasImage: boolean;
+};
+
+/**
+ * Lightweight check used by the site-wide "new message" pop-up.
+ * afterId 0 only returns the newest message id (so old messages never pop up).
+ * Otherwise returns up to 5 messages from other people, newer than afterId, sent in the
+ * group chat or straight to me in the last few minutes.
+ */
+export const pollInbox = createServerFn({ method: "POST" })
+  .validator(z.object({ afterId: z.number().int().min(0) }))
+  .handler(async ({ data }): Promise<{ latestId: number; items: InboxItem[] }> => {
+    const me = await requireMember();
+    const sql = await getSql();
+    const top = await sql<{ id: number | null }>`select max(id) as id from chat_messages`;
+    const latestId = Number(top[0]?.id ?? 0);
+    if (data.afterId <= 0 || latestId <= data.afterId) return { latestId, items: [] };
+    const rows = await sql.query<MsgRow>(
+      `${MSG_SELECT}
+       where c.id > $2 and c.sender_id <> $1 and (c.recipient_id is null or c.recipient_id = $1)
+         and c.created_at > now() - interval '3 minutes'
+       order by c.id desc limit 5`,
+      [me.id, data.afterId],
+    );
+    return {
+      latestId,
+      items: rows.reverse().map((r) => ({
+        id: r.id,
+        senderId: r.sender_id,
+        senderName: r.display_name,
+        senderUsername: r.username,
+        senderAvatarUrl: imageUrl(r.avatar_id),
+        isGroup: r.recipient_id == null,
+        body: r.body.slice(0, 160),
+        hasImage: r.image_id != null,
+      })),
+    };
+  });
+
 /** Everyone else, with unread counts, most recent conversations first. */
 export const listConversations = createServerFn({ method: "GET" }).handler(async (): Promise<Conversation[]> => {
   const me = await requireMember();

@@ -4,6 +4,7 @@ import { LangRuntime } from "@/components/i18n/lang-runtime";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeRoot } from "@/components/book/theme-root";
+import { MessageToasts } from "@/components/chat/message-toasts";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "গল্প সংগ্রহ";
@@ -51,6 +52,7 @@ export const Route = createRootRoute({
         <AuthProvider>
           <ThemeRoot>
             <Outlet />
+            <MessageToasts />
           </ThemeRoot>
         </AuthProvider>
         <Scripts />

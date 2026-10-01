@@ -49,7 +49,7 @@ function Section({ title, icon, children, defaultOpen = false, i = 0 }: { title:
   );
 }
 
-function Row({ icon, label, onClick, right }: { icon: ReactNode; label: string; onClick?: () => void; right?: ReactNode }) {
+function Row({ icon, label, onClick, right }: { icon: ReactNode; label: ReactNode; onClick?: () => void; right?: ReactNode }) {
   return (
     <button
       type="button"
@@ -220,7 +220,11 @@ export function ChatInfoPanel({
                 <Row
                   key={m.id}
                   icon={<Pin className="size-4 text-lamp" />}
-                  label={`${pinName(m)}: ${m.body || "📷 ছবি"}`}
+                  label={
+                    <>
+                      <span data-no-i18n>{pinName(m)}</span>: {m.body ? <span data-no-i18n>{m.body}</span> : <span>📷 ছবি</span>}
+                    </>
+                  }
                   onClick={() => {
                     onJump(m.id);
                     onClose();
@@ -252,7 +256,7 @@ export function ChatInfoPanel({
                 </button>
                 {prefs.photo ? (
                   <button type="button" onClick={() => update({ photo: "" })} className="pressable font-sans text-xs text-muted hover:text-fg">
-                    সরান
+                    ছবি সরান
                   </button>
                 ) : null}
               </div>
@@ -340,7 +344,7 @@ export function ChatInfoPanel({
             <div className="mb-2 flex gap-1 px-3">
               {(["photos", "links"] as const).map((t) => (
                 <button key={t} type="button" onClick={() => setTab(t)} className={cn("pressable rounded-full px-3 py-1 font-sans text-xs", tab === t ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted")}>
-                  {t === "photos" ? `ছবি (${photos.length})` : `লিঙ্ক (${links.length})`}
+                  <span>{t === "photos" ? "ছবিগুলো" : "লিঙ্ক"}</span> <span>{t === "photos" ? photos.length : links.length}</span>
                 </button>
               ))}
             </div>

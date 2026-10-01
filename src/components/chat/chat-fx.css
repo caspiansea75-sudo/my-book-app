@@ -132,3 +132,44 @@ mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent
 }
 
 .cx-send-themed { background: linear-gradient(135deg, var(--cx-from), var(--cx-to)); }
+
+/* ---------- New-message pop-ups (whole site) ---------- */
+.cx-toasts {
+  position: fixed; z-index: 80; top: 12px; right: 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(360px, calc(100vw - 24px)); pointer-events: none;
+}
+@keyframes cx-toast-in { 0% { opacity: 0; transform: translateX(60px) scale(.92); } 60% { transform: translateX(-6px) scale(1.01); } 100% { opacity: 1; transform: none; } }
+.cx-toast {
+  position: relative; overflow: hidden; pointer-events: auto;
+  border: 1px solid var(--color-border); border-radius: 16px;
+  background: color-mix(in oklab, var(--color-surface-2) 94%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 34px -12px rgba(0,0,0,.65), 0 0 0 1px color-mix(in oklab, var(--color-lamp) 18%, transparent);
+  animation: cx-toast-in 520ms cubic-bezier(.22,1,.36,1) both;
+}
+.cx-toast-body { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 38px 14px 12px; text-align: left; }
+.cx-toast-avatar { position: relative; flex-shrink: 0; }
+@keyframes cx-ring { 0%,100% { transform: rotate(0); } 15% { transform: rotate(18deg); } 30% { transform: rotate(-16deg); } 45% { transform: rotate(10deg); } 60% { transform: rotate(-6deg); } 75% { transform: rotate(0); } }
+.cx-toast-bell {
+  position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center;
+  width: 20px; height: 20px; border-radius: 9999px;
+  background: var(--color-accent); color: var(--color-accent-fg);
+  border: 2px solid var(--color-surface-2);
+  animation: cx-ring 1.2s ease-in-out 0.4s 2;
+}
+.cx-toast-x {
+  position: absolute; top: 8px; right: 8px; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: 9999px; color: var(--color-muted);
+}
+.cx-toast-x:hover { background: var(--color-surface); color: var(--color-fg); }
+@keyframes cx-toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.cx-toast-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 3px; transform-origin: left;
+  background: linear-gradient(90deg, var(--color-lamp), var(--color-accent));
+  animation-name: cx-toast-bar; animation-timing-function: linear; animation-fill-mode: forwards;
+}
+@media (max-width: 640px) { .cx-toasts { right: 12px; left: 12px; width: auto; top: 8px; } }
+@media (prefers-reduced-motion: reduce) {
+  .cx-toast, .cx-toast-bell { animation: none !important; }
+}
