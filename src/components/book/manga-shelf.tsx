@@ -23,7 +23,7 @@ export function MangaShelf({
   if (total === 0 && !canCreate) return null;
 
   return (
-    <section id="manga-collection" className="mt-14" aria-label="মাঙ্গা সংগ্রহ">
+    <section id="manga-collection" className="mt-8" aria-label="মাঙ্গা সংগ্রহ">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="flex items-center gap-2 font-sans text-xs tracking-[0.22em] text-lamp">

@@ -129,6 +129,23 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
   const { setPrefs, toggleFav, setShelf } = stored;
 
   const [query, setQuery] = useState("");
+  // Stories and manga are two tabs at the top, so manga never needs a long scroll. The choice is remembered.
+  const [tab, setTab] = useState<"books" | "manga">("books");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("bk-lib-tab") === "manga") setTab("manga");
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
+  function pickTab(next: "books" | "manga") {
+    setTab(next);
+    try {
+      window.localStorage.setItem("bk-lib-tab", next);
+    } catch {
+      /* storage unavailable */
+    }
+  }
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [allTags, setAllTags] = useState(false);
   const dragSlug = useRef<string | null>(null);
@@ -338,7 +355,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           ))}
         </div>
 
-        {continueBooks.length ? (
+        {tab === "books" && continueBooks.length ? (
           <div className="mt-10">
             <h2 className="mb-3 font-display text-lg">পড়া চালিয়ে যান</h2>
             <div className="flex gap-3 overflow-x-auto pb-2">
@@ -389,6 +406,31 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
         ) : null}
 
         <div className="sticky top-2 z-30 mt-10 space-y-2 rounded-2xl border border-border bg-bg/85 p-2 backdrop-blur-md">
+          {manga.length > 0 || me ? (
+            <div role="tablist" className="flex gap-1 rounded-full border border-border p-0.5">
+              {(
+                [
+                  { id: "books", label: "গল্প", n: filtered.length },
+                  { id: "manga", label: "মাঙ্গা", n: mangaShown.length },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  onClick={() => pickTab(t.id)}
+                  className={cn(
+                    "pressable inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-full font-sans text-sm",
+                    tab === t.id ? "bg-accent text-accent-fg" : "text-muted hover:text-fg",
+                  )}
+                >
+                  <span>{t.label}</span>
+                  <span className="text-xs opacity-70">{formatCount(t.n)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative min-w-52 flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -415,6 +457,8 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
               ) : null}
             </div>
 
+            {tab === "books" ? (
+              <>
             <select
               value={prefs.sort}
               onChange={(e) => setPrefs({ sort: e.target.value as LibSort })}
@@ -485,12 +529,18 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
             >
               <Shuffle className="size-4" />
             </button>
+              </>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 font-sans text-xs text-muted">
-            <span className="text-fg">{formatCount(filtered.length)}টি বই</span>
-            {manual ? <span>টেনে এনে বা তীর বোতামে ক্রম বদলান</span> : null}
-            {query || activeCount ? (
+            {tab === "books" ? (
+              <span className="text-fg">{formatCount(filtered.length)}টি বই</span>
+            ) : (
+              <span className="text-fg">{formatCount(mangaShown.length)}টি মাঙ্গা</span>
+            )}
+            {tab === "books" && manual ? <span>টেনে এনে বা তীর বোতামে ক্রম বদলান</span> : null}
+            {query || (tab === "books" && activeCount) ? (
               <button type="button" onClick={resetAll} className="pressable text-lamp">
                 সব ফিল্টার মুছুন
               </button>
@@ -498,7 +548,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           </div>
         </div>
 
-        {filtersOpen ? (
+        {tab === "books" && filtersOpen ? (
           <div className="mt-3 space-y-3 rounded-2xl border border-border bg-surface p-4">
             <FilterRow label="উৎস">
               {SOURCES.map((s) => (
@@ -566,7 +616,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           </div>
         ) : null}
 
-        {letters.length ? (
+        {tab === "books" && letters.length ? (
           <div className="mt-3 flex flex-wrap gap-1">
             {letters.map((l) => (
               <button
@@ -581,7 +631,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           </div>
         ) : null}
 
-        {filtered.length === 0 && mangaShown.length === 0 ? (
+        {tab === "books" && filtered.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-border p-10 text-center">
             <p className="font-display text-lg">কোনো বই মেলেনি</p>
             <p className="mt-1 font-sans text-sm text-muted">অন্য শব্দে খুঁজুন, অথবা ফিল্টার সরিয়ে দেখুন।</p>
@@ -595,7 +645,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           </div>
         ) : null}
 
-        <div className={cn("mt-6", GRID[prefs.view])}>
+        <div className={cn("mt-6", GRID[prefs.view])} style={tab === "books" ? undefined : { display: "none" }}>
           {filtered.map((book, i) => (
             <LibraryCard
               key={book.slug}
@@ -654,7 +704,9 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           ) : null}
         </div>
 
-        <MangaShelf series={mangaShown} total={manga.length} searching={terms.length > 0} canCreate={Boolean(me)} />
+        {tab === "manga" ? (
+          <MangaShelf series={mangaShown} total={manga.length} searching={terms.length > 0} canCreate={Boolean(me)} />
+        ) : null}
       </section>
     </main>
   );
