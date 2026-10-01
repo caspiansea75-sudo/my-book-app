@@ -6,6 +6,7 @@ import {
   Forward,
   BellOff,
   ImagePlus,
+  SmilePlus,
   Info,
   MessageCircle,
   Pin,
@@ -45,7 +46,8 @@ import { useLocale } from "@/lib/i18n/locale";
 import { ChatInfoPanel } from "@/components/chat/chat-info";
 import { PresenceDot, PresenceLabel, usePresence, type PresenceMap } from "@/components/presence/presence";
 import { EFFECTS, MsgText, heartAt, reactToText } from "@/components/chat/chat-fx";
-import { CHAT_THEMES, useChatPrefs } from "@/lib/chat-prefs";
+import { resolveTheme, useChatPrefs } from "@/lib/chat-prefs";
+import { EmojiPicker } from "@/components/chat/emoji-picker";
 
 type Member = NonNullable<ReturnType<typeof useMe>>;
 
@@ -265,6 +267,8 @@ function Thread({
   const [reporting, setReporting] = useState<ChatMessage | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiBox = useRef<HTMLDivElement>(null);
   const [flying, setFlying] = useState(false);
   const [prefs, updatePrefs] = useChatPrefs(me.id, peerId);
   const primed = useRef(false);
@@ -272,8 +276,8 @@ function Thread({
   const nick = (id: number, name: string) => prefs.nicknames[String(id)] || name;
   const title = prefs.name || (peer ? peer.displayName : "সবার চ্যাট");
   const photo = prefs.photo || null;
-  const theme = CHAT_THEMES.find((t) => t.id === prefs.theme) ?? CHAT_THEMES[0];
-  const themeStyle = (theme.from ? { ["--cx-from" as string]: theme.from, ["--cx-to" as string]: theme.to } : {}) as React.CSSProperties;
+  const theme = resolveTheme(prefs);
+  const themeStyle = (theme.from ? { ["--cx-from" as string]: theme.from, ["--cx-to" as string]: theme.to, ["--cx-fg" as string]: theme.fg } : {}) as React.CSSProperties;
   const lastId = useRef(0);
   const box = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -392,6 +396,39 @@ function Thread({
     } finally {
       setSending(false);
     }
+  }
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const down = (e: PointerEvent) => {
+      const t = e.target as Element | null;
+      if (!emojiBox.current?.contains(t) && !t?.closest?.("[data-emoji-toggle]")) setEmojiOpen(false);
+    };
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setEmojiOpen(false);
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("keydown", key);
+    };
+  }, [emojiOpen]);
+
+  /** Put an emoji where the cursor is in the message box. */
+  function addEmoji(emoji: string) {
+    const el = areaRef.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = text.slice(0, start) + emoji + text.slice(end);
+    if (next.length > 2000) return;
+    setText(next);
+    window.requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const at = start + emoji.length;
+      el.setSelectionRange(at, at);
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 128)}px`;
+    });
   }
 
   async function remove(id: number) {
@@ -755,7 +792,12 @@ function Thread({
         })}
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="relative border-t border-border p-3">
+        {emojiOpen ? (
+          <div ref={emojiBox} className="cx-picker absolute bottom-full left-3 z-20 mb-2 w-[min(344px,calc(100%-24px))] rounded-2xl border border-border bg-surface-2 p-2 shadow-2xl">
+            <EmojiPicker onPick={addEmoji} height={200} />
+          </div>
+        ) : null}
         {error ? (
           <p role="alert" className="mb-2 font-sans text-xs text-nsfw">
             {error}
@@ -823,6 +865,20 @@ function Thread({
           >
             <ImagePlus className="size-5" strokeWidth={1.75} />
           </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEmojiOpen((v) => !v);
+            }}
+            aria-label="ইমোজি যোগ করুন"
+            title="ইমোজি যোগ করুন"
+            aria-expanded={emojiOpen}
+            data-emoji-toggle
+            className={cn("pressable grid size-11 shrink-0 place-items-center rounded-lg border border-border text-muted hover:text-fg", emojiOpen && "bg-surface-2 text-fg")}
+          >
+            <SmilePlus className="size-5" strokeWidth={1.75} />
+          </button>
           <textarea
             ref={areaRef}
             rows={1}
@@ -858,7 +914,7 @@ function Thread({
               style={themeStyle}
               className={cn(
                 "pressable grid size-11 shrink-0 place-items-center rounded-lg text-accent-fg disabled:opacity-50",
-                theme.from ? "cx-send-themed text-white" : "bg-accent",
+                theme.from ? "cx-send-themed" : "bg-accent",
                 flying && "cx-fly",
               )}
             >

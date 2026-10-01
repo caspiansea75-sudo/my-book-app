@@ -10,6 +10,8 @@ import {
   Pencil,
   Pin,
   Search,
+  Shuffle,
+  ArrowLeftRight,
   Smile,
   Type,
   UserRound,
@@ -19,8 +21,8 @@ import {
 import { Avatar } from "@/components/members/avatar";
 import { MsgText } from "@/components/chat/chat-fx";
 import { resizeToJpeg } from "@/lib/image-resize";
-import { ALL_REACTIONS } from "@/lib/chat-emoji";
-import { CHAT_THEMES, type ChatPrefs } from "@/lib/chat-prefs";
+import { CHAT_THEMES, resolveTheme, type ChatPrefs } from "@/lib/chat-prefs";
+import { EmojiPicker } from "@/components/chat/emoji-picker";
 import type { ChatMessage, Conversation } from "@/lib/social-api";
 import { cn } from "@/lib/utils";
 
@@ -256,7 +258,7 @@ export function ChatInfoPanel({
                 </button>
                 {prefs.photo ? (
                   <button type="button" onClick={() => update({ photo: "" })} className="pressable font-sans text-xs text-muted hover:text-fg">
-                    ছবি সরান
+                    ছবি মুছে ফেলুন
                   </button>
                 ) : null}
               </div>
@@ -284,20 +286,73 @@ export function ChatInfoPanel({
                     {t.label}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={() => update({ theme: "custom" })}
+                  aria-label="নিজের থিম"
+                  title="নিজের থিম"
+                  className={cn("pressable flex flex-col items-center gap-1 rounded-lg p-1.5 font-sans text-[10px] text-muted", prefs.theme === "custom" && "bg-surface-2 text-fg")}
+                >
+                  <span
+                    className={cn("grid size-8 place-items-center rounded-full border border-dashed border-lamp text-xs transition-transform", prefs.theme === "custom" && "scale-110 ring-2 ring-lamp")}
+                    style={{ background: `conic-gradient(from 0deg, ${prefs.customFrom}, ${prefs.customTo}, ${prefs.customFrom})` }}
+                  >
+                    <Palette className="size-3.5 text-white drop-shadow" />
+                  </span>
+                  নিজের থিম
+                </button>
               </div>
+
+              {prefs.theme === "custom" ? (
+                <div className="cx-rise mt-3 rounded-xl border border-border bg-surface-2/60 p-3">
+                  <div className="flex items-center gap-3">
+                    <label className="flex flex-1 flex-col gap-1 font-sans text-[11px] text-muted">
+                      <span>প্রথম রং</span>
+                      <input type="color" value={prefs.customFrom} onChange={(e) => update({ customFrom: e.target.value })} className="h-9 w-full cursor-pointer rounded-lg border border-border bg-transparent p-0.5" />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => update({ customFrom: prefs.customTo, customTo: prefs.customFrom })}
+                      aria-label="রং অদলবদল"
+                      title="রং অদলবদল"
+                      className="pressable mt-4 grid size-8 place-items-center rounded-full border border-border text-muted hover:text-fg"
+                    >
+                      <ArrowLeftRight className="size-4" />
+                    </button>
+                    <label className="flex flex-1 flex-col gap-1 font-sans text-[11px] text-muted">
+                      <span>দ্বিতীয় রং</span>
+                      <input type="color" value={prefs.customTo} onChange={(e) => update({ customTo: e.target.value })} className="h-9 w-full cursor-pointer rounded-lg border border-border bg-transparent p-0.5" />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pick = () => `#${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0")}`;
+                      update({ customFrom: pick(), customTo: pick() });
+                    }}
+                    className="pressable mt-3 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 font-sans text-xs text-muted hover:text-fg"
+                  >
+                    <Shuffle className="size-3.5" /> এলোমেলো রং
+                  </button>
+                  <p className="mb-1.5 mt-3 font-sans text-[11px] text-subtle">পূর্বরূপ</p>
+                  <div className="flex justify-end">
+                    <span
+                      className="cx-mine rounded-2xl px-3 py-2 font-sans text-sm"
+                      style={{ ["--cx-from" as string]: resolveTheme(prefs).from, ["--cx-to" as string]: resolveTheme(prefs).to, ["--cx-fg" as string]: resolveTheme(prefs).fg } as React.CSSProperties}
+                      data-no-i18n
+                    >
+                      Hello! ✨
+                    </span>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="px-3 py-2">
               <p className="mb-2 flex items-center gap-2 font-sans text-xs text-muted">
                 <Smile className="size-3.5" /> ইমোজি বদলান <span className="text-subtle">(পাঠানোর বোতামে বসবে)</span>
               </p>
-              <div className="grid max-h-36 grid-cols-8 gap-0.5 overflow-y-auto">
-                {ALL_REACTIONS.map((e) => (
-                  <button key={e} type="button" onClick={() => update({ emoji: e })} className={cn("pressable grid size-8 place-items-center rounded-lg text-lg hover:bg-surface-2", prefs.emoji === e && "bg-surface-2 ring-1 ring-lamp")}>
-                    {e}
-                  </button>
-                ))}
-              </div>
+              <EmojiPicker recent={false} selected={prefs.emoji} onPick={(e) => update({ emoji: e })} height={170} />
             </div>
 
             <div className="px-3 py-2">

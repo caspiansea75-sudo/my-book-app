@@ -16,6 +16,8 @@ export type ChatPrefs = {
   name: string;
   photo: string; // small JPEG data-URL, or ""
   theme: string;
+  customFrom: string;
+  customTo: string;
   emoji: string;
   nicknames: Record<string, string>; // key = member id
 };
@@ -25,9 +27,33 @@ export const DEFAULT_PREFS: ChatPrefs = {
   name: "",
   photo: "",
   theme: "default",
+  customFrom: "#e11d48",
+  customTo: "#7c3aed",
   emoji: "👍",
   nicknames: {},
 };
+
+/** Is this colour bright? (so we can switch the text to dark) */
+function isLight(hex: string): boolean {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255) > 0.4;
+}
+
+/** The colours + text colour for the theme picked in these settings (default theme has no colours). */
+export function resolveTheme(p: Pick<ChatPrefs, "theme" | "customFrom" | "customTo">): { from: string; to: string; fg: string } {
+  if (p.theme === "custom") {
+    const light = isLight(p.customFrom) && isLight(p.customTo);
+    return { from: p.customFrom, to: p.customTo, fg: light ? "#111827" : "#ffffff" };
+  }
+  const t = CHAT_THEMES.find((x) => x.id === p.theme) ?? CHAT_THEMES[0];
+  return { from: t.from, to: t.to, fg: "#ffffff" };
+}
 
 const key = (meId: number, peerId: number | null) => `chat-prefs:${meId}:${peerId ?? "group"}`;
 

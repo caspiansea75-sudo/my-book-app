@@ -9,7 +9,7 @@
 /* My bubbles: theme gradient + slow shimmer */
 .cx-mine {
   background: linear-gradient(135deg, var(--cx-from, var(--color-accent)), var(--cx-to, var(--color-accent)));
-  color: #fff;
+  color: var(--cx-fg, #fff);
   position: relative;
   overflow: hidden;
   box-shadow: 0 4px 16px -8px var(--cx-from, var(--color-accent));
@@ -131,7 +131,7 @@ mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent
   .fx-type { clip-path: none; }
 }
 
-.cx-send-themed { background: linear-gradient(135deg, var(--cx-from), var(--cx-to)); }
+.cx-send-themed { background: linear-gradient(135deg, var(--cx-from), var(--cx-to)); color: var(--cx-fg, #fff); }
 
 /* ---------- New-message pop-ups (whole site) ---------- */
 .cx-toasts {
@@ -182,3 +182,10 @@ mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent
 .pr-on::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: #34d399; animation: pr-ping 1.8s ease-out infinite; }
 .pr-badge { position: absolute; right: -2px; bottom: -2px; border: 2px solid var(--color-surface); width: 13px; height: 13px; box-sizing: border-box; }
 @media (prefers-reduced-motion: reduce) { .pr-on::after { animation: none; display: none; } }
+
+/* ---------- Emoji picker ---------- */
+.cx-emoji { transition: transform 120ms ease, background-color 150ms; }
+.cx-emoji:hover { transform: scale(1.3); }
+@keyframes cx-picker-in { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: none; } }
+.cx-picker { animation: cx-picker-in 220ms cubic-bezier(.22,1,.36,1) both; transform-origin: bottom left; }
+@media (prefers-reduced-motion: reduce) { .cx-picker { animation: none; } .cx-emoji:hover { transform: none; } }
