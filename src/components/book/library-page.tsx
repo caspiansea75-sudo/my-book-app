@@ -16,7 +16,12 @@ import {
 } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { LibraryCard, type CardMeta } from "@/components/book/library-card";
-import { MangaShelf } from "@/components/book/manga-shelf";
+import {
+  MangaBody,
+  MangaFilterPanel,
+  MangaToolbar,
+  useMangaLibrary,
+} from "@/components/book/manga-shelf";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
@@ -258,14 +263,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
     return list.map((x) => x.book);
   }, [books, metas, prefs, terms]);
 
-  // Manga follow the search box only: they have no shelves, tags or sensitive flags, so the book filters don't apply.
-  const mangaShown = useMemo(() => {
-    if (!terms.length) return manga;
-    return manga.filter((m) => {
-      const hay = norm([m.title, m.titleEn ?? "", m.author, m.description].join(" "));
-      return terms.every((t) => hay.includes(t));
-    });
-  }, [manga, terms]);
+  const ml = useMangaLibrary(manga, terms, mounted);
 
   const continueBooks = useMemo(() => {
     if (!mounted) return [];
@@ -411,7 +409,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
               {(
                 [
                   { id: "books", label: "গল্প", n: filtered.length },
-                  { id: "manga", label: "মাঙ্গা", n: mangaShown.length },
+                  { id: "manga", label: "মাঙ্গা", n: ml.filtered.length },
                 ] as const
               ).map((t) => (
                 <button
@@ -440,8 +438,8 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
                 onKeyDown={(e) => {
                   if (e.key === "Escape") setQuery("");
                 }}
-                placeholder="বই, লেখক বা ট্যাগ খুঁজুন…"
-                aria-label="বই খুঁজুন"
+                placeholder={tab === "books" ? "বই, লেখক বা ট্যাগ খুঁজুন…" : "মাঙ্গা বা লেখক খুঁজুন…"}
+                aria-label={tab === "books" ? "বই খুঁজুন" : "মাঙ্গা খুঁজুন"}
                 className="field-input"
                 style={{ paddingLeft: 36, paddingRight: 36 }}
               />
@@ -530,23 +528,34 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
               <Shuffle className="size-4" />
             </button>
               </>
-            ) : null}
+            ) : (
+              <MangaToolbar ml={ml} />
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 font-sans text-xs text-muted">
             {tab === "books" ? (
               <span className="text-fg">{formatCount(filtered.length)}টি বই</span>
             ) : (
-              <span className="text-fg">{formatCount(mangaShown.length)}টি মাঙ্গা</span>
+              <span className="text-fg">{formatCount(ml.filtered.length)}টি মাঙ্গা</span>
             )}
             {tab === "books" && manual ? <span>টেনে এনে বা তীর বোতামে ক্রম বদলান</span> : null}
-            {query || (tab === "books" && activeCount) ? (
-              <button type="button" onClick={resetAll} className="pressable text-lamp">
+            {query || (tab === "books" ? activeCount : ml.activeCount) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  resetAll();
+                  ml.reset();
+                }}
+                className="pressable text-lamp"
+              >
                 সব ফিল্টার মুছুন
               </button>
             ) : null}
           </div>
         </div>
+
+        {tab === "manga" && ml.filtersOpen ? <MangaFilterPanel ml={ml} /> : null}
 
         {tab === "books" && filtersOpen ? (
           <div className="mt-3 space-y-3 rounded-2xl border border-border bg-surface p-4">
@@ -705,7 +714,16 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
         </div>
 
         {tab === "manga" ? (
-          <MangaShelf series={mangaShown} total={manga.length} searching={terms.length > 0} canCreate={Boolean(me)} />
+          <MangaBody
+            ml={ml}
+            terms={terms}
+            canCreate={Boolean(me)}
+            searching={terms.length > 0}
+            onResetAll={() => {
+              resetAll();
+              ml.reset();
+            }}
+          />
         ) : null}
       </section>
     </main>

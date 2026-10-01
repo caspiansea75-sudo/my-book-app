@@ -34,7 +34,7 @@ export type DragProps = {
   onDragEnd: () => void;
 };
 
-function Mark({ text, terms }: { text: string; terms: string[] }) {
+export function Mark({ text, terms }: { text: string; terms: string[] }) {
   if (!terms.length) return <>{text}</>;
   const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
   const parts = text.split(re);
@@ -70,7 +70,7 @@ function Pill({ children, tone }: { children: ReactNode; tone?: "lamp" | "warn" 
   );
 }
 
-function Badges({ meta, short }: { meta: CardMeta; short?: boolean }) {
+export function Badges({ meta, short }: { meta: CardMeta; short?: boolean }) {
   return (
     <>
       {meta.unread > 0 ? (
@@ -82,7 +82,7 @@ function Badges({ meta, short }: { meta: CardMeta; short?: boolean }) {
   );
 }
 
-function RoundBtn({
+export function RoundBtn({
   label,
   onClick,
   active,
@@ -113,7 +113,7 @@ function RoundBtn({
   );
 }
 
-function ShelfMenu({ shelf, onPick }: { shelf?: Shelf; onPick: (s: Shelf | null) => void }) {
+export function ShelfMenu({ shelf, onPick }: { shelf?: Shelf; onPick: (s: Shelf | null) => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -167,7 +167,7 @@ function ShelfMenu({ shelf, onPick }: { shelf?: Shelf; onPick: (s: Shelf | null)
   );
 }
 
-function Progress({ opened, total }: { opened: number; total: number }) {
+export function Progress({ opened, total }: { opened: number; total: number }) {
   if (opened <= 0 || total <= 0) return null;
   return (
     <span className="mt-3 block h-1 overflow-hidden rounded-full bg-surface-2">

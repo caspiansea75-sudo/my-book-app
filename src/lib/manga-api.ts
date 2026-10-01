@@ -23,6 +23,8 @@ export type MangaSeriesCard = {
   coverMediaId: number | null;
   chapterCount: number;
   titleEn?: string;
+  ownerId?: number | null;
+  createdAt?: number;
   /** Where "start reading" goes. Null while the series has no chapters yet. */
   firstChapterSlug?: string | null;
 };
@@ -129,8 +131,11 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     owner_name: string | null;
     title_en: string;
     first_chapter: string | null;
+    owner_id: number | null;
+    created_ms: number | string;
   }>`
-    select s.slug, s.title, s.title_en, s.description, s.cover_media_id, s.author,
+    select s.slug, s.title, s.title_en, s.description, s.cover_media_id, s.author, s.owner_id,
+      (extract(epoch from s.created_at) * 1000)::float8 as created_ms,
       (select fc.slug from manga_chapters fc where fc.series_id = s.id order by fc.sort_order asc, fc.id asc limit 1) as first_chapter,
       (select m.display_name from members m where m.id = s.owner_id) as owner_name,
       count(c.id) as chapter_count
@@ -148,6 +153,8 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     author: r.author || r.owner_name || "",
     titleEn: r.title_en,
     firstChapterSlug: r.first_chapter,
+    ownerId: r.owner_id,
+    createdAt: Number(r.created_ms) || 0,
   })) satisfies MangaSeriesCard[];
   const shown = list.map((x) => ({ ...x, hidden: hid.has(x.slug) }));
   return me.role === "admin" ? shown : shown.filter((x) => !x.hidden);

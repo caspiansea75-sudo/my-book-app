@@ -5,6 +5,7 @@ import { Lightbox, type LightboxItem } from "@/components/book/lightbox";
 import { Engagement } from "@/components/engagement/engagement";
 import { PageReader } from "@/components/manga/page-reader";
 import { getMangaChapterForReading } from "@/lib/manga-api";
+import { useMangaLibraryStore } from "@/lib/manga-library-store";
 
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/")({
   loader: async ({ params }) => {
@@ -26,6 +27,12 @@ function MangaReaderPage() {
   const [page, setPage] = useState(0);
   const total = chapter.panels.length;
   const pageKey = `manga-page:${chapter.seriesSlug}/${chapterSlug}`;
+  const markRead = useMangaLibraryStore((s) => s.markRead);
+
+  // Remember what has been read, for the library's progress bar, shelves and "continue reading".
+  useEffect(() => {
+    markRead(seriesSlug, chapterSlug);
+  }, [seriesSlug, chapterSlug, markRead]);
 
   useEffect(() => {
     try {
