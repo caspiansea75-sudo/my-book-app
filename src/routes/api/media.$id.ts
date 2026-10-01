@@ -11,32 +11,23 @@ export const Route = createFileRoute("/api/media/$id")({
           return new Response("Not found", { status: 404 });
         }
         const { memberFromCookieHeader, isHidden } = await import("@/lib/members-core");
-        const wantThumb = new URL(request.url).searchParams.get("thumb") === "1";
-        const sql = await getSql();
-
-        // Who is asking and the row itself are looked up at the same time (saves a database round trip).
-        // For a thumbnail we do NOT pull the full picture (`data`) out of Neon; only when there is no thumbnail.
-        const [viewer, rows] = await Promise.all([
-          memberFromCookieHeader(request.headers.get("cookie")),
-          sql<{
-            mime: string;
-            source: string;
-            url: string | null;
-            data: string | null;
-            thumb: string | null;
-            owner_id: number | null;
-            deleted_at: string | null;
-          }>`
-            select mime, source, url, owner_id, deleted_at,
-              case when ${wantThumb}::boolean then thumb else null end as thumb,
-              case when ${wantThumb}::boolean and thumb is not null then null else data end as data
-            from media where id = ${id} limit 1
-          `,
-        ]);
+        const viewer = await memberFromCookieHeader(request.headers.get("cookie"));
         if (!viewer) return new Response("Unauthorized", { status: 401 });
         if (viewer.role !== "admin" && (await isHidden("media", String(id)))) {
           return new Response("Not found", { status: 404 });
         }
+        const sql = await getSql();
+        const rows = await sql<{
+          mime: string;
+          source: string;
+          url: string | null;
+          data: string | null;
+          thumb: string | null;
+          owner_id: number | null;
+          deleted_at: string | null;
+        }>`
+          select mime, source, url, data, thumb, owner_id, deleted_at from media where id = ${id} limit 1
+        `;
         const row = rows[0];
         if (!row) return new Response("Not found", { status: 404 });
         // Files in the trash are only shown to their owner and the admin (for the Trash page).
@@ -44,6 +35,7 @@ export const Route = createFileRoute("/api/media/$id")({
           return new Response("Not found", { status: 404 });
         }
 
+        const wantThumb = new URL(request.url).searchParams.get("thumb") === "1";
         if (wantThumb && row.thumb) {
           if (row.thumb.startsWith("http")) {
             return Response.redirect(row.thumb, 302);
