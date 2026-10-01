@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
+import { getMediaFile, isBlobUrl } from "@/lib/blob-store.server";
 
 /**
  * Chat pictures and avatars. Signed-in members only, and a picture is only
@@ -21,8 +22,8 @@ export const Route = createFileRoute("/api/chat-image/$id")({
         if (!me) return new Response("Unauthorized", { status: 401 });
 
         const sql = await getSql();
-        const rows = await sql<{ mime: string; data: string }>`
-          select i.mime, i.data
+        const rows = await sql<{ mime: string; data: string | null; url: string | null }>`
+          select i.mime, i.data, i.url
           from chat_images i
           where i.id = ${id}
             and (
@@ -39,14 +40,21 @@ export const Route = createFileRoute("/api/chat-image/$id")({
         const row = rows[0];
         if (!row) return new Response("Not found", { status: 404 });
 
-        return new Response(Buffer.from(row.data, "base64"), {
-          headers: {
-            "Content-Type": row.mime || "image/jpeg",
-            "Cache-Control": "private, max-age=31536000, immutable",
-            Vary: "Cookie",
-            "X-Content-Type-Options": "nosniff",
-          },
-        });
+        const headers = {
+          "Content-Type": row.mime || "image/jpeg",
+          "Cache-Control": "private, max-age=31536000, immutable",
+          Vary: "Cookie",
+          "X-Content-Type-Options": "nosniff",
+        };
+
+        // Private Blob: access was already checked above, so stream it through the server.
+        if (row.url && isBlobUrl(row.url)) {
+          const file = await getMediaFile(row.url);
+          if (!file) return new Response("Not found", { status: 404 });
+          return new Response(file.stream, { headers });
+        }
+        if (!row.data) return new Response("Not found", { status: 404 });
+        return new Response(Buffer.from(row.data, "base64"), { headers });
       },
     },
   },

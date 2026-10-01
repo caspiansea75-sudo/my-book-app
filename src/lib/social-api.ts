@@ -163,6 +163,13 @@ export const updateProfile = createServerFn({ method: "POST" })
 
 /* -------------------------------------------------------------------- images */
 
+/** Remove files from Vercel Blob for chat_images rows that were just deleted. */
+async function purgeImageFiles(rows: { url: string | null }[]) {
+  if (!rows.length) return;
+  const { deleteMediaFile } = await import("@/lib/blob-store.server");
+  await Promise.all(rows.map((r) => deleteMediaFile(r.url)));
+}
+
 export const uploadChatImage = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -186,16 +193,22 @@ export const uploadChatImage = createServerFn({ method: "POST" })
     if ((recent[0]?.n ?? 0) >= 10) throw new Error(TOO_FAST);
 
     // Tidy up pictures that were uploaded but never sent or used.
-    await sql`
+    const stale = await sql<{ url: string | null }>`
       delete from chat_images i
       where i.created_at < now() - interval '1 hour'
         and not exists (select 1 from chat_messages c where c.image_id = i.id)
         and not exists (select 1 from members m where m.avatar_id = i.id)
+      returning i.url
     `;
+    await purgeImageFiles(stale);
 
+    // Picture -> Vercel Blob (link saved in Neon). If Blob is off or fails, keep it in Neon.
+    const b64 = bytes.toString("base64");
+    const { putMedia } = await import("@/lib/blob-store.server");
+    const blobUrl = await putMedia(b64, "image/jpeg");
     const rows = await sql<{ id: number }>`
-      insert into chat_images (owner_id, mime, data, bytes)
-      values (${me.id}, 'image/jpeg', ${bytes.toString("base64")}, ${bytes.length})
+      insert into chat_images (owner_id, mime, data, url, bytes)
+      values (${me.id}, 'image/jpeg', ${blobUrl ? null : b64}, ${blobUrl}, ${bytes.length})
       returning id
     `;
     const id = rows[0]?.id;
@@ -205,12 +218,14 @@ export const uploadChatImage = createServerFn({ method: "POST" })
 
 async function dropAvatarImage(id: number, ownerId: number) {
   const sql = await getSql();
-  await sql`
+  const gone = await sql<{ url: string | null }>`
     delete from chat_images i
     where i.id = ${id} and i.owner_id = ${ownerId}
       and not exists (select 1 from chat_messages c where c.image_id = i.id)
       and not exists (select 1 from members m where m.avatar_id = i.id)
+    returning i.url
   `;
+  await purgeImageFiles(gone);
 }
 
 export const setAvatar = createServerFn({ method: "POST" })
@@ -480,12 +495,14 @@ export const deleteMessage = createServerFn({ method: "POST" })
     if (!mine && !adminInGroup) throw new Error("এই বার্তা মোছার অনুমতি নেই");
     await sql`delete from chat_messages where id = ${data.id}`;
     if (msg.image_id) {
-      await sql`
+      const gone = await sql<{ url: string | null }>`
         delete from chat_images i
         where i.id = ${msg.image_id}
           and not exists (select 1 from chat_messages c where c.image_id = i.id)
           and not exists (select 1 from members m where m.avatar_id = i.id)
+        returning i.url
       `;
+      await purgeImageFiles(gone);
     }
     return { ok: true };
   });
