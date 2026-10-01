@@ -4,6 +4,7 @@ import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { listMembers } from "@/lib/members-api";
 import { StoryExport } from "@/components/members/story-export";
+import { StorageUsage } from "@/components/members/storage-usage";
 import { PresenceDot, PresenceLabel, usePresence } from "@/components/presence/presence";
 
 export const Route = createFileRoute("/members")({
@@ -70,6 +71,8 @@ function MembersPage() {
             ))}
           </div>
         )}
+
+        <StorageUsage />
 
         <StoryExport />
       </section>
