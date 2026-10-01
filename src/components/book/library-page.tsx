@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { LibraryCard, type CardMeta } from "@/components/book/library-card";
+import { MangaShelf } from "@/components/book/manga-shelf";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
+import type { MangaSeriesCard } from "@/lib/manga-api";
 import {
   LIB_DEFAULTS,
   SHELF_LABEL,
@@ -111,7 +113,7 @@ function FilterRow({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
+export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; manga?: MangaSeriesCard[] }) {
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
   const progress = useReaderStore((s) => s.progress);
@@ -238,6 +240,15 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
     }
     return list.map((x) => x.book);
   }, [books, metas, prefs, terms]);
+
+  // Manga follow the search box only: they have no shelves, tags or sensitive flags, so the book filters don't apply.
+  const mangaShown = useMemo(() => {
+    if (!terms.length) return manga;
+    return manga.filter((m) => {
+      const hay = norm([m.title, m.titleEn ?? "", m.author, m.description].join(" "));
+      return terms.every((t) => hay.includes(t));
+    });
+  }, [manga, terms]);
 
   const continueBooks = useMemo(() => {
     if (!mounted) return [];
@@ -570,7 +581,7 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
           </div>
         ) : null}
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && mangaShown.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-border p-10 text-center">
             <p className="font-display text-lg">কোনো বই মেলেনি</p>
             <p className="mt-1 font-sans text-sm text-muted">অন্য শব্দে খুঁজুন, অথবা ফিল্টার সরিয়ে দেখুন।</p>
@@ -642,6 +653,8 @@ export function LibraryPage({ books }: { books: LibraryBookCard[] }) {
             </Link>
           ) : null}
         </div>
+
+        <MangaShelf series={mangaShown} total={manga.length} searching={terms.length > 0} canCreate={Boolean(me)} />
       </section>
     </main>
   );

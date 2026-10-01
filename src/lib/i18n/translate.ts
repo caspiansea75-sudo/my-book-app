@@ -1,8 +1,9 @@
 import { EXACT, PATTERNS } from "@/lib/i18n/dict";
 import { CHAT_EXACT } from "@/lib/i18n/dict-chat";
+import { LIBRARY_EXACT, LIBRARY_PATTERNS } from "@/lib/i18n/dict-library";
 import { STUDIO_EXACT } from "@/lib/i18n/dict-studio";
 
-const PATTERN_LIST = PATTERNS.map(([src, en]) => [new RegExp(src), en] as const);
+const PATTERN_LIST = [...LIBRARY_PATTERNS, ...PATTERNS].map(([src, en]) => [new RegExp(src), en] as const);
 const BN_DIGITS = "০১২৩৪৫৬৭৮৯";
 const NUMERIC = /^[\s০-৯0-9.,/:–-]+$/;
 
@@ -19,6 +20,7 @@ export function translateText(text: string): string | null {
 }
 
 function lookup(core: string): string | null {
+  if (core in LIBRARY_EXACT) return LIBRARY_EXACT[core];
   if (core in STUDIO_EXACT) return STUDIO_EXACT[core];
   if (core in CHAT_EXACT) return CHAT_EXACT[core];
   if (core in EXACT) return EXACT[core];

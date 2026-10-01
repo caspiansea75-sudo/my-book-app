@@ -22,6 +22,9 @@ export type MangaSeriesCard = {
   description: string;
   coverMediaId: number | null;
   chapterCount: number;
+  titleEn?: string;
+  /** Where "start reading" goes. Null while the series has no chapters yet. */
+  firstChapterSlug?: string | null;
 };
 
 export type MangaChapterMeta = {
@@ -124,8 +127,11 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     chapter_count: string;
     author: string;
     owner_name: string | null;
+    title_en: string;
+    first_chapter: string | null;
   }>`
-    select s.slug, s.title, s.description, s.cover_media_id, s.author,
+    select s.slug, s.title, s.title_en, s.description, s.cover_media_id, s.author,
+      (select fc.slug from manga_chapters fc where fc.series_id = s.id order by fc.sort_order asc, fc.id asc limit 1) as first_chapter,
       (select m.display_name from members m where m.id = s.owner_id) as owner_name,
       count(c.id) as chapter_count
     from manga_series s
@@ -140,6 +146,8 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     coverMediaId: r.cover_media_id,
     chapterCount: Number(r.chapter_count),
     author: r.author || r.owner_name || "",
+    titleEn: r.title_en,
+    firstChapterSlug: r.first_chapter,
   })) satisfies MangaSeriesCard[];
   const shown = list.map((x) => ({ ...x, hidden: hid.has(x.slug) }));
   return me.role === "admin" ? shown : shown.filter((x) => !x.hidden);
