@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, X } from "lucide-react";
 import { Avatar } from "@/components/members/avatar";
 import { parseEffect } from "@/components/chat/chat-fx";
+import { MiniChat, type MiniTarget } from "@/components/chat/mini-chat";
 import { pollInbox, type InboxItem } from "@/lib/social-api";
 import { useMe } from "@/lib/use-me";
 import "@/components/chat/chat-fx.css";
@@ -63,6 +64,9 @@ export function MessageToasts() {
   const locRef = useRef(loc);
   locRef.current = loc;
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [mini, setMini] = useState<{ target: MiniTarget; minimized: boolean } | null>(null);
+  const miniRef = useRef(mini);
+  miniRef.current = mini;
   const lastId = useRef(0);
   const keySeq = useRef(0);
   const unseen = useRef(0);
@@ -70,6 +74,12 @@ export function MessageToasts() {
 
   const dismiss = useCallback((key: number) => setToasts((t) => t.filter((x) => x.key !== key)), []);
   const meId = me?.id ?? null;
+  const onChatPage = loc.path === "/chat";
+
+  // The full chat page takes over, so the little window goes away.
+  useEffect(() => {
+    if (onChatPage) setMini(null);
+  }, [onChatPage]);
 
   useEffect(() => {
     if (meId == null) return;
@@ -109,6 +119,9 @@ export function MessageToasts() {
           if (prefs.muted) continue;
           const viewing = visible && here.path === "/chat" && (here.search.with ?? null) === peerId;
           if (viewing) continue;
+          // The little chat window for this very conversation is open: it shows the message itself.
+          const m = miniRef.current;
+          if (visible && m && !m.minimized && m.target.peerId === peerId) continue;
           show.push({ ...it, key: ++keySeq.current, nick: prefs.nicknames[String(it.senderId)] || null });
         }
         if (!show.length) return;
@@ -132,22 +145,47 @@ export function MessageToasts() {
     };
   }, [meId]);
 
-  if (meId == null || toasts.length === 0) return null;
+  if (meId == null) return null;
+
+  function openFull(target: MiniTarget) {
+    setMini(null);
+    void navigate({ to: "/chat", search: target.peerId == null ? {} : { with: target.peerId } });
+  }
 
   return (
-    <div className="cx-toasts" role="region" aria-live="polite" aria-label="নতুন বার্তা">
-      {toasts.map((t) => (
-        <ToastCard
-          key={t.key}
-          t={t}
-          onClose={() => dismiss(t.key)}
-          onOpen={() => {
-            dismiss(t.key);
-            void navigate({ to: "/chat", search: t.isGroup ? {} : { with: t.senderId } });
-          }}
+    <>
+      {toasts.length > 0 ? (
+        <div className="cx-toasts" role="region" aria-live="polite" aria-label="নতুন বার্তা">
+          {toasts.map((t) => (
+            <ToastCard
+              key={t.key}
+              t={t}
+              onClose={() => dismiss(t.key)}
+              onOpen={() => {
+                const target: MiniTarget = t.isGroup
+                  ? { peerId: null, name: "সবার চ্যাট", avatarUrl: null }
+                  : { peerId: t.senderId, name: t.nick ?? t.senderName, avatarUrl: t.senderAvatarUrl };
+                // Clear every pop-up from this conversation, not just the one that was clicked.
+                setToasts((cur) => cur.filter((x) => (x.isGroup ? null : x.senderId) !== target.peerId));
+                // Already on the chat page: just switch conversation there. Anywhere else: a small window.
+                if (locRef.current.path === "/chat") openFull(target);
+                else setMini({ target, minimized: false });
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      {mini && !onChatPage ? (
+        <MiniChat
+          meId={meId}
+          target={mini.target}
+          minimized={mini.minimized}
+          onMinimize={(v) => setMini((cur) => (cur ? { ...cur, minimized: v } : cur))}
+          onClose={() => setMini(null)}
+          onExpand={() => openFull(mini.target)}
         />
-      ))}
-    </div>
+      ) : null}
+    </>
   );
 }
 

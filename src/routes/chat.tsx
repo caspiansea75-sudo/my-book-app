@@ -47,6 +47,7 @@ import { ChatInfoPanel } from "@/components/chat/chat-info";
 import { PresenceDot, PresenceLabel, usePresence, type PresenceMap } from "@/components/presence/presence";
 import { EFFECTS, MsgText, heartAt, reactToText } from "@/components/chat/chat-fx";
 import { resolveTheme, useChatPrefs } from "@/lib/chat-prefs";
+import { mergeThread } from "@/lib/chat-merge";
 import { EmojiPicker } from "@/components/chat/emoji-picker";
 
 type Member = NonNullable<ReturnType<typeof useMe>>;
@@ -176,20 +177,6 @@ function ChatShell({ me }: { me: Member }) {
       </section>
     </main>
   );
-}
-
-function mergeThread(prev: ChatMessage[], res: ThreadResult): ChatMessage[] {
-  let next = prev;
-  if (res.latestIds.length === 0) {
-    next = [];
-  } else {
-    const keep = new Set(res.latestIds);
-    const oldest = Math.min(...res.latestIds);
-    next = next.filter((m) => m.id < oldest || keep.has(m.id));
-  }
-  const have = new Set(next.map((m) => m.id));
-  const fresh = res.messages.filter((m) => !have.has(m.id));
-  return fresh.length ? [...next, ...fresh] : next;
 }
 
 type Pop = { id: number; kind: "react" | "more"; rect: DOMRect };
