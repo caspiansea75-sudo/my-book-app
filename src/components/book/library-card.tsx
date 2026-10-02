@@ -227,7 +227,7 @@ export function LibraryCard({
       id={`book-${book.slug}`}
       style={fxIndex(index)}
       className={cn(
-        "mf-tile mf-rise group relative scroll-mt-28 rounded-xl",
+        "mf-tile mf-rise group relative scroll-mt-56 rounded-xl",
         over && "ring-2 ring-lamp",
         manual && "cursor-grab",
         book.hidden && "opacity-50",

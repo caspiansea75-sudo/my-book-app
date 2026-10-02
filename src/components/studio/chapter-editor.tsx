@@ -811,7 +811,7 @@ export function ChapterEditor({
           </div>
         ) : null}
 
-        <div className="sticky top-2 z-20 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface/95 p-1.5 backdrop-blur">
+        <div className="sticky top-[4.5rem] z-20 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-surface/95 p-1.5 backdrop-blur">
           <TopBtn label="আনডু" onClick={undo} disabled={hist.u === 0 && blocks === lastCommitted.current}>
             <Undo2 className="size-3.5" />
           </TopBtn>

@@ -752,7 +752,7 @@ function MediaPage() {
         </nav>
 
         {/* Toolbar */}
-        <div className="sticky top-2 z-30 mt-4 space-y-2 rounded-2xl border border-border bg-bg/85 p-2 backdrop-blur-md">
+        <div className="sticky top-[4.5rem] z-30 mt-4 space-y-2 rounded-2xl border border-border bg-bg/85 p-2 backdrop-blur-md">
           <div className="flex flex-wrap items-center gap-2">
             <label className="relative min-w-52 flex-1">
               <span className="sr-only">ফাইল বা ফোল্ডার খুঁজুন</span>

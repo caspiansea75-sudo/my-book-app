@@ -85,7 +85,7 @@ export function MangaCard({
       id={`manga-${series.slug}`}
       style={fxIndex(index)}
       className={cn(
-        "mf-tile mf-rise group relative scroll-mt-28 rounded-xl",
+        "mf-tile mf-rise group relative scroll-mt-56 rounded-xl",
         over && "ring-2 ring-lamp",
         manual && "cursor-grab",
         series.hidden && "opacity-50",

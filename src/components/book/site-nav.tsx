@@ -22,7 +22,7 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] | "pr
     return true;
   });
   return (
-    <header className="relative z-20 border-b border-border/80 bg-bg/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-border/80 bg-bg/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link to="/" className="pressable flex min-w-0 items-center gap-2 text-fg">
           <span className="grid size-8 place-items-center rounded-md bg-surface-2 text-lamp">

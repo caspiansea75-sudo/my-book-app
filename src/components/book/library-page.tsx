@@ -403,7 +403,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           </div>
         ) : null}
 
-        <div className="sticky top-2 z-30 mt-10 space-y-2 rounded-2xl border border-border bg-bg/85 p-2 backdrop-blur-md">
+        <div className="sticky top-[4.5rem] z-30 mt-10 space-y-2 rounded-2xl border border-border bg-bg/85 p-2 backdrop-blur-md">
           {manga.length > 0 || me ? (
             <div role="tablist" className="flex gap-1 rounded-full border border-border p-0.5">
               {(
