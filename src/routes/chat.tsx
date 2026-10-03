@@ -128,7 +128,7 @@ function ChatShell({ me }: { me: Member }) {
             </span>
             <span className="font-display text-base">সবার চ্যাট</span>
           </button>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="cx-scroll min-h-0 flex-1 overflow-y-auto">
             {people.length === 0 ? (
               <p className="px-3 py-4 font-sans text-xs text-muted">এখনো আর কেউ যোগ দেয়নি।</p>
             ) : null}
@@ -609,7 +609,7 @@ function Thread({
         </button>
       ) : null}
 
-      <div ref={box} onScroll={() => { onScroll(); if (pop) closePop(); }} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-4">
+      <div ref={box} onScroll={() => { onScroll(); if (pop) closePop(); }} className="cx-scroll min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 sm:px-4">
         {loading ? <p className="text-center font-sans text-sm text-muted">লোড হচ্ছে…</p> : null}
         {!loading && messages.length === 0 ? (
           <p className="py-10 text-center font-sans text-sm text-muted">
@@ -1094,7 +1094,7 @@ function PickDialog({ title, onClose, children }: { title: string; onClose: () =
       />
       <div className="relative flex max-h-[80dvh] w-full max-w-sm flex-col rounded-xl border border-border bg-surface p-4 shadow-xl">
         <h2 className="mb-2 font-display text-lg">{title}</h2>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="cx-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
         <button
           type="button"
           onClick={onClose}

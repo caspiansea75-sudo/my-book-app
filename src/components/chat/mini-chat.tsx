@@ -175,7 +175,7 @@ export function MiniChat({
           ) : (
             <Avatar name={target.name} url={target.avatarUrl} size={32} />
           )}
-          <span data-no-i18n className="truncate font-display text-sm text-fg">
+          <span data-no-i18n={peerId != null ? true : undefined} className="truncate font-display text-sm text-fg">
             {title}
           </span>
         </button>
@@ -210,7 +210,7 @@ export function MiniChat({
 
       {!minimized ? (
         <>
-          <div ref={box} onScroll={onScroll} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+          <div ref={box} onScroll={onScroll} className="cx-scroll min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
             {loading ? (
               <p className="py-6 text-center font-sans text-xs text-muted">লোড হচ্ছে…</p>
             ) : messages.length === 0 ? (

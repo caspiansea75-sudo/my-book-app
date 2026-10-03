@@ -21,6 +21,15 @@ export const GALLERY_EXACT: Record<string, string> = {
   "সাবফোল্ডার বানান": "Create subfolder",
   "মেলে এমন ফোল্ডার": "Matching folders",
 
+  // Mini chat window
+  "বন্ধ করুন": "Close",
+  "চ্যাট খুলুন": "Open chat",
+  "চ্যাট ছোট করুন": "Minimise chat",
+  "পুরো চ্যাট পেজে খুলুন": "Open in the full chat page",
+  "বড় করুন": "Expand",
+  "ছোট করুন": "Minimise",
+  "এখনো কোনো বার্তা নেই।": "No messages yet.",
+
   // Manual 18+ switch
   "১৮+": "18+",
   "১৮+ চিহ্নিত": "Marked 18+",
@@ -49,6 +58,7 @@ export const GALLERY_EXACT: Record<string, string> = {
 
 /** Counts rendered as one piece of text, e.g. "৩টি ফাইল", "২ সাবফোল্ডার", "মোট ১২", "(৩)". */
 export const GALLERY_PATTERNS: [string, string][] = [
+  ["^(.+) এর সাথে চ্যাট$", "Chat with {1}"],
   ["^(১|1)টি ফাইল$", "1 file"],
   ["^([০-৯0-9,]+)টি ফাইল$", "{1} files"],
   ["^(১|1)টি ফোল্ডার$", "1 folder"],
