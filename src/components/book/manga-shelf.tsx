@@ -67,7 +67,7 @@ export function useMangaLibrary(manga: MangaSeriesCard[], terms: string[], mount
         opened,
         unread: opened > 0 ? Math.max(0, m.chapterCount - opened) : 0,
         status: prefs.shelves[m.slug] ?? auto,
-        sensitive: false,
+        sensitive: m.adult ?? false,
         fav: prefs.favs.includes(m.slug),
       });
     }

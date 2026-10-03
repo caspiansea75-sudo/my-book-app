@@ -14,6 +14,7 @@ import { CoverArt } from "@/components/book/cover-art";
 import { fxIndex } from "@/components/media/fx";
 import { formatCount, type LibraryBookCard } from "@/lib/book";
 import { SHELF_LABEL, type LibView, type Shelf } from "@/lib/library-store";
+import { AdultToggle } from "@/components/members/adult-toggle";
 import { HideToggle } from "@/components/members/hide-toggle";
 import { canEditOwner, useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
@@ -348,6 +349,7 @@ export function LibraryCard({
         <RoundBtn label="প্রিয়" active={meta.fav} onClick={onFav}>
           <Heart className={cn("size-4", meta.fav && "fill-current")} />
         </RoundBtn>
+        <AdultToggle kind="book" id={book.slug} adult={meta.sensitive} ownerId={book.ownerId ?? null} />
         <HideToggle kind="book" id={book.slug} hidden={!!book.hidden} />
         <ShelfMenu shelf={meta.status} onPick={onShelf} />
         {canEditOwner(me, book.ownerId) && book.origin === "studio" ? (

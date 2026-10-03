@@ -4,6 +4,7 @@ import { BookImage, ImagePlus, PenLine, Play, Plus, Trash2 } from "lucide-react"
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
 import { AuthorLine } from "@/components/members/author-line";
+import { AdultToggle } from "@/components/members/adult-toggle";
 import { HideToggle } from "@/components/members/hide-toggle";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
@@ -167,7 +168,16 @@ function MangaSeriesPage() {
               <>
                 <h1 className="font-display text-3xl font-semibold sm:text-4xl"><FxWords text={series.title} /></h1>
                 <AuthorLine kind="manga" slug={series.slug} author={series.author} canEdit={canEdit} />
-                <HideToggle kind="manga" id={series.slug} hidden={!!series.hidden} variant="pill" className="mt-3" />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <AdultToggle
+                    kind="manga"
+                    id={series.slug}
+                    adult={!!series.adult}
+                    ownerId={series.ownerId ?? null}
+                    variant="pill"
+                  />
+                  <HideToggle kind="manga" id={series.slug} hidden={!!series.hidden} variant="pill" />
+                </div>
                 {series.description ? (
                   <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">{series.description}</p>
                 ) : null}

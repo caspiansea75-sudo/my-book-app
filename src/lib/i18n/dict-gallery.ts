@@ -20,6 +20,13 @@ export const GALLERY_EXACT: Record<string, string> = {
   "নতুন সাবফোল্ডার": "New subfolder",
   "সাবফোল্ডার বানান": "Create subfolder",
   "মেলে এমন ফোল্ডার": "Matching folders",
+
+  // Manual 18+ switch
+  "১৮+": "18+",
+  "১৮+ চিহ্নিত": "Marked 18+",
+  "১৮+ নয়": "Not 18+",
+  "১৮+ চিহ্ন সরান": "Remove the 18+ mark",
+  "১৮+ হিসেবে চিহ্নিত করুন": "Mark as 18+",
   // Manga panel picker (chapter editor)
   "ফোল্ডারের বাইরের ছবি": "Images outside folders",
   "সাবফোল্ডার আছে": "Has subfolders",

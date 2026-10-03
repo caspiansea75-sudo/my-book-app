@@ -178,6 +178,13 @@ export async function hiddenSet(kind: HiddenKind): Promise<Set<string>> {
   return new Set(rows.map((r) => r.key));
 }
 
+/** Manual 18+ marks: slug -> true/false. A slug with no entry has not been marked either way. */
+export async function adultMap(kind: "book" | "manga"): Promise<Map<string, boolean>> {
+  const sql = await getSql();
+  const rows = await sql<{ key: string; adult: boolean }>`select key, adult from adult_flags where kind = ${kind}`;
+  return new Map(rows.map((r) => [r.key, r.adult]));
+}
+
 export async function isHidden(kind: HiddenKind, key: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ key: string }>`select key from hidden_items where kind = ${kind} and key = ${key} limit 1`;

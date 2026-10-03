@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { assertBookAccess, assertMediaAccess, hiddenSet, isHidden, requireMember } from "@/lib/members-core";
+import {
+  adultMap,
+  assertBookAccess,
+  assertMediaAccess,
+  hiddenSet,
+  isHidden,
+  requireMember,
+} from "@/lib/members-core";
 import {
   emptyChapterBody,
   getCanonBook,
@@ -266,6 +273,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
   const sql = await getSql();
   const covers = await coverMap();
   const authors = await authorMap();
+  const adults = await adultMap("book");
   const studioRows = await sql<BookRow>`
     select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at,
       (select m.display_name from members m where m.id = library_books.owner_id) as owner_name
@@ -298,6 +306,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
       origin: "studio",
       coverUrl: row.cover_media_id ? mediaSrc(row.cover_media_id) : covers.get(row.slug) ?? null,
       nsfwCount: 0,
+      adult: adults.get(row.slug) ?? false,
       createdAt: toMs(row.created_at),
       ownerId: row.owner_id ?? null,
     };
@@ -314,6 +323,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     origin: "canon",
     coverUrl: covers.get(book.slug) ?? null,
     nsfwCount: book.nsfwCount,
+    adult: adults.get(book.slug) ?? book.nsfwCount > 0,
     createdAt: 0,
     ownerId: null,
   }));
@@ -329,9 +339,11 @@ export const resolveBook = createServerFn({ method: "GET" })
     const canon = getCanonBook(data.slug);
     const covers = await coverMap();
     const authors = await authorMap();
+    const adults = await adultMap("book");
     if (canon) {
       return {
         ...canon,
+        adult: adults.get(canon.slug) ?? canon.nsfwCount > 0,
         author: authors.get(canon.slug) ?? cleanAuthor(canon.author),
         origin: "canon" as const,
         coverUrl: covers.get(canon.slug) ?? null,
@@ -350,7 +362,8 @@ export const resolveBook = createServerFn({ method: "GET" })
     if (!row) return null;
     // Drafts are only ever listed for the author and the admin, and only when asked for (the studio).
     const withDrafts = Boolean(data.drafts) && (me.role === "admin" || row.owner_id === me.id);
-    return studioBookIndex(row, withDrafts);
+    const index = await studioBookIndex(row, withDrafts);
+    return { ...index, adult: adults.get(row.slug) ?? false };
   });
 
 export const loadStudioChapter = createServerFn({ method: "GET" })

@@ -66,6 +66,8 @@ export type BookIndex = {
   coverUrl?: string | null;
   /** Member who created it (null = made before accounts, or an original book). */
   ownerId?: number | null;
+  /** Marked 18+ by hand (or, for the old bundled stories, until someone decides otherwise). */
+  adult?: boolean;
 };
 
 export type LibraryBookCard = {
@@ -80,6 +82,8 @@ export type LibraryBookCard = {
   origin: BookOrigin;
   coverUrl: string | null;
   nsfwCount?: number;
+  /** 18+ mark: set by hand; the old bundled stories fall back to their flagged-paragraph count. */
+  adult?: boolean;
   createdAt?: number;
   ownerId?: number | null;
 };

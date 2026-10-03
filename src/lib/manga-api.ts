@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { assertPanelAccess, assertSeriesAccess, hiddenSet, isHidden, requireMember } from "@/lib/members-core";
+import {
+  adultMap,
+  assertPanelAccess,
+  assertSeriesAccess,
+  hiddenSet,
+  isHidden,
+  requireMember,
+} from "@/lib/members-core";
 import { slugifyTitle } from "@/lib/book";
 
 function uniqueSlug(base: string, taken: Set<string>): string {
@@ -17,6 +24,8 @@ function uniqueSlug(base: string, taken: Set<string>): string {
 export type MangaSeriesCard = {
   author: string;
   hidden?: boolean;
+  /** Marked 18+ by hand. New manga start as not 18+. */
+  adult?: boolean;
   slug: string;
   title: string;
   description: string;
@@ -120,6 +129,7 @@ export const updateMangaChapterTitle = createServerFn({ method: "POST" })
 export const listMangaSeries = createServerFn({ method: "GET" }).handler(async () => {
   const me = await requireMember();
   const hid = await hiddenSet("manga");
+  const adults = await adultMap("manga");
   const sql = await getSql();
   const rows = await sql<{
     slug: string;
@@ -154,6 +164,7 @@ export const listMangaSeries = createServerFn({ method: "GET" }).handler(async (
     titleEn: r.title_en,
     firstChapterSlug: r.first_chapter,
     ownerId: r.owner_id,
+    adult: adults.get(r.slug) ?? false,
     createdAt: Number(r.created_ms) || 0,
   })) satisfies MangaSeriesCard[];
   const shown = list.map((x) => ({ ...x, hidden: hid.has(x.slug) }));
@@ -223,8 +234,10 @@ export const getMangaSeries = createServerFn({ method: "GET" })
       order by c.sort_order asc, c.id asc
     `;
 
+    const adults = await adultMap("manga");
     return {
       hidden: hiddenNow,
+      adult: adults.get(series.slug) ?? false,
       author: series.author || series.owner_name || "",
       slug: series.slug,
       title: series.title,

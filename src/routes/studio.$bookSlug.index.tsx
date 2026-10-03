@@ -4,6 +4,7 @@ import { ChevronLeft, ImagePlus, Plus } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
+import { AdultToggle } from "@/components/members/adult-toggle";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { formatCount } from "@/lib/book";
 import {
@@ -117,6 +118,14 @@ function StudioBookPage() {
                 ? ` · ${formatCount(book.chapters.filter((c: { status?: string }) => c.status === "draft").length)} টি খসড়া`
                 : ""}
             </p>
+            <AdultToggle
+              kind="book"
+              id={book.slug}
+              adult={!!book.adult}
+              ownerId={book.ownerId ?? null}
+              variant="pill"
+              className="mt-3"
+            />
 
             {canon ? (
               <p className="mt-5 rounded-lg border border-border bg-surface px-4 py-3 font-sans text-sm text-muted">

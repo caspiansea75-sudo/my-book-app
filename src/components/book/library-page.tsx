@@ -176,7 +176,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
         opened,
         unread: opened > 0 ? Math.max(0, b.chapterCount - opened) : 0,
         status: prefs.shelves[b.slug] ?? auto,
-        sensitive: (b.nsfwCount ?? 0) > 0,
+        sensitive: b.adult ?? (b.nsfwCount ?? 0) > 0,
         fav: prefs.favs.includes(b.slug),
         tags: splitTags(b.tagline),
       });
@@ -184,7 +184,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
     return out;
   }, [books, openedMap, prefs.shelves, prefs.favs]);
 
-  const anySensitive = useMemo(() => books.some((b) => (b.nsfwCount ?? 0) > 0), [books]);
+  const anySensitive = useMemo(() => books.some((b) => b.adult ?? (b.nsfwCount ?? 0) > 0), [books]);
 
   const tagList = useMemo(() => {
     const counts = new Map<string, number>();
