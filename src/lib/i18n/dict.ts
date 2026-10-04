@@ -320,7 +320,7 @@ export const EXACT: Record<string, string> = {
  "মূল সংগ্রহ": "Original collection",
  "স্টুডিও বই": "Studio book",
  "প্রচ্ছদ": "Cover",
- "এই বইয়ের লেখা অপরিবর্তিত। প্রচ্ছদ বদলান, আর যেকোনো অধ্যায়ে ছবি বা ভিডিও বসান।": "This book's text is unchanged. Change the cover, and place images or videos in any chapter.",
+ "মূল অধ্যায়ের লেখা অপরিবর্তিত। প্রচ্ছদ বদলান, মূল অধ্যায়ে ছবি বা ভিডিও বসান, আর নিচের \"নতুন অধ্যায়\" বোতামে বই চালিয়ে নতুন অধ্যায় যোগ করুন।": "The original chapters' text stays unchanged. Change the cover, add images or videos to original chapters, and use the \"New chapter\" button below to continue the book with new chapters.",
  "বই মুছুন": "Delete book",
  "প্রচ্ছদের ছবি": "Cover image",
  "অধ্যায়": "Chapters",

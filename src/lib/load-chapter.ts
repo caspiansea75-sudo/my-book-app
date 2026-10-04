@@ -12,7 +12,8 @@ import {
 
 export async function loadChapterForBook(book: BookIndex, rawSlug: string): Promise<Chapter> {
   const slug = padSlug(rawSlug);
-  if (book.origin === "studio") {
+  const meta = book.chapters.find((c) => c.slug === slug);
+  if (book.origin === "studio" || meta?.extra) {
     const chapter = await loadStudioChapter({ data: { bookSlug: book.slug, slug } });
     if (!chapter) throw new Error("এই আপডেটটি পাওয়া যায়নি");
     return chapter;

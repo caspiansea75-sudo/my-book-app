@@ -14,6 +14,8 @@ import { fxIndex } from "@/components/media/fx";
 import { AdultToggle } from "@/components/members/adult-toggle";
 import { HideToggle } from "@/components/members/hide-toggle";
 import { formatCount } from "@/lib/book";
+import { StatsLine } from "@/components/engagement/stats-line";
+import type { ContentStats } from "@/lib/engagement-api";
 import type { LibView, Shelf } from "@/lib/library-store";
 import type { MangaSeriesCard } from "@/lib/manga-api";
 import { mediaSrc } from "@/lib/media-url";
@@ -36,8 +38,10 @@ export function MangaCard({
   onFav,
   onShelf,
   onMove,
+  stats,
 }: {
   index?: number;
+  stats?: ContentStats;
   series: MangaSeriesCard;
   view: LibView;
   meta: CardMeta;
@@ -120,6 +124,7 @@ export function MangaCard({
                 <BookImage className="size-3.5" strokeWidth={1.75} />
                 {count(series.chapterCount)}
               </span>
+              <StatsLine stats={stats} size="xs" className="mt-1.5" />
               <Progress opened={meta.opened} total={series.chapterCount} />
             </span>
           </Link>
@@ -144,6 +149,7 @@ export function MangaCard({
               {series.author ? `${series.author} · ` : ""}
               {count(series.chapterCount)}
             </span>
+            <StatsLine stats={stats} size="xs" className="mt-1.5" />
             <Progress opened={meta.opened} total={series.chapterCount} />
           </span>
         </Link>

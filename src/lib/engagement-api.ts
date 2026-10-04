@@ -22,6 +22,7 @@ export type Comment = {
   canDelete: boolean;
 };
 export type Engagement = {
+  viewCount: number;
   likeCount: number;
   liked: boolean;
   commentCount: number;
@@ -102,6 +103,9 @@ export const getEngagement = createServerFn({ method: "GET" })
     const total = await sql<{ n: number }>`
       select count(*)::int as n from content_comments where kind = ${data.kind} and target = ${key}
     `;
+    const views = await sql<{ n: number }>`
+      select count(*)::int as n from content_views where kind = ${data.kind} and target = ${key}
+    `;
     // Newest MAX_LIST comments, shown oldest-first.
     const rows = await sql<CommentRow>`
       select * from (
@@ -114,6 +118,7 @@ export const getEngagement = createServerFn({ method: "GET" })
     `;
     return {
       ...likes,
+      viewCount: views[0]?.n ?? 0,
       commentCount: total[0]?.n ?? 0,
       comments: rows.map((r) => toComment(r, me)),
     };
@@ -194,4 +199,62 @@ export const deleteComment = createServerFn({ method: "POST" })
     if (me.role !== "admin" && row.member_id !== me.id) throw new Error("এই মন্তব্য মোছার অনুমতি নেই");
     await sql`delete from content_comments where id = ${data.id}`;
     return { ok: true };
+  });
+
+/**
+ * Counts a view of one chapter. A member counts once per chapter per day, so reloading the page
+ * does not push the number up.
+ */
+export const recordView = createServerFn({ method: "POST" })
+  .validator(targetSchema)
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertTarget(me, data);
+    const sql = await getSql();
+    await sql`
+      insert into content_views (member_id, kind, target)
+      values (${me.id}, ${data.kind}, ${keyOf(data)})
+      on conflict do nothing
+    `;
+    return { ok: true };
+  });
+
+export type ContentStats = { views: number; likes: number; comments: number };
+
+/**
+ * Views, likes and comments added up per story / per manga series (all of its chapters).
+ * Pass `parents` to get only some of them.
+ */
+export const getContentStats = createServerFn({ method: "GET" })
+  .validator(z.object({ kind: z.enum(["story", "manga"]), parents: z.array(slugPart).max(300).optional() }))
+  .handler(async ({ data }): Promise<Record<string, ContentStats>> => {
+    await requireMember();
+    const sql = await getSql();
+    const parents = data.parents ?? null;
+    const out: Record<string, ContentStats> = {};
+    const add = (rows: { parent: string; n: number }[], field: keyof ContentStats) => {
+      for (const r of rows) (out[r.parent] ??= { views: 0, likes: 0, comments: 0 })[field] = Number(r.n);
+    };
+    add(
+      await sql<{ parent: string; n: number }>`
+        select split_part(target, ':', 1) as parent, count(*)::int as n from content_views
+        where kind = ${data.kind} and (${parents}::text[] is null or split_part(target, ':', 1) = any(${parents}::text[]))
+        group by 1`,
+      "views",
+    );
+    add(
+      await sql<{ parent: string; n: number }>`
+        select split_part(target, ':', 1) as parent, count(*)::int as n from content_likes
+        where kind = ${data.kind} and (${parents}::text[] is null or split_part(target, ':', 1) = any(${parents}::text[]))
+        group by 1`,
+      "likes",
+    );
+    add(
+      await sql<{ parent: string; n: number }>`
+        select split_part(target, ':', 1) as parent, count(*)::int as n from content_comments
+        where kind = ${data.kind} and (${parents}::text[] is null or split_part(target, ':', 1) = any(${parents}::text[]))
+        group by 1`,
+      "comments",
+    );
+    return out;
   });

@@ -225,13 +225,16 @@ export function ChapterEditor({
   book,
   chapter,
   slug,
+  extra = false,
 }: {
   book: BookIndex;
   chapter: Chapter | null;
   slug?: string;
+  /** A chapter added from the Studio: fully editable even when the story itself is an original one. */
+  extra?: boolean;
 }) {
   const navigate = useNavigate();
-  const canon = book.origin !== "studio";
+  const canon = book.origin !== "studio" && !extra;
   const [title, setTitle] = useState(chapter?.title ?? "");
   const [titleEn, setTitleEn] = useState(chapter?.titleEn ?? "");
   const [excerpt, setExcerpt] = useState(chapter?.excerpt ?? "");

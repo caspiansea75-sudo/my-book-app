@@ -10,6 +10,7 @@ import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
+import { StatsLine, useContentStats } from "@/components/engagement/stats-line";
 import { useCanEdit } from "@/lib/use-me";
 import {
   createMangaChapter,
@@ -35,6 +36,7 @@ export const Route = createFileRoute("/manga/$seriesSlug/")({
 function MangaSeriesPage() {
   const { series, media } = Route.useLoaderData();
   const canEdit = useCanEdit(series.ownerId);
+  const totals = useContentStats("manga", [series.slug]);
   const router = useRouter();
   const navigate = useNavigate();
 
@@ -167,6 +169,7 @@ function MangaSeriesPage() {
             ) : (
               <>
                 <h1 className="font-display text-3xl font-semibold sm:text-4xl"><FxWords text={series.title} /></h1>
+                <StatsLine stats={totals[series.slug]} className="mt-2" />
                 <AuthorLine kind="manga" slug={series.slug} author={series.author} canEdit={canEdit} />
                 <div className="mt-3 flex flex-wrap gap-2">
                   <AdultToggle

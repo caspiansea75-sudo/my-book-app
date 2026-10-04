@@ -14,7 +14,6 @@ export const Route = createFileRoute("/studio/$bookSlug/$slug")({
     if (!book) throw notFound();
     if (!canEditOwner(context.me, book.ownerId)) throw redirect({ to: "/studio" });
     if (params.slug === "new") {
-      if (book.origin !== "studio") throw notFound();
       return { book, slug: undefined as string | undefined };
     }
     return { book, slug: params.slug };
@@ -71,7 +70,13 @@ function StudioChapterPage() {
               <div className="h-40 animate-pulse rounded-xl bg-surface" />
             </div>
           ) : (
-            <ChapterEditor key={slug ?? "new"} book={book} chapter={chapter} slug={slug} />
+            <ChapterEditor
+              key={slug ?? "new"}
+              book={book}
+              chapter={chapter}
+              slug={slug}
+              extra={book.origin === "studio" || !slug || Boolean(chapter?.extra)}
+            />
           )}
         </div>
       </section>

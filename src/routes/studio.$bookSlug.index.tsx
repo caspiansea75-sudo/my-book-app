@@ -129,7 +129,7 @@ function StudioBookPage() {
 
             {canon ? (
               <p className="mt-5 rounded-lg border border-border bg-surface px-4 py-3 font-sans text-sm text-muted">
-                এই বইয়ের লেখা অপরিবর্তিত। প্রচ্ছদ বদলান, আর যেকোনো অধ্যায়ে ছবি বা ভিডিও বসান।
+                মূল অধ্যায়ের লেখা অপরিবর্তিত। প্রচ্ছদ বদলান, মূল অধ্যায়ে ছবি বা ভিডিও বসান, আর নিচের "নতুন অধ্যায়" বোতামে বই চালিয়ে নতুন অধ্যায় যোগ করুন।
               </p>
             ) : (
               <form onSubmit={(e) => void saveMeta(e)} className="mt-6 space-y-3">
@@ -188,7 +188,6 @@ function StudioBookPage() {
 
         <div className="mt-12 flex items-end justify-between gap-3">
           <h2 className="font-display text-2xl">অধ্যায়</h2>
-          {!canon ? (
             <Link
               to="/studio/$bookSlug/$slug"
               params={{ bookSlug: book.slug, slug: "new" }}
@@ -197,7 +196,6 @@ function StudioBookPage() {
               <Plus className="size-4" />
               নতুন অধ্যায়
             </Link>
-          ) : null}
         </div>
 
         <ol className="mt-5 grid gap-2">
@@ -211,7 +209,7 @@ function StudioBookPage() {
                 <span>
                   <span className="flex items-center gap-2 font-display text-base">
                     {ch.title}
-                    {!canon && ch.status === "draft" ? (
+                    {ch.status === "draft" ? (
                       <span className="rounded-full border border-border bg-surface-2 px-2 py-0.5 font-sans text-[10px] text-muted">
                         খসড়া
                       </span>
@@ -220,7 +218,7 @@ function StudioBookPage() {
                   <span className="mt-1 block font-sans text-xs text-muted">{ch.excerpt}</span>
                 </span>
                 <span className="shrink-0 font-sans text-xs text-lamp">
-                  {canon ? "ছবি যোগ" : "সম্পাদনা"}
+                  {canon && !ch.extra ? "ছবি যোগ" : "সম্পাদনা"}
                 </span>
               </Link>
             </li>

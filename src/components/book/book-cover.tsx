@@ -6,11 +6,13 @@ import { AmbientAudio } from "@/components/book/ambient-audio";
 import { WarningGate } from "@/components/book/warning-gate";
 import { formatCount, type BookIndex } from "@/lib/book";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
+import { StatsLine, useContentStats } from "@/components/engagement/stats-line";
 import { canEditOwner, useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 export function BookCoverPage({ book }: { book: BookIndex }) {
   const me = useMe();
+  const totals = useContentStats("story", [book.slug]);
   const lastSlug = useReaderStore((s) => s.lastByBook[book.slug]);
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
@@ -51,6 +53,7 @@ export function BookCoverPage({ book }: { book: BookIndex }) {
           <p className="mt-5 max-w-lg font-display text-base leading-relaxed text-muted sm:text-lg">
             {book.description}
           </p>
+          <StatsLine stats={totals[book.slug]} className="mt-4" />
 
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -75,7 +78,7 @@ export function BookCoverPage({ book }: { book: BookIndex }) {
                 className="pressable inline-flex h-12 items-center gap-2 rounded-lg border border-border px-4 font-sans text-sm text-muted hover:text-fg"
               >
                 <PenLine className="size-4" strokeWidth={1.75} />
-                {book.origin === "studio" ? "সম্পাদনা" : "ছবি যোগ"}
+                {book.origin === "studio" ? "সম্পাদনা" : "অধ্যায় ও ছবি যোগ"}
               </Link>
             ) : null}
           </div>

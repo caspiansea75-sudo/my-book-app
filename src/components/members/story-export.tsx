@@ -76,6 +76,11 @@ export function StoryExport() {
         }
       };
       await Promise.all(Array.from({ length: Math.min(FETCH_AT_ONCE, book.chapters.length) }, worker));
+      if (book.extraBook) {
+        const more = await loadExportStudioBook({ data: { slug: book.extraBook, drafts } });
+        chapters.push(...more);
+        setProgress((p) => ({ ...p, done: p.done + more.length }));
+      }
     }
     const text = renderBook(book, chapters, fmt, window.location.origin);
     return { name: safeFileName(book.title, book.slug), text };

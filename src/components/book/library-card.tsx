@@ -16,6 +16,8 @@ import { formatCount, type LibraryBookCard } from "@/lib/book";
 import { SHELF_LABEL, type LibView, type Shelf } from "@/lib/library-store";
 import { AdultToggle } from "@/components/members/adult-toggle";
 import { HideToggle } from "@/components/members/hide-toggle";
+import { StatsLine } from "@/components/engagement/stats-line";
+import type { ContentStats } from "@/lib/engagement-api";
 import { canEditOwner, useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
@@ -193,6 +195,7 @@ export function LibraryCard({
   onFav,
   onShelf,
   onMove,
+  stats,
 }: {
   /** Position in the grid, used to stagger the entrance animation. */
   index?: number;
@@ -207,6 +210,8 @@ export function LibraryCard({
   onFav: () => void;
   onShelf: (s: Shelf | null) => void;
   onMove: (dir: -1 | 1) => void;
+  /** Views, likes and comments added up over all chapters. */
+  stats?: ContentStats;
 }) {
   const me = useMe();
   const blurred = blur && meta.sensitive;
@@ -257,6 +262,7 @@ export function LibraryCard({
               {formatCount(book.chapterCount)} আপডেট
               {book.origin === "studio" ? " · স্টুডিও" : null}
             </span>
+            <StatsLine stats={stats} size="xs" className="mt-1.5" />
             <Progress opened={meta.opened} total={book.chapterCount} />
           </span>
         </Link>
@@ -279,6 +285,7 @@ export function LibraryCard({
             <span className="mt-1 font-sans text-[11px] text-muted">
               {formatCount(book.chapterCount)} আপডেট
             </span>
+            <StatsLine stats={stats} size="xs" className="mt-1.5" />
             <Progress opened={meta.opened} total={book.chapterCount} />
           </span>
         </Link>
@@ -305,6 +312,7 @@ export function LibraryCard({
               {book.author ? `${book.author} · ` : ""}
               {formatCount(book.chapterCount)} আপডেট
             </span>
+            <StatsLine stats={stats} size="xs" className="mt-1.5" />
             <Progress opened={meta.opened} total={book.chapterCount} />
           </span>
         </Link>

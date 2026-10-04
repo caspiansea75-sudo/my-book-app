@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Heart, MessageCircle, Send, Trash2 } from "lucide-react";
+import { Eye, Heart, MessageCircle, Send, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/members/avatar";
 import {
   addComment,
   deleteComment,
   getEngagement,
+  recordView,
   toggleLike,
   type Comment,
   type Engagement as EngagementData,
@@ -71,7 +72,10 @@ export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
     setData(null);
     setError(null);
     setDraft("");
-    getEngagement({ data: { kind, parent, item } })
+    // Opening the chapter counts as one view (once per member per day), then show the numbers.
+    recordView({ data: { kind, parent, item } })
+      .catch(() => undefined)
+      .then(() => getEngagement({ data: { kind, parent, item } }))
       .then((d) => {
         if (mine === seq.current) setData(d);
       })
@@ -159,9 +163,13 @@ export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
           <span>{data?.liked ? "পছন্দ করেছেন" : "পছন্দ"}</span>
           <span className={t.muted}>{data?.likeCount ?? 0}</span>
         </button>
-        <span className={cn("inline-flex items-center gap-1.5 text-sm", t.muted)}>
+        <span className={cn("inline-flex items-center gap-1.5 text-sm", t.muted)} title="মন্তব্য">
           <MessageCircle className="size-4" strokeWidth={1.75} />
           {data?.commentCount ?? 0}
+        </span>
+        <span className={cn("inline-flex items-center gap-1.5 text-sm", t.muted)} title="ভিউ">
+          <Eye className="size-4" strokeWidth={1.75} />
+          {data?.viewCount ?? 0}
         </span>
       </div>
 

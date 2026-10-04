@@ -38,6 +38,7 @@ import {
   type StatusFilter,
 } from "@/lib/library-store";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
+import { useContentStats } from "@/components/engagement/stats-line";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
@@ -119,6 +120,8 @@ function FilterRow({ label, children }: { label: string; children: ReactNode }) 
 }
 
 export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; manga?: MangaSeriesCard[] }) {
+  const storyStats = useContentStats("story");
+  const mangaStats = useContentStats("manga");
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
   const progress = useReaderStore((s) => s.progress);
@@ -662,6 +665,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
               book={book}
               view={prefs.view}
               meta={metas.get(book.slug)!}
+              stats={storyStats[book.slug]}
               blur={prefs.blurCovers}
               terms={terms}
               manual={manual}
@@ -715,6 +719,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
 
         {tab === "manga" ? (
           <MangaBody
+            stats={mangaStats}
             ml={ml}
             terms={terms}
             canCreate={Boolean(me)}

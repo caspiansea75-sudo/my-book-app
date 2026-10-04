@@ -112,4 +112,6 @@ export const CHAT_EXACT: Record<string, string> = {
   "সবাইকে উল্লেখ করেছে": "mentioned everyone",
   "উল্লেখ করুন": "Mention someone",
   "দেখেছেন": "Seen",
+  "ভিউ": "Views",
+  "অধ্যায় ও ছবি যোগ": "Add chapters & images",
 };

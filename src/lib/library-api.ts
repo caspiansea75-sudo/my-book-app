@@ -191,6 +191,24 @@ function mergeInserts(chapter: Chapter, inserts: InsertRow[]): Chapter {
   return { ...chapter, sections };
 }
 
+/** Extra chapters of an original story are stored under a hidden "companion" book. */
+const EXT_PREFIX = "ext--";
+
+async function extensionBook(canonSlug: string, create: boolean): Promise<{ id: number; slug: string } | null> {
+  const sql = await getSql();
+  const rows = await sql<{ id: number; slug: string }>`select id, slug from library_books where extends_slug = ${canonSlug} limit 1`;
+  if (rows[0] || !create) return rows[0] ?? null;
+  const canon = getCanonBook(canonSlug);
+  if (!canon) return null;
+  const made = await sql<{ id: number; slug: string }>`
+    insert into library_books (slug, title, title_en, extends_slug)
+    values (${EXT_PREFIX + canonSlug}, ${canon.title}, ${canon.titleEn}, ${canonSlug})
+    on conflict (slug) do update set extends_slug = excluded.extends_slug
+    returning id, slug
+  `;
+  return made[0] ?? null;
+}
+
 function uniqueSlug(base: string, taken: Set<string>): string {
   const root = slugifyTitle(base) || `golpo-${Date.now().toString(36)}`;
   if (!taken.has(root)) return root;
@@ -278,9 +296,16 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at,
       (select m.display_name from members m where m.id = library_books.owner_id) as owner_name
     from library_books
-    where deleted_at is null
+    where deleted_at is null and extends_slug is null
     order by created_at desc
   `;
+  const extraRows = await sql<{ extends_slug: string; n: number }>`
+    select b.extends_slug, (count(*) filter (where c.status = 'published'))::int as n
+    from library_chapters c join library_books b on b.id = c.book_id
+    where b.extends_slug is not null and c.deleted_at is null
+    group by b.extends_slug
+  `;
+  const extraCount = new Map(extraRows.map((r) => [r.extends_slug, Number(r.n)]));
   const counts = await sql<{ book_id: number; pub: number; total: number }>`
     select book_id,
       (count(*) filter (where status = 'published'))::int as pub,
@@ -319,7 +344,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     author: authors.get(book.slug) ?? cleanAuthor(book.author),
     tagline: book.tagline,
     description: book.description,
-    chapterCount: book.chapterCount,
+    chapterCount: book.chapterCount + (extraCount.get(book.slug) ?? 0),
     origin: "canon",
     coverUrl: covers.get(book.slug) ?? null,
     nsfwCount: book.nsfwCount,
@@ -341,8 +366,20 @@ export const resolveBook = createServerFn({ method: "GET" })
     const authors = await authorMap();
     const adults = await adultMap("book");
     if (canon) {
+      const ext = await extensionBook(canon.slug, false);
+      let extras: ChapterMeta[] = [];
+      if (ext) {
+        const sqlx = await getSql();
+        const rowsx = await sqlx<BookRow>`select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at from library_books where id = ${ext.id} limit 1`;
+        const withDrafts = Boolean(data.drafts) && me.role === "admin";
+        extras = rowsx[0] ? (await studioBookIndex(rowsx[0], withDrafts)).chapters.map((c) => ({ ...c, extra: true })) : [];
+      }
       return {
         ...canon,
+        chapters: [...canon.chapters, ...extras],
+        chapterCount: canon.chapterCount + extras.length,
+        paraCount: canon.paraCount + extras.reduce((n, c) => n + c.paraCount, 0),
+        chars: canon.chars + extras.reduce((n, c) => n + c.chars, 0),
         adult: adults.get(canon.slug) ?? canon.nsfwCount > 0,
         author: authors.get(canon.slug) ?? cleanAuthor(canon.author),
         origin: "canon" as const,
@@ -374,7 +411,9 @@ export const loadStudioChapter = createServerFn({ method: "GET" })
     const sql = await getSql();
     const books = await sql<BookRow>`
       select id, slug, title, title_en, author, tagline, description, cover_media_id, owner_id, created_at
-      from library_books where slug = ${data.bookSlug} and deleted_at is null limit 1
+      from library_books
+      where ((slug = ${data.bookSlug} and extends_slug is null) or extends_slug = ${data.bookSlug}) and deleted_at is null
+      limit 1
     `;
     const book = books[0];
     if (!book) return null;
@@ -401,6 +440,7 @@ export const loadStudioChapter = createServerFn({ method: "GET" })
       chars: stats.chars,
       sections: body.sections,
       status: isDraft ? "draft" : "published",
+      extra: getCanonBook(data.bookSlug) ? true : undefined,
     };
     return chapter;
   });
@@ -704,10 +744,20 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
     const me = await requireMember();
     await assertBookAccess(me, data.bookSlug);
     const sql = await getSql();
-    const books = await sql<{ id: number }>`
-      select id from library_books where slug = ${data.bookSlug} and deleted_at is null limit 1
-    `;
-    const book = books[0];
+    const canonBook = getCanonBook(data.bookSlug);
+    let book: { id: number } | undefined;
+    if (canonBook) {
+      // The text of the original chapters never changes; only new chapters can be added.
+      if (data.slug && canonBook.chapters.some((c) => c.slug === data.slug)) {
+        throw new Error("মূল অধ্যায়ের লেখা বদলানো যায় না");
+      }
+      book = (await extensionBook(canonBook.slug, true)) ?? undefined;
+    } else {
+      const books = await sql<{ id: number }>`
+        select id from library_books where slug = ${data.bookSlug} and deleted_at is null limit 1
+      `;
+      book = books[0];
+    }
     if (!book) throw new Error("বই পাওয়া যায়নি");
     const sections: Section[] = data.sections.map((section) => ({
       id: section.id || newBlockId("s"),
@@ -733,13 +783,12 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
       select slug, sort_order, deleted_at from library_chapters where book_id = ${book.id}
     `;
     const live = existing.filter((c) => !c.deleted_at);
+    const taken = new Set([...existing.map((c) => c.slug), ...(canonBook ? canonBook.chapters.map((c) => c.slug) : [])]);
+    const nextNumber = (canonBook ? canonBook.chapterCount : 0) + existing.length + 1;
     const slug =
       data.slug && live.some((c) => c.slug === data.slug)
         ? data.slug
-        : uniqueSlug(
-            data.slug || String(existing.length + 1).padStart(2, "0"),
-            new Set(existing.map((c) => c.slug)),
-          );
+        : uniqueSlug(data.slug || String(nextNumber).padStart(2, "0"), taken);
     const sortOrder = live.find((c) => c.slug === slug)?.sort_order ?? existing.length + 1;
     const body = JSON.stringify({ sections });
     await sql.query(
@@ -793,7 +842,9 @@ export const deleteStudioChapter = createServerFn({ method: "POST" })
     const me = await requireMember();
     await assertBookAccess(me, data.bookSlug);
     const sql = await getSql();
-    const books = await sql<{ id: number }>`select id from library_books where slug = ${data.bookSlug} limit 1`;
+    const books = await sql<{ id: number }>`
+      select id from library_books where (slug = ${data.bookSlug} and extends_slug is null) or extends_slug = ${data.bookSlug} limit 1
+    `;
     const book = books[0];
     if (!book) throw new Error("বই পাওয়া যায়নি");
     // Goes to the trash — it can be restored from Studio › Trash.

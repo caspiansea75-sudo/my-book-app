@@ -43,6 +43,8 @@ export type Chapter = {
   sections: Section[];
   /** Studio chapters only: a draft is visible to its author and the admin, nobody else. */
   status?: "draft" | "published";
+  /** Added from the Studio to an original story (the first chapters come from the story files). */
+  extra?: boolean;
 };
 
 export type ChapterMeta = Omit<Chapter, "sections"> & { hasNsfw: boolean };

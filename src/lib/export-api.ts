@@ -17,6 +17,8 @@ export type ExportListItem = {
   chapterCount: number;
   /** Built-in stories: the chapter files to fetch. Studio stories are loaded from the database instead. */
   chapters: { slug: string }[];
+  /** Original stories: the hidden book that holds chapters added from the Studio (loaded from the database). */
+  extraBook?: string;
 };
 
 async function requireAdmin() {
@@ -50,9 +52,18 @@ export const listExportBooks = createServerFn({ method: "GET" })
         (select count(*)::int from library_chapters c
           where c.book_id = b.id and c.deleted_at is null and (${data.drafts}::boolean or c.status = 'published')) as n
       from library_books b
-      where b.deleted_at is null
+      where b.deleted_at is null and b.extends_slug is null
       order by b.created_at desc
     `;
+
+    const extras = await sql<{ extends_slug: string; slug: string; n: number }>`
+      select b.extends_slug, b.slug,
+        (select count(*)::int from library_chapters c
+          where c.book_id = b.id and c.deleted_at is null and (${data.drafts}::boolean or c.status = 'published')) as n
+      from library_books b
+      where b.extends_slug is not null and b.deleted_at is null
+    `;
+    const extraOf = new Map(extras.map((e) => [e.extends_slug, e]));
 
     const canon = listCanonBooks().map(
       (b): ExportListItem => ({
@@ -63,8 +74,9 @@ export const listExportBooks = createServerFn({ method: "GET" })
         tagline: b.tagline,
         description: b.description,
         origin: "canon",
-        chapterCount: b.chapters.length,
+        chapterCount: b.chapters.length + Number(extraOf.get(b.slug)?.n ?? 0),
         chapters: b.chapters.map((c) => ({ slug: c.slug })),
+        extraBook: extraOf.get(b.slug) && Number(extraOf.get(b.slug)?.n) > 0 ? extraOf.get(b.slug)?.slug : undefined,
       }),
     );
 

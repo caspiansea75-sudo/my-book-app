@@ -316,12 +316,14 @@ export function MangaBody({
   canCreate,
   searching,
   onResetAll,
+  stats,
 }: {
   ml: MangaLib;
   terms: string[];
   canCreate: boolean;
   searching: boolean;
   onResetAll: () => void;
+  stats?: Record<string, import("@/lib/engagement-api").ContentStats>;
 }) {
   const { prefs, filtered, metas, manga } = ml;
   const manual = prefs.sort === "manual";
@@ -418,6 +420,7 @@ export function MangaBody({
             series={series}
             view={prefs.view}
             meta={metas.get(series.slug)!}
+            stats={stats?.[series.slug]}
             resumeChapter={prefs.lastChapter[series.slug] ?? series.firstChapterSlug ?? null}
             terms={terms}
             manual={manual}
