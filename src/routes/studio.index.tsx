@@ -52,8 +52,7 @@ function StudioHome() {
         </p>
         <h1 className="mt-4 font-display text-4xl font-semibold sm:text-5xl"><FxWords text="স্টুডিও" /></h1>
         <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">
-          নতুন বই লিখুন, প্রচ্ছদ তুলুন, অধ্যায়ে ছবি ও ভিডিও বসান। সবকিছু সাইটেই থাকে — Vercel ডিপ্লয়ের সাথে
-          সংরক্ষিত, GitHub-এ মিডিয়া কমিট করতে হয় না।
+          নতুন বই লিখুন, প্রচ্ছদ বেছে নিন, অধ্যায়ে ছবি ও ভিডিও বসান। সবকিছু সাইটেই নিরাপদে সংরক্ষিত থাকে।
         </p>
 
         <div className="mt-6 flex flex-wrap gap-2">

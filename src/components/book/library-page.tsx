@@ -331,7 +331,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
             className="mf-rise mx-auto mt-4 max-w-lg font-sans text-sm leading-relaxed text-muted sm:text-base"
             style={fxIndex(6)}
           >
-            রাতে পড়ার বই, প্রচ্ছদ, ছবি ও ভিডিও — সব এক জায়গায়। স্টুডিও থেকে নতুন গল্প যোগ করুন।
+            স্বাগতম! আরাম করে বসুন, পছন্দের গল্পে ডুব দিন — পড়ার আনন্দে সময় কাটুক সুন্দর।
           </p>
         </div>
 
@@ -707,7 +707,7 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
               <Images className="size-6 text-lamp" strokeWidth={1.6} />
               <span className="mt-3 font-display text-lg">নতুন বই</span>
               <span className="mt-1 max-w-xs font-sans text-sm text-muted">
-                স্টুডিওতে প্রচ্ছদ, অধ্যায়, ছবি ও ভিডিও যোগ করুন। GitHub-এ ফাইল তোলার দরকার নেই।
+                স্টুডিওতে প্রচ্ছদ, অধ্যায়, ছবি ও ভিডিও যোগ করুন।
               </span>
             </Link>
           ) : null}
