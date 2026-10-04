@@ -232,3 +232,34 @@ mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent
   background: color-mix(in srgb, var(--book-fg) 45%, transparent);
   background-clip: content-box;
 }
+
+/* ---------- @mentions ---------- */
+/* in the message box: coloured text sits behind a see-through textarea */
+.cx-mention-back {
+  position: absolute; inset: 0; height: 100%; min-height: 0; overflow: hidden;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: break-word; pointer-events: none;
+}
+.cx-mention-wrap .cx-mention-ta, .cx-mention-wrap .cx-mention-ta:focus {
+  position: relative; display: block; background: transparent; border-color: transparent;
+  color: transparent; caret-color: var(--book-fg, #fff); scrollbar-width: none;
+}
+.cx-mention-ta::-webkit-scrollbar { display: none; }
+.cx-mention-ta::placeholder { color: color-mix(in oklab, var(--book-fg, #fff) 45%, transparent); opacity: 1; }
+.cx-mention-ta::selection { background: color-mix(in oklab, var(--book-lamp, #e0a96d) 35%, transparent); color: transparent; }
+.cx-mention-wrap:focus-within .cx-mention-back { border-color: color-mix(in oklab, var(--book-lamp, #e0a96d) 55%, var(--book-border, #333)); }
+.cx-mention-in { background: color-mix(in oklab, var(--book-lamp, #e0a96d) 30%, transparent); border-radius: 4px; box-shadow: 0 0 0 1px color-mix(in oklab, var(--book-lamp, #e0a96d) 35%, transparent); }
+
+/* inside sent messages */
+.cx-mention { color: var(--color-lamp); font-weight: 600; background: color-mix(in oklab, var(--color-lamp) 16%, transparent); border-radius: 5px; padding: 0 3px; }
+.cx-mine .cx-mention { color: inherit; background: rgba(255,255,255,.24); }
+@keyframes cx-mention-pop { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-lamp) 70%, transparent); } 100% { box-shadow: 0 0 0 9px transparent; } }
+.cx-mention-me, .cx-mention-all { animation: cx-mention-pop 1.4s ease-out 2; }
+.cx-mention-me { background: color-mix(in oklab, var(--color-lamp) 34%, transparent); }
+
+/* a message that mentions me (or everyone) glows softly */
+@keyframes cx-glow-ring { 0%,100% { box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--color-lamp) 70%, transparent), 0 0 16px -4px var(--color-lamp); } 50% { box-shadow: 0 0 0 1.5px var(--color-lamp), 0 0 26px -2px var(--color-lamp); } }
+.cx-mentioned { animation: cx-glow-ring 2.6s ease-in-out infinite; }
+
+/* the pop-up for a mention */
+.cx-toast-mention { box-shadow: 0 12px 34px -12px rgba(0,0,0,.65), 0 0 0 1.5px var(--color-lamp); }
+@media (prefers-reduced-motion: reduce) { .cx-mention-me, .cx-mention-all, .cx-mentioned { animation: none !important; } }

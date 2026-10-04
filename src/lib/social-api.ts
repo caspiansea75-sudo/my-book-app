@@ -297,7 +297,7 @@ export const pollInbox = createServerFn({ method: "POST" })
         senderUsername: r.username,
         senderAvatarUrl: imageUrl(r.avatar_id),
         isGroup: r.recipient_id == null,
-        body: r.body.slice(0, 160),
+        body: r.body.slice(0, 600),
         hasImage: r.image_id != null,
       })),
     };

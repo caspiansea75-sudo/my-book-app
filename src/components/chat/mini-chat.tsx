@@ -3,10 +3,13 @@ import { Link } from "@tanstack/react-router";
 import { ImagePlus, Maximize2, Minus, Send, Users, X } from "lucide-react";
 import { Avatar } from "@/components/members/avatar";
 import { MsgText } from "@/components/chat/chat-fx";
+import { MentionTextarea } from "@/components/chat/mention-textarea";
+import { mentionKind, type MentionPerson } from "@/lib/mentions";
+import { useMe } from "@/lib/use-me";
 import { resizeToJpeg } from "@/lib/image-resize";
 import { mergeThread } from "@/lib/chat-merge";
 import { resolveTheme, useChatPrefs } from "@/lib/chat-prefs";
-import { loadThread, sendMessage, uploadChatImage, type ChatMessage } from "@/lib/social-api";
+import { listConversations, loadThread, sendMessage, uploadChatImage, type ChatMessage } from "@/lib/social-api";
 import { cn } from "@/lib/utils";
 import "@/components/chat/chat-fx.css";
 
@@ -48,6 +51,20 @@ export function MiniChat({
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [prefs] = useChatPrefs(meId, peerId);
+  const me = useMe();
+  // @mentions only in the group chat: needs the member list.
+  const [members, setMembers] = useState<MentionPerson[] | null>(null);
+  useEffect(() => {
+    if (peerId != null) return;
+    let stop = false;
+    listConversations()
+      .then((list) => !stop && setMembers(list.filter((p) => p.id !== meId).map((p) => ({ id: p.id, name: p.displayName, username: p.username, avatarUrl: p.avatarUrl }))))
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [peerId, meId]);
+  const mentionNames = peerId == null && members ? [...members.map((p) => p.name), me?.displayName ?? ""] : undefined;
   const theme = resolveTheme(prefs);
   const themeStyle = (theme.from
     ? { ["--cx-from" as string]: theme.from, ["--cx-to" as string]: theme.to, ["--cx-fg" as string]: theme.fg }
@@ -235,6 +252,7 @@ export function MiniChat({
                         className={cn(
                           "rounded-2xl px-3 py-1.5 font-sans text-[13px] leading-relaxed",
                           mine ? "cx-mine" : "cx-theirs bg-surface-2 text-fg",
+                          !mine && mentionNames && mentionKind(m.body, me?.displayName ?? "", mentionNames) && "cx-mentioned",
                         )}
                         title={new Date(m.createdAt).toLocaleString("bn-BD")}
                       >
@@ -255,7 +273,7 @@ export function MiniChat({
                         ) : null}
                         {m.body ? (
                           <p className="whitespace-pre-wrap break-words">
-                            <MsgText body={m.body} />
+                            <MsgText body={m.body} names={mentionNames} meName={me?.displayName ?? ""} />
                           </p>
                         ) : null}
                       </div>
@@ -292,18 +310,15 @@ export function MiniChat({
               >
                 <ImagePlus className="size-4" strokeWidth={1.75} />
               </button>
-              <textarea
-                ref={areaRef}
+              <MentionTextarea
+                areaRef={areaRef}
                 value={text}
-                rows={1}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  e.target.style.height = "auto";
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 96)}px`;
-                }}
+                onValue={setText}
                 onKeyDown={onKeyDown}
+                people={peerId == null ? (members ?? []) : null}
                 placeholder={uploading ? "ছবি প্রস্তুত হচ্ছে…" : "বার্তা লিখুন…"}
-                className="field-input max-h-24 min-h-10 flex-1 resize-none"
+                maxHeight={96}
+                className="max-h-24 min-h-10 w-full"
               />
               <button
                 type="button"

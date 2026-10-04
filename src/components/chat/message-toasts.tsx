@@ -6,13 +6,15 @@ import { parseEffect } from "@/components/chat/chat-fx";
 import { MiniChat, type MiniTarget } from "@/components/chat/mini-chat";
 import { pollInbox, type InboxItem } from "@/lib/social-api";
 import { useMe } from "@/lib/use-me";
+import { cn } from "@/lib/utils";
+import { mentionKind } from "@/lib/mentions";
 import "@/components/chat/chat-fx.css";
 
 const POLL_MS = 7000;
 const SHOW_MS = 6500;
 const MAX_ON_SCREEN = 3;
 
-type Toast = InboxItem & { key: number; nick: string | null };
+type Toast = InboxItem & { key: number; nick: string | null; mention: "me" | "everyone" | null };
 
 /** Reads the chat settings saved by the info panel (mute + nicknames) for one conversation. */
 function readPrefs(meId: number, peerId: number | null): { muted: boolean; nicknames: Record<string, string> } {
@@ -74,6 +76,8 @@ export function MessageToasts() {
 
   const dismiss = useCallback((key: number) => setToasts((t) => t.filter((x) => x.key !== key)), []);
   const meId = me?.id ?? null;
+  const meNameRef = useRef(me?.displayName ?? "");
+  meNameRef.current = me?.displayName ?? "";
   const onChatPage = loc.path === "/chat";
 
   // The full chat page takes over, so the little window goes away.
@@ -116,13 +120,15 @@ export function MessageToasts() {
         for (const it of res.items) {
           const peerId = it.isGroup ? null : it.senderId;
           const prefs = readPrefs(meId, peerId);
-          if (prefs.muted) continue;
+          // Being called by name still gets through when the chat is muted; "@everyone" does not.
+          const mention = it.isGroup ? mentionKind(it.body, meNameRef.current) : null;
+          if (prefs.muted && mention !== "me") continue;
           const viewing = visible && here.path === "/chat" && (here.search.with ?? null) === peerId;
           if (viewing) continue;
           // The little chat window for this very conversation is open: it shows the message itself.
           const m = miniRef.current;
           if (visible && m && !m.minimized && m.target.peerId === peerId) continue;
-          show.push({ ...it, key: ++keySeq.current, nick: prefs.nicknames[String(it.senderId)] || null });
+          show.push({ ...it, key: ++keySeq.current, nick: prefs.nicknames[String(it.senderId)] || null, mention });
         }
         if (!show.length) return;
         if (!visible) {
@@ -206,7 +212,7 @@ function ToastCard({ t, onClose, onOpen }: { t: Toast; onClose: () => void; onOp
   const text = preview(t);
   const name = t.nick ?? t.senderName;
   return (
-    <div className="cx-toast" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+    <div className={cn("cx-toast", t.mention && "cx-toast-mention")} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       <button type="button" onClick={onOpen} className="cx-toast-body pressable">
         <span className="cx-toast-avatar">
           <Avatar name={t.senderName} url={t.senderAvatarUrl} size={40} />
@@ -215,7 +221,7 @@ function ToastCard({ t, onClose, onOpen }: { t: Toast; onClose: () => void; onOp
           </span>
         </span>
         <span className="min-w-0 flex-1 text-left">
-          <span className="block font-sans text-[11px] text-lamp">{t.isGroup ? "সবার চ্যাটে নতুন বার্তা" : "নতুন বার্তা"}</span>
+          <span className="block font-sans text-[11px] text-lamp">{t.mention === "me" ? "আপনাকে উল্লেখ করেছে" : t.mention === "everyone" ? "সবাইকে উল্লেখ করেছে" : t.isGroup ? "সবার চ্যাটে নতুন বার্তা" : "নতুন বার্তা"}</span>
           <span data-no-i18n className="block truncate font-display text-sm text-fg">
             {name}
           </span>

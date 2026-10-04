@@ -49,6 +49,8 @@ import { EFFECTS, MsgText, heartAt, reactToText } from "@/components/chat/chat-f
 import { resolveTheme, useChatPrefs } from "@/lib/chat-prefs";
 import { mergeThread } from "@/lib/chat-merge";
 import { EmojiPicker } from "@/components/chat/emoji-picker";
+import { MentionTextarea } from "@/components/chat/mention-textarea";
+import { mentionKind, type MentionPerson } from "@/lib/mentions";
 
 type Member = NonNullable<ReturnType<typeof useMe>>;
 
@@ -264,6 +266,11 @@ function Thread({
   const title = prefs.name || (peer ? peer.displayName : "সবার চ্যাট");
   const photo = prefs.photo || null;
   const theme = resolveTheme(prefs);
+  // Mentions work in the group chat only.
+  const mentionPeople: MentionPerson[] | null = peer
+    ? null
+    : people.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, name: p.displayName, username: p.username, avatarUrl: p.avatarUrl }));
+  const mentionNames = mentionPeople ? [...mentionPeople.map((p) => p.name), me.displayName] : undefined;
   const themeStyle = (theme.from ? { ["--cx-from" as string]: theme.from, ["--cx-to" as string]: theme.to, ["--cx-fg" as string]: theme.fg } : {}) as React.CSSProperties;
   const lastId = useRef(0);
   const box = useRef<HTMLDivElement>(null);
@@ -700,6 +707,7 @@ function Thread({
                       className={cn(
                         "rounded-2xl px-3 py-2 font-sans text-sm leading-relaxed",
                         mine ? "cx-mine" : "cx-theirs bg-surface-2 text-fg",
+                        !mine && mentionNames && mentionKind(m.body, me.displayName, mentionNames) && "cx-mentioned",
                       )}
                     >
                       {m.forwarded ? (
@@ -739,7 +747,7 @@ function Thread({
                       ) : null}
                       {m.body ? (
                         <p className="whitespace-pre-wrap break-words">
-                          <MsgText body={m.body} />
+                          <MsgText body={m.body} names={mentionNames} meName={me.displayName} />
                         </p>
                       ) : null}
                     </div>
@@ -866,19 +874,16 @@ function Thread({
           >
             <SmilePlus className="size-5" strokeWidth={1.75} />
           </button>
-          <textarea
-            ref={areaRef}
-            rows={1}
+          <MentionTextarea
+            areaRef={areaRef}
             value={text}
-            maxLength={2000}
-            onChange={(e) => {
-              setText(e.target.value);
-              e.target.style.height = "auto";
-              e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
-            }}
+            onValue={setText}
             onKeyDown={onKeyDown}
+            people={mentionPeople}
             placeholder={uploading ? "ছবি প্রস্তুত হচ্ছে…" : "বার্তা লিখুন…"}
-            className="field-input max-h-32 min-h-11 flex-1 resize-none"
+            maxHeight={128}
+            maxLength={2000}
+            className="max-h-32 min-h-11 w-full"
           />
           {!text.trim() && !pending ? (
             <button

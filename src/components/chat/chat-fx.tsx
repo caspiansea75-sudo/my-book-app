@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import { splitMentions } from "@/lib/mentions";
+import { cn } from "@/lib/utils";
 import "@/components/chat/chat-fx.css";
 
 /* ---------- text effects: start a message with /shake, /rainbow ... ---------- */
@@ -56,11 +58,25 @@ function Highlight({ text, q }: { text: string; q: string }) {
 }
 
 /** Renders a message body with its effect (if any). */
-export function MsgText({ body, q = "" }: { body: string; q?: string }) {
+export function MsgText({ body, q = "", names, meName = "" }: { body: string; q?: string; names?: string[]; meName?: string }) {
   const [open, setOpen] = useState(false);
   if (isEmojiOnly(body)) return <span className="cx-bigemoji">{body}</span>;
   const { effect, text } = parseEffect(body);
-  const inner = <Highlight text={text} q={q} />;
+  const inner = names
+    ? (
+        <>
+          {splitMentions(text, names, meName).map((seg, k) =>
+            seg.mention ? (
+              <span key={k} className={cn("cx-mention", seg.me && "cx-mention-me", seg.mention === "everyone" && "cx-mention-all")}>
+                <Highlight text={seg.text} q={q} />
+              </span>
+            ) : (
+              <Highlight key={k} text={seg.text} q={q} />
+            ),
+          )}
+        </>
+      )
+    : <Highlight text={text} q={q} />;
   switch (effect) {
     case "wave":
       return (

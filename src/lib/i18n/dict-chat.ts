@@ -107,4 +107,8 @@ export const CHAT_EXACT: Record<string, string> = {
   "কিছু অধ্যায় আনা যায়নি": "Some chapters couldn't be loaded",
   "গল্প তালিকা লোড হয়নি": "Couldn't load the story list",
   "এখনো কোনো গল্প নেই।": "No stories yet.",
+  "চ্যাটের সবাই নোটিফিকেশন পাবে": "Everyone in the chat gets notified",
+  "আপনাকে উল্লেখ করেছে": "mentioned you",
+  "সবাইকে উল্লেখ করেছে": "mentioned everyone",
+  "উল্লেখ করুন": "Mention someone",
 };
