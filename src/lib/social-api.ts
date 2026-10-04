@@ -42,6 +42,8 @@ export type ThreadResult = {
   /** Reactions (and, for the admin, report counts) for every message still on screen. */
   states: Record<number, MessageState>;
   pins: ChatMessage[];
+  /** How far each other member has read here (group: any message id; private: my own message id). */
+  seen: { memberId: number; lastReadId: number }[];
 };
 
 type MsgRow = {
@@ -348,12 +350,15 @@ export const loadThread = createServerFn({ method: "POST" })
     z.object({
       peerId: z.number().int().positive().nullable(),
       afterId: z.number().int().min(0),
+      /** false = just looking in the background (a minimised window), so don't count it as read. */
+      markSeen: z.boolean().optional(),
     }),
   )
   .handler(async ({ data }): Promise<ThreadResult> => {
     const me = await requireMember();
     const sql = await getSql();
     const { peerId, afterId } = data;
+    const counts = data.markSeen !== false;
 
     if (peerId != null) {
       if (peerId === me.id) throw new Error("নিজেকে বার্তা পাঠানো যায় না");
@@ -414,18 +419,40 @@ export const loadThread = createServerFn({ method: "POST" })
       for (const r of reportRows) (states[r.message_id] ??= { reactions: [], reports: 0 }).reports = r.n;
     }
 
-    if (peerId != null) {
-      await sql`
-        insert into chat_reads (member_id, peer_id, last_read_id)
-        select ${me.id}, ${peerId}, coalesce(max(c.id), 0)
-        from chat_messages c
-        where c.sender_id = ${peerId} and c.recipient_id = ${me.id}
-        on conflict (member_id, peer_id) do update
-          set last_read_id = greatest(chat_reads.last_read_id, excluded.last_read_id)
-      `;
+    if (counts) {
+      if (peerId != null) {
+        await sql`
+          insert into chat_reads (member_id, peer_id, last_read_id)
+          select ${me.id}, ${peerId}, coalesce(max(c.id), 0)
+          from chat_messages c
+          where c.sender_id = ${peerId} and c.recipient_id = ${me.id}
+          on conflict (member_id, peer_id) do update
+            set last_read_id = greatest(chat_reads.last_read_id, excluded.last_read_id)
+        `;
+      } else {
+        // Group chat: remember the newest message I have now seen (only writes when it moved).
+        await sql`
+          insert into chat_group_reads (member_id, last_read_id)
+          select ${me.id}, coalesce(max(c.id), 0) from chat_messages c where c.recipient_id is null
+          on conflict (member_id) do update
+            set last_read_id = excluded.last_read_id, updated_at = now()
+            where chat_group_reads.last_read_id < excluded.last_read_id
+        `;
+      }
     }
 
-    return { messages: rows.map(toMessage), latestIds: latest.map((r) => r.id), states, pins: pins.map(toMessage) };
+    // Who has seen what. Private chat: how far the other person has read MY messages.
+    const seenRows =
+      peerId != null
+        ? await sql<{ member_id: number; last_read_id: number }>`
+            select member_id, last_read_id from chat_reads where member_id = ${peerId} and peer_id = ${me.id}
+          `
+        : await sql<{ member_id: number; last_read_id: number }>`
+            select member_id, last_read_id from chat_group_reads where member_id <> ${me.id} and last_read_id > 0
+          `;
+    const seen = seenRows.map((r) => ({ memberId: Number(r.member_id), lastReadId: Number(r.last_read_id) }));
+
+    return { messages: rows.map(toMessage), latestIds: latest.map((r) => r.id), states, pins: pins.map(toMessage), seen };
   });
 
 export const sendMessage = createServerFn({ method: "POST" })

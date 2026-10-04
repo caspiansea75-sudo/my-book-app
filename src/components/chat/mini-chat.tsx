@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ImagePlus, Maximize2, Minus, Send, Users, X } from "lucide-react";
 import { Avatar } from "@/components/members/avatar";
 import { MsgText } from "@/components/chat/chat-fx";
 import { MentionTextarea } from "@/components/chat/mention-textarea";
+import { SeenRow } from "@/components/chat/seen-row";
+import { placeSeen } from "@/lib/seen";
 import { mentionKind, type MentionPerson } from "@/lib/mentions";
 import { useMe } from "@/lib/use-me";
 import { resizeToJpeg } from "@/lib/image-resize";
@@ -44,6 +46,7 @@ export function MiniChat({
 }) {
   const { peerId } = target;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [seen, setSeen] = useState<{ memberId: number; lastReadId: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -65,6 +68,12 @@ export function MiniChat({
     };
   }, [peerId, meId]);
   const mentionNames = peerId == null && members ? [...members.map((p) => p.name), me?.displayName ?? ""] : undefined;
+  const seenAt = useMemo(() => {
+    const who = new Map<number, { id: number; name: string; avatarUrl: string | null }>();
+    if (peerId != null) who.set(peerId, { id: peerId, name: target.name, avatarUrl: target.avatarUrl });
+    else for (const p of members ?? []) who.set(p.id, { id: p.id, name: p.name, avatarUrl: p.avatarUrl });
+    return placeSeen(messages, seen, who, meId);
+  }, [messages, seen, members, peerId, target.name, target.avatarUrl, meId]);
   const theme = resolveTheme(prefs);
   const themeStyle = (theme.from
     ? { ["--cx-from" as string]: theme.from, ["--cx-to" as string]: theme.to, ["--cx-fg" as string]: theme.fg }
@@ -80,7 +89,8 @@ export function MiniChat({
 
   const fetchNew = useCallback(async () => {
     try {
-      const res = await loadThread({ data: { peerId, afterId: lastId.current } });
+      const res = await loadThread({ data: { peerId, afterId: lastId.current, markSeen: !minimizedRef.current } });
+      setSeen(res.seen);
       for (const m of res.messages) if (m.id > lastId.current) lastId.current = m.id;
       setMessages((prev) => mergeThread(prev, res));
       setError((e) => (e && e.startsWith("বার্তা লোড") ? null : e));
@@ -236,7 +246,8 @@ export function MiniChat({
               messages.map((m) => {
                 const mine = m.senderId === meId;
                 return (
-                  <div key={m.id} className={cn("flex items-end gap-2", mine ? "cx-msg-right flex-row-reverse" : "cx-msg-left")}>
+                  <div key={m.id}>
+                  <div className={cn("flex items-end gap-2", mine ? "cx-msg-right flex-row-reverse" : "cx-msg-left")}>
                     {!mine ? (
                       <Link to="/u/$username" params={{ username: m.senderUsername }} className="shrink-0">
                         <Avatar name={m.senderName} url={m.senderAvatarUrl} size={24} />
@@ -278,6 +289,8 @@ export function MiniChat({
                         ) : null}
                       </div>
                     </div>
+                  </div>
+                  <SeenRow people={seenAt.get(m.id) ?? []} label={(p) => p.name} />
                   </div>
                 );
               })

@@ -263,3 +263,13 @@ mark.cx-hit { background: color-mix(in oklab, var(--color-lamp) 55%, transparent
 /* the pop-up for a mention */
 .cx-toast-mention { box-shadow: 0 12px 34px -12px rgba(0,0,0,.65), 0 0 0 1.5px var(--color-lamp); }
 @media (prefers-reduced-motion: reduce) { .cx-mention-me, .cx-mention-all, .cx-mentioned { animation: none !important; } }
+
+/* ---------- "Seen by" avatars ---------- */
+.cx-seen { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 2px 4px 0; }
+.cx-seen-label { font-size: 10px; color: var(--color-subtle, #8a8f98); }
+.cx-seen-stack { display: inline-flex; }
+@keyframes cx-seen-in { from { opacity: 0; transform: translateY(6px) scale(.4); } to { opacity: 1; transform: none; } }
+.cx-seen-av { display: inline-flex; margin-left: -5px; border-radius: 9999px; box-shadow: 0 0 0 2px var(--color-surface, #14181f); animation: cx-seen-in 380ms cubic-bezier(.34,1.56,.64,1) both; }
+.cx-seen-av:first-child { margin-left: 0; }
+.cx-seen-more { font-size: 10px; color: var(--color-muted, #9aa0a8); }
+@media (prefers-reduced-motion: reduce) { .cx-seen-av { animation: none; } }

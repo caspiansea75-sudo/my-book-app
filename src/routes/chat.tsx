@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import {
   EllipsisVertical,
@@ -50,6 +50,8 @@ import { resolveTheme, useChatPrefs } from "@/lib/chat-prefs";
 import { mergeThread } from "@/lib/chat-merge";
 import { EmojiPicker } from "@/components/chat/emoji-picker";
 import { MentionTextarea } from "@/components/chat/mention-textarea";
+import { SeenRow } from "@/components/chat/seen-row";
+import { placeSeen } from "@/lib/seen";
 import { mentionKind, type MentionPerson } from "@/lib/mentions";
 
 type Member = NonNullable<ReturnType<typeof useMe>>;
@@ -245,6 +247,7 @@ function Thread({
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [states, setStates] = useState<Record<number, MessageState>>({});
+  const [seen, setSeen] = useState<{ memberId: number; lastReadId: number }[]>([]);
   const [pins, setPins] = useState<ChatMessage[]>([]);
   const [pinIdx, setPinIdx] = useState(0);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -286,6 +289,7 @@ function Thread({
       for (const m of res.messages) if (m.id > lastId.current) lastId.current = m.id;
       setMessages((prev) => mergeThread(prev, res));
       setStates(res.states);
+      setSeen(res.seen);
       setPins(res.pins);
       setError((e) => (e && e.startsWith("বার্তা লোড") ? null : e));
     } catch (err) {
@@ -538,6 +542,13 @@ function Thread({
     }
   }
 
+  const seenAt = useMemo(() => {
+    const who = new Map<number, { id: number; name: string; avatarUrl: string | null }>();
+    if (peer) who.set(peer.id, { id: peer.id, name: peer.displayName, avatarUrl: peer.avatarUrl });
+    else for (const p of people) who.set(p.id, { id: p.id, name: p.displayName, avatarUrl: p.avatarUrl });
+    return placeSeen(messages, seen, who, me.id);
+  }, [messages, seen, peer, people, me.id]);
+
   let lastDay = "";
   const popMsg = pop ? (messages.find((m) => m.id === pop.id) ?? pins.find((m) => m.id === pop.id) ?? null) : null;
   const pinnedIds = new Set(pins.map((p) => p.id));
@@ -782,6 +793,7 @@ function Thread({
                   </div>
                 </div>
               </div>
+              <SeenRow people={seenAt.get(m.id) ?? []} label={(p) => nick(p.id, p.name)} />
             </div>
           );
         })}
