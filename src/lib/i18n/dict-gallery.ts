@@ -1,8 +1,8 @@
 // English text for the gallery's search / sort / view / filter bar and sub-folders.
 // Only keys that are NOT already in dict.ts live here (a key here would win over dict.ts everywhere).
 export const GALLERY_EXACT: Record<string, string> = {
-  "ফোল্ডার ও সাবফোল্ডার বানিয়ে ছবি ও ভিডিও গুছিয়ে রাখুন। সাজান, খুঁজুন, ফিল্টার করুন, একসাথে অনেকগুলো বেছে সরান — ফাইল টেনে ফোল্ডারে ছেড়েও দেওয়া যায়।":
-    "Organise photos and videos into folders and subfolders. Sort, search, filter, select many at once and move them together — you can also drag files onto a folder.",
+  "ফোল্ডার ও সাবফোল্ডার বানিয়ে ছবি ও ভিডিও গুছিয়ে রাখুন। সাজান, খুঁজুন, ফিল্টার করুন, একসাথে অনেকগুলো বেছে সরান — ফাইল টেনে ফোল্ডারে ছেড়েও দেওয়া যায়। নিজের ছবি, ভিডিও বা ফোল্ডারে তালা (🔒) দিলে অন্য সদস্যরা সেগুলো দেখতে পাবেন না।":
+    "Organise photos and videos into folders and subfolders. Sort, search, filter, select many at once and move them together — you can also drag files onto a folder. Put a lock (🔒) on your own pictures, videos or folders and other members won't be able to see them.",
   "ফাইল বা ফোল্ডার খুঁজুন": "Search files or folders",
   "ফাইল বা ফোল্ডারের নাম খুঁজুন…": "Search files or folders by name…",
   "এই ফোল্ডারে খুঁজুন…": "Search this folder…",
@@ -20,6 +20,20 @@ export const GALLERY_EXACT: Record<string, string> = {
   "নতুন সাবফোল্ডার": "New subfolder",
   "সাবফোল্ডার বানান": "Create subfolder",
   "মেলে এমন ফোল্ডার": "Matching folders",
+
+  // Locking your own pictures, videos and folders
+  "লক": "Lock",
+  "আনলক": "Unlock",
+  "লক করা": "Locked",
+  "লক করুন — অন্য সদস্যরা দেখতে পাবে না": "Lock — other members won't be able to see it",
+  "আনলক করুন — সবাই দেখতে পাবে": "Unlock — everyone will be able to see it",
+  "ফোল্ডার লক করুন — ভেতরের সবকিছু অন্য সদস্যদের কাছে লুকোবে": "Lock folder — everything inside is hidden from other members",
+  "ফোল্ডার আনলক করুন": "Unlock folder",
+  "লক করা — শুধু আপনি আর অ্যাডমিন দেখতে পাবেন": "Locked — only you and the admin can see this",
+  "লক করা ফোল্ডারের ভেতরে — শুধু আপনি আর অ্যাডমিন দেখতে পাবেন": "Inside a locked folder — only you and the admin can see this",
+  "শুধু নিজের আপলোড করা ফাইল লক করা যায়।": "You can only lock files you uploaded yourself.",
+  "অন্যের ফাইল বাদ দিয়ে শুধু আপনার ফাইলগুলো বদলানো হয়েছে।": "Other people's files were skipped — only your own files were changed.",
+  "এই ছবি/ভিডিওটি মালিক লক করে রেখেছেন, তাই ব্যবহার করা যাবে না": "The owner has locked this picture/video, so it can't be used",
 
   // Mini chat window
   "বন্ধ করুন": "Close",
