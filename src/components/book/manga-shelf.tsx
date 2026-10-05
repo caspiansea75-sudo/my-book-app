@@ -125,6 +125,8 @@ export function useMangaLibrary(manga: MangaSeriesCard[], terms: string[], mount
         by((a, b) => (manualIdx.get(a.series.slug) ?? 100000 + a.idx) - (manualIdx.get(b.series.slug) ?? 100000 + b.idx));
         break;
       default:
+        // Recently updated first.
+        by((a, b) => (b.series.updatedAt ?? 0) - (a.series.updatedAt ?? 0));
         break;
     }
     return list.map((x) => x.series);

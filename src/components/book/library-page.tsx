@@ -261,6 +261,8 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
         by((a, b) => (manualIdx.get(a.book.slug) ?? 100000 + a.idx) - (manualIdx.get(b.book.slug) ?? 100000 + b.idx));
         break;
       default:
+        // Recently updated first (books with no known date keep their usual order, after the dated ones).
+        by((a, b) => (b.book.updatedAt ?? 0) - (a.book.updatedAt ?? 0));
         break;
     }
     return list.map((x) => x.book);

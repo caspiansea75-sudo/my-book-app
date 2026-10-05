@@ -17,7 +17,7 @@ export type StatusFilter = "all" | "fav" | Shelf | "unread";
 export type SourceFilter = "all" | "studio" | "canon";
 
 export const SORTS: { id: LibSort; label: string }[] = [
-  { id: "default", label: "ডিফল্ট" },
+  { id: "default", label: "সাম্প্রতিক আপডেট" },
   { id: "newest", label: "নতুন আগে" },
   { id: "oldest", label: "পুরনো আগে" },
   { id: "az", label: "নাম (অ → হ)" },

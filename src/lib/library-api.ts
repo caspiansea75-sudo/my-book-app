@@ -299,24 +299,27 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     where deleted_at is null and extends_slug is null
     order by created_at desc
   `;
-  const extraRows = await sql<{ extends_slug: string; n: number }>`
-    select b.extends_slug, (count(*) filter (where c.status = 'published'))::int as n
+  const extraRows = await sql<{ extends_slug: string; n: number; last_ms: number | null }>`
+    select b.extends_slug, (count(*) filter (where c.status = 'published'))::int as n,
+      (extract(epoch from max(coalesce(c.published_at, c.created_at)) filter (where c.status = 'published')) * 1000)::float8 as last_ms
     from library_chapters c join library_books b on b.id = c.book_id
     where b.extends_slug is not null and c.deleted_at is null
     group by b.extends_slug
   `;
   const extraCount = new Map(extraRows.map((r) => [r.extends_slug, Number(r.n)]));
-  const counts = await sql<{ book_id: number; pub: number; total: number }>`
+  const extraLast = new Map(extraRows.map((r) => [r.extends_slug, Number(r.last_ms) || 0]));
+  const counts = await sql<{ book_id: number; pub: number; total: number; last_ms: number | null }>`
     select book_id,
       (count(*) filter (where status = 'published'))::int as pub,
-      count(*)::int as total
+      count(*)::int as total,
+      (extract(epoch from max(coalesce(published_at, created_at)) filter (where status = 'published')) * 1000)::float8 as last_ms
     from library_chapters
     where deleted_at is null
     group by book_id
   `;
   const countMap = new Map(counts.map((c) => [c.book_id, c]));
   const studio: LibraryBookCard[] = studioRows.flatMap((row) => {
-    const c = countMap.get(row.id) ?? { pub: 0, total: 0 };
+    const c = countMap.get(row.id) ?? { pub: 0, total: 0, last_ms: null };
     const mine = me.role === "admin" || row.owner_id === me.id;
     // Nobody but the author and the admin sees a book whose chapters are all still drafts.
     if (!mine && c.total > 0 && c.pub === 0) return [];
@@ -333,6 +336,8 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
       nsfwCount: 0,
       adult: adults.get(row.slug) ?? false,
       createdAt: toMs(row.created_at),
+      // A new published chapter moves a book up; a book with none yet counts from when it was made.
+      updatedAt: Number(c.last_ms) || toMs(row.created_at),
       ownerId: row.owner_id ?? null,
     };
     return [card];
@@ -350,6 +355,8 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
     nsfwCount: book.nsfwCount,
     adult: adults.get(book.slug) ?? book.nsfwCount > 0,
     createdAt: 0,
+    // The original files have no dates; they move up when a new chapter is added from the Studio.
+    updatedAt: extraLast.get(book.slug) ?? 0,
     ownerId: null,
   }));
   const all = [...studio, ...canon].map((b) => ({ ...b, hidden: hid.has(b.slug) }));
@@ -792,14 +799,19 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
     const sortOrder = live.find((c) => c.slug === slug)?.sort_order ?? existing.length + 1;
     const body = JSON.stringify({ sections });
     await sql.query(
-      `insert into library_chapters (book_id, slug, title, title_en, excerpt, sort_order, body, status)
-       values ($1,$2,$3,$4,$5,$6,$7::jsonb, coalesce($8::text, 'published'))
+      `insert into library_chapters (book_id, slug, title, title_en, excerpt, sort_order, body, status, published_at)
+       values ($1,$2,$3,$4,$5,$6,$7::jsonb, coalesce($8::text, 'published'),
+         case when coalesce($8::text, 'published') = 'published' then now() end)
        on conflict (book_id, slug) do update set
          title = excluded.title,
          title_en = excluded.title_en,
          excerpt = excluded.excerpt,
          body = excluded.body,
-         status = coalesce($8::text, library_chapters.status)`,
+         status = coalesce($8::text, library_chapters.status),
+         published_at = case
+           when coalesce($8::text, library_chapters.status) = 'published' and library_chapters.status <> 'published' then now()
+           else coalesce(library_chapters.published_at, library_chapters.created_at)
+         end`,
       [book.id, slug, data.title, data.titleEn ?? "", excerpt, sortOrder, body, data.status ?? null],
     );
     return { slug, status: data.status ?? null };

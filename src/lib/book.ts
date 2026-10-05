@@ -87,6 +87,8 @@ export type LibraryBookCard = {
   /** 18+ mark: set by hand; the old bundled stories fall back to their flagged-paragraph count. */
   adult?: boolean;
   createdAt?: number;
+  /** When the newest chapter went up (ms). 0 = no date known. */
+  updatedAt?: number;
   ownerId?: number | null;
 };
 
