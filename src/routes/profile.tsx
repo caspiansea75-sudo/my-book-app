@@ -6,7 +6,8 @@ import { Avatar } from "@/components/members/avatar";
 import { FxAurora, FxWords } from "@/components/media/fx";
 import { resizeToJpeg } from "@/lib/image-resize";
 import { redirectGuest } from "@/lib/auth/guest";
-import { getProfile, removeAvatar, setAvatar, updateProfile, uploadChatImage } from "@/lib/social-api";
+import { CreatorStatsSection } from "@/components/members/creator-stats";
+import { getCreatorStats, getProfile, removeAvatar, setAvatar, updateProfile, uploadChatImage } from "@/lib/social-api";
 
 export const Route = createFileRoute("/profile")({
   beforeLoad: ({ context }) => {
@@ -16,7 +17,8 @@ export const Route = createFileRoute("/profile")({
   loader: async ({ context }) => {
     const profile = await getProfile({ data: { username: context.me!.username } });
     if (!profile) throw redirect({ to: "/login" });
-    return profile;
+    const creator = await getCreatorStats({ data: { username: profile.username } });
+    return { ...profile, creator };
   },
   component: ProfilePage,
 });
@@ -164,6 +166,9 @@ function ProfilePage() {
             </Link>
           </div>
         </form>
+      </section>
+      <section className="mx-auto max-w-2xl px-5 pb-16 sm:px-8">
+        <CreatorStatsSection stats={profile.creator} />
       </section>
     </main>
   );

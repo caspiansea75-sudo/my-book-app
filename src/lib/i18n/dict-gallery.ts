@@ -35,6 +35,11 @@ export const GALLERY_EXACT: Record<string, string> = {
   "অন্যের ফাইল বাদ দিয়ে শুধু আপনার ফাইলগুলো বদলানো হয়েছে।": "Other people's files were skipped — only your own files were changed.",
   "এই ছবি/ভিডিওটি মালিক লক করে রেখেছেন, তাই ব্যবহার করা যাবে না": "The owner has locked this picture/video, so it can't be used",
 
+  // Creator stats on profiles
+  "লেখকের পরিসংখ্যান": "Creator stats",
+  "সব অধ্যায় মিলিয়ে ভিউ, পছন্দ, মন্তব্য ও ভোট": "Views, likes, comments and votes across all chapters",
+  "ভোট": "Votes",
+
   // Mini chat window
   "বন্ধ করুন": "Close",
   "চ্যাট খুলুন": "Open chat",

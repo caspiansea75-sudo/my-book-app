@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { getSql } from "@/lib/db";
-import { requireMember, requireViewer } from "@/lib/members-core";
+import { getSql, type Sql } from "@/lib/db";
+import { hiddenSet, requireMember, requireViewer } from "@/lib/members-core";
+import { mediaSrc } from "@/lib/media-url";
 import { ALL_REACTIONS, REPORT_REASONS } from "@/lib/chat-emoji";
 
 /** Profiles, direct messages, the group chat and private chat pictures. Members only. */
@@ -141,6 +142,142 @@ export const getProfile = createServerFn({ method: "GET" })
       joined: r.joined,
       isMe: r.id === me.id,
     };
+  });
+
+/* ------------------------------------------------------------ creator stats */
+
+export type CreatorWork = {
+  kind: "story" | "manga";
+  slug: string;
+  title: string;
+  coverUrl: string | null;
+  chapters: number;
+  views: number;
+  likes: number;
+  comments: number;
+  up: number;
+  down: number;
+};
+export type CreatorStats = {
+  works: CreatorWork[];
+  totals: { works: number; views: number; likes: number; comments: number; up: number; down: number };
+};
+
+type Counts = { views: number; likes: number; comments: number; up: number; down: number };
+
+/** Views, likes, comments and up/down votes for each story or series, added up over all of its chapters. */
+async function countsFor(sql: Sql, kind: "story" | "manga", slugs: string[]): Promise<Map<string, Counts>> {
+  const out = new Map<string, Counts>();
+  if (slugs.length === 0) return out;
+  const slot = (parent: string): Counts => {
+    let c = out.get(parent);
+    if (!c) {
+      c = { views: 0, likes: 0, comments: 0, up: 0, down: 0 };
+      out.set(parent, c);
+    }
+    return c;
+  };
+  const per = async (table: string, field: "views" | "likes" | "comments") => {
+    const rows = await sql.query<{ parent: string; n: number }>(
+      `select split_part(target, ':', 1) as parent, count(*)::int as n from ${table}
+       where kind = $1 and split_part(target, ':', 1) = any($2::text[]) group by 1`,
+      [kind, slugs],
+    );
+    for (const r of rows) slot(r.parent)[field] = Number(r.n);
+  };
+  await per("content_views", "views");
+  await per("content_likes", "likes");
+  await per("content_comments", "comments");
+  const votes = await sql.query<{ parent: string; up: number; down: number }>(
+    `select parent, (count(*) filter (where value = 1))::int as up, (count(*) filter (where value = -1))::int as down
+     from content_votes where kind = $1 and parent = any($2::text[]) group by parent`,
+    [kind, slugs],
+  );
+  for (const r of votes) {
+    const c = slot(r.parent);
+    c.up = Number(r.up);
+    c.down = Number(r.down);
+  }
+  return out;
+}
+
+/**
+ * The stories and manga a member made, with how each one is doing: views, likes, comments and votes.
+ * These numbers are already shown on the library cards, so any signed-in visitor may see them.
+ * Hidden items (for non-admins) and books that are still all drafts (for everyone but the author and admin) are left out.
+ */
+export const getCreatorStats = createServerFn({ method: "GET" })
+  .validator(z.object({ username: z.string().min(1).max(40).transform((s) => s.trim().toLowerCase()) }))
+  .handler(async ({ data }): Promise<CreatorStats> => {
+    const me = await requireViewer();
+    const sql = await getSql();
+    const empty: CreatorStats = { works: [], totals: { works: 0, views: 0, likes: 0, comments: 0, up: 0, down: 0 } };
+    const owner = await sql<{ id: number }>`
+      select id from members where username = ${data.username} and role <> 'guest' limit 1
+    `;
+    const ownerId = owner[0]?.id;
+    if (!ownerId) return empty;
+    const admin = me.role === "admin";
+    const mine = admin || me.id === ownerId;
+
+    const books = await sql<{ id: number; slug: string; title: string; cover_media_id: number | null; pub: number; total: number }>`
+      select b.id, b.slug, b.title, b.cover_media_id,
+        (select count(*)::int from library_chapters c where c.book_id = b.id and c.deleted_at is null and c.status = 'published') as pub,
+        (select count(*)::int from library_chapters c where c.book_id = b.id and c.deleted_at is null) as total
+      from library_books b
+      where b.owner_id = ${ownerId} and b.deleted_at is null and b.extends_slug is null
+      order by b.created_at desc
+    `;
+    const series = await sql<{ slug: string; title: string; cover_media_id: number | null; chapters: number }>`
+      select s.slug, s.title, s.cover_media_id,
+        (select count(*)::int from manga_chapters c where c.series_id = s.id) as chapters
+      from manga_series s
+      where s.owner_id = ${ownerId}
+      order by s.created_at desc
+    `;
+
+    const hiddenBooks = admin ? new Set<string>() : await hiddenSet("book");
+    const hiddenManga = admin ? new Set<string>() : await hiddenSet("manga");
+    const shownBooks = books.filter((b) => !hiddenBooks.has(b.slug) && (mine || b.total === 0 || b.pub > 0));
+    const shownSeries = series.filter((s) => !hiddenManga.has(s.slug));
+
+    const storyCounts = await countsFor(sql, "story", shownBooks.map((b) => b.slug));
+    const mangaCounts = await countsFor(sql, "manga", shownSeries.map((s) => s.slug));
+    const zero: Counts = { views: 0, likes: 0, comments: 0, up: 0, down: 0 };
+
+    const works: CreatorWork[] = [
+      ...shownBooks.map((b) => ({
+        kind: "story" as const,
+        slug: b.slug,
+        title: b.title,
+        coverUrl: b.cover_media_id ? mediaSrc(b.cover_media_id) : null,
+        chapters: Number(mine ? b.total : b.pub),
+        ...(storyCounts.get(b.slug) ?? zero),
+      })),
+      ...shownSeries.map((s) => ({
+        kind: "manga" as const,
+        slug: s.slug,
+        title: s.title,
+        coverUrl: s.cover_media_id ? mediaSrc(s.cover_media_id) : null,
+        chapters: Number(s.chapters),
+        ...(mangaCounts.get(s.slug) ?? zero),
+      })),
+    ];
+    // The ones people react to most come first.
+    works.sort((a, b) => b.views + b.likes + b.comments - (a.views + a.likes + a.comments));
+
+    const totals = works.reduce(
+      (t, w) => ({
+        works: t.works + 1,
+        views: t.views + w.views,
+        likes: t.likes + w.likes,
+        comments: t.comments + w.comments,
+        up: t.up + w.up,
+        down: t.down + w.down,
+      }),
+      empty.totals,
+    );
+    return { works, totals };
   });
 
 export const updateProfile = createServerFn({ method: "POST" })

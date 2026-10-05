@@ -5,7 +5,8 @@ import { Avatar } from "@/components/members/avatar";
 import { FxAurora } from "@/components/media/fx";
 import { useGuestGate } from "@/components/members/join-prompt";
 import { useMe } from "@/lib/use-me";
-import { getProfile } from "@/lib/social-api";
+import { CreatorStatsSection } from "@/components/members/creator-stats";
+import { getCreatorStats, getProfile } from "@/lib/social-api";
 
 export const Route = createFileRoute("/u/$username")({
   beforeLoad: ({ context }) => {
@@ -14,7 +15,8 @@ export const Route = createFileRoute("/u/$username")({
   loader: async ({ params }) => {
     const profile = await getProfile({ data: { username: params.username } });
     if (!profile) throw notFound();
-    return profile;
+    const creator = await getCreatorStats({ data: { username: profile.username } });
+    return { ...profile, creator };
   },
   component: ProfileView,
 });
@@ -73,6 +75,7 @@ function ProfileView() {
             )}
           </div>
         </div>
+        <CreatorStatsSection stats={p.creator} />
       </section>
     </main>
   );
