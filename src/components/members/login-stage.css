@@ -1,0 +1,676 @@
+/* Login / sign-up: a floating glass window in front of a ghost of the main site.
+   Plain CSS on the theme variables, so all four reading themes work. */
+
+.ls-stage {
+  --ls-rx: 0deg;
+  --ls-ry: 0deg;
+  --ls-px: 0;
+  --ls-py: 0;
+  position: relative;
+  min-height: 100dvh;
+}
+
+/* ---------------------------------------------------------------- the ghost site */
+.ls-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10; /* under the rain (15), over the page */
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.ls-glow {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(40% 36% at 22% 18%, color-mix(in oklab, var(--book-lamp) 20%, transparent), transparent 70%),
+    radial-gradient(46% 40% at 82% 78%, color-mix(in oklab, var(--book-accent) 30%, transparent), transparent 72%);
+  animation: ls-breathe 12s ease-in-out infinite;
+}
+.ls-site {
+  position: absolute;
+  inset: 0 0 -140px;
+  transform-origin: 50% 0;
+  display: flex;
+  flex-direction: column;
+  transform: translate3d(calc(var(--ls-px) * -14px), calc(var(--ls-py) * -10px), 0) scale(1.05);
+  filter: blur(3.5px) saturate(1);
+  opacity: 0.92;
+  transition: filter 700ms ease, opacity 700ms ease, transform 700ms ease;
+  animation: ls-site-in 1100ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ls-drift {
+  animation: ls-drift 42s ease-in-out infinite alternate;
+}
+.ls-veil {
+  position: absolute;
+  inset: 0;
+  transition: opacity 600ms ease;
+  background:
+    radial-gradient(ellipse at 50% 48%, color-mix(in oklab, var(--book-bg) 52%, transparent) 0%, color-mix(in oklab, var(--book-bg) 22%, transparent) 55%, color-mix(in oklab, var(--book-bg) 62%, transparent) 100%);
+}
+
+.ls-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(64rem, 100%);
+  margin: 0 auto;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--book-border);
+  background: color-mix(in oklab, var(--book-bg) 90%, transparent);
+}
+.ls-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+.ls-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--book-surface-2);
+  color: var(--book-lamp);
+}
+.ls-pills {
+  display: flex;
+  gap: 4px;
+}
+.ls-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--book-muted);
+}
+.ls-pill.on {
+  background: var(--book-accent);
+  color: var(--book-accent-fg);
+}
+.ls-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--book-surface-2), color-mix(in oklab, var(--book-lamp) 45%, var(--book-surface-2)));
+}
+
+.ls-page {
+  width: min(64rem, 100%);
+  margin: 0 auto;
+  padding: 28px 24px 0;
+}
+.ls-seg {
+  display: flex;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid var(--book-border);
+  border-radius: 999px;
+}
+.ls-seg > span {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--book-muted);
+}
+.ls-seg > span.on {
+  background: var(--book-accent);
+  color: var(--book-accent-fg);
+}
+.ls-bar-row {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 26px;
+}
+.ls-search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--book-border);
+  border-radius: 10px;
+  background: var(--book-surface);
+  color: var(--book-subtle);
+}
+.ls-round {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--book-border);
+  border-radius: 999px;
+}
+.ls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.ls-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--book-border);
+  border-radius: 12px;
+  background: var(--book-surface);
+}
+.ls-cover {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(var(--a, 150deg), var(--book-surface-2), color-mix(in oklab, var(--t, var(--book-accent)) 40%, var(--book-bg)));
+}
+.ls-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, transparent 0 15px, color-mix(in oklab, var(--book-fg) 5%, transparent) 15px 16px);
+}
+.ls-cover b {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  font-family: var(--font-display);
+  font-size: 54px;
+  line-height: 1;
+  font-weight: 600;
+  color: color-mix(in oklab, var(--book-fg) 88%, transparent);
+}
+.ls-cover i {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--book-border) 70%, transparent);
+  background: color-mix(in oklab, var(--book-bg) 75%, transparent);
+}
+.ls-new {
+  position: absolute;
+  top: 12px;
+  left: 10px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in oklab, var(--book-lamp) 50%, transparent);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--book-bg) 80%, transparent);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--book-lamp);
+}
+.ls-meta {
+  padding: 12px;
+}
+.ls-line {
+  display: block;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--book-fg) 16%, transparent);
+}
+.ls-line + .ls-line {
+  margin-top: 8px;
+  height: 7px;
+  background: color-mix(in oklab, var(--book-fg) 9%, transparent);
+}
+.ls-prog {
+  display: block;
+  height: 4px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: var(--book-surface-2);
+}
+.ls-prog > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--book-lamp);
+}
+
+/* ------------------------------------------------------------- the floating window */
+.ls-front {
+  position: relative;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 56px 16px 40px;
+}
+.ls-lang {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 21;
+}
+.ls-float {
+  position: relative;
+  width: min(25rem, 100%);
+  animation: ls-float 8s ease-in-out infinite;
+}
+.ls-tilt {
+  position: relative;
+  transform: perspective(1100px) rotateX(var(--ls-rx)) rotateY(var(--ls-ry));
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-style: preserve-3d;
+}
+.ls-halo {
+  position: absolute;
+  inset: -34px;
+  z-index: -1;
+  border-radius: 48px;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--book-lamp) 30%, transparent), transparent 72%);
+  filter: blur(26px);
+  opacity: 0.55;
+  animation: ls-breathe 7s ease-in-out infinite;
+}
+.ls-window {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--book-lamp) 24%, var(--book-border));
+  border-radius: 22px;
+  background: color-mix(in oklab, var(--book-surface) 74%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  backdrop-filter: blur(22px) saturate(1.35);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.5),
+    0 2px 0 color-mix(in oklab, var(--book-fg) 9%, transparent) inset,
+    0 0 0 1px color-mix(in oklab, var(--book-bg) 60%, transparent);
+  animation: ls-window-in 800ms 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: border-color 300ms ease, opacity 420ms ease, transform 420ms ease, filter 420ms ease;
+}
+.ls-window::after {
+  /* a soft diagonal sheen, like light on glass */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, color-mix(in oklab, var(--book-fg) 9%, transparent) 0%, transparent 38%);
+}
+.ls-window:focus-within {
+  border-color: color-mix(in oklab, var(--book-lamp) 55%, var(--book-border));
+}
+.ls-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--book-border);
+  background: color-mix(in oklab, var(--book-bg) 28%, transparent);
+}
+.ls-dots {
+  display: flex;
+  gap: 6px;
+}
+.ls-dots i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--book-fg) 20%, transparent);
+}
+.ls-dots i:first-child {
+  background: color-mix(in oklab, var(--book-accent) 80%, var(--book-fg));
+}
+.ls-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto;
+  padding: 4px 12px;
+  border: 1px solid var(--book-border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--book-surface-2) 80%, transparent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--book-muted);
+}
+.ls-tab svg {
+  color: var(--book-lamp);
+}
+.ls-titlebar > .ls-spacer {
+  width: 46px;
+}
+.ls-body {
+  position: relative;
+  padding: 26px 26px 24px;
+}
+.ls-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  border: 1px solid color-mix(in oklab, var(--book-lamp) 35%, var(--book-border));
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--book-lamp) 10%, var(--book-surface-2));
+  color: var(--book-lamp);
+}
+.ls-title {
+  margin: 16px 0 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.ls-title .mf-word:last-child {
+  margin-right: 0;
+}
+.ls-sub {
+  margin: 8px 0 0;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--book-muted);
+}
+.ls-switch {
+  display: flex;
+  gap: 4px;
+  margin-top: 20px;
+  padding: 3px;
+  border: 1px solid var(--book-border);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--book-bg) 35%, transparent);
+}
+.ls-switch a {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  height: 38px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--book-muted);
+  text-decoration: none;
+  transition: background-color 200ms ease, color 200ms ease;
+}
+.ls-switch a:hover {
+  color: var(--book-fg);
+}
+.ls-switch a[aria-current="page"] {
+  background: var(--book-accent);
+  color: var(--book-accent-fg);
+  box-shadow: 0 6px 18px color-mix(in oklab, var(--book-accent) 40%, transparent);
+}
+.ls-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.ls-field {
+  position: relative;
+  display: block;
+}
+.ls-field > svg {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  width: 16px;
+  height: 16px;
+  transform: translateY(-50%);
+  color: var(--book-subtle);
+  pointer-events: none;
+  transition: color 200ms ease;
+}
+.ls-field:focus-within > svg {
+  color: var(--book-lamp);
+}
+.ls-input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px 0 40px;
+  border: 1px solid var(--book-border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--book-bg) 55%, transparent);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--book-fg);
+  outline: none;
+  transition: border-color 200ms ease, background-color 200ms ease, box-shadow 200ms ease;
+}
+.ls-input::placeholder {
+  color: var(--book-subtle);
+}
+.ls-input:focus {
+  border-color: var(--book-lamp);
+  background: color-mix(in oklab, var(--book-bg) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--book-lamp) 16%, transparent);
+}
+.ls-input.has-eye {
+  padding-right: 44px;
+}
+.ls-eye {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--book-muted);
+}
+.ls-eye:hover {
+  color: var(--book-fg);
+}
+.ls-error {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--book-nsfw);
+}
+.ls-submit {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  margin-top: 4px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--book-accent);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--book-accent-fg);
+  box-shadow: 0 10px 26px color-mix(in oklab, var(--book-accent) 45%, transparent);
+}
+.ls-submit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in oklab, var(--book-accent-fg) 24%, transparent) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: ls-shine 5.5s 1.4s ease-in-out infinite;
+}
+.ls-submit:disabled {
+  opacity: 0.7;
+}
+.ls-submit svg {
+  transition: transform 200ms ease;
+}
+.ls-submit:hover:not(:disabled) svg {
+  transform: translateX(3px);
+}
+.ls-spin {
+  animation: ls-rot 800ms linear infinite;
+}
+.ls-foot {
+  margin: 16px 0 0;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--book-muted);
+}
+.ls-foot a {
+  color: var(--book-lamp);
+  text-underline-offset: 4px;
+}
+.ls-foot a:hover {
+  text-decoration: underline;
+}
+.ls-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--book-subtle);
+}
+
+/* ------------------------------------------------------------ states and motion */
+.ls-stage.is-shake .ls-window {
+  animation: ls-shake 420ms ease;
+}
+/* after a successful login the glass lifts away and the site comes into focus */
+.ls-stage.is-leaving .ls-window {
+  opacity: 0;
+  transform: scale(1.07) translateY(-8px);
+  filter: blur(8px);
+  pointer-events: none;
+}
+.ls-stage.is-leaving .ls-halo {
+  opacity: 0;
+}
+.ls-stage.is-leaving .ls-veil {
+  opacity: 0;
+}
+.ls-stage.is-leaving .ls-site {
+  filter: blur(0);
+  opacity: 1;
+  transform: scale(1);
+}
+
+@keyframes ls-site-in {
+  from {
+    opacity: 0;
+    filter: blur(18px);
+  }
+}
+@keyframes ls-window-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.955);
+    filter: blur(10px);
+  }
+}
+@keyframes ls-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+@keyframes ls-drift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-120px);
+  }
+}
+@keyframes ls-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.04);
+  }
+}
+@keyframes ls-shine {
+  0%,
+  62%,
+  100% {
+    transform: translateX(-120%);
+  }
+  80% {
+    transform: translateX(120%);
+  }
+}
+@keyframes ls-shake {
+  20% {
+    transform: translateX(-7px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+@keyframes ls-rot {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 760px) {
+  .ls-pills .ls-pill span {
+    display: none;
+  }
+  .ls-pill {
+    padding: 0 11px;
+  }
+  .ls-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .ls-nav,
+  .ls-page {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .ls-body {
+    padding: 22px 20px 20px;
+  }
+  .ls-title {
+    font-size: 28px;
+  }
+}
+@media (hover: none) {
+  .ls-tilt {
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-site,
+  .ls-window,
+  .ls-float,
+  .ls-drift,
+  .ls-glow,
+  .ls-halo,
+  .ls-submit::after,
+  .ls-stage.is-shake .ls-window {
+    animation: none;
+  }
+  .ls-tilt {
+    transform: none;
+    transition: none;
+  }
+}

@@ -1,4 +1,5 @@
 import { EXACT, PATTERNS } from "@/lib/i18n/dict";
+import { AUTH_EXACT } from "@/lib/i18n/dict-auth";
 import { CHAT_EXACT } from "@/lib/i18n/dict-chat";
 import { GALLERY_EXACT, GALLERY_PATTERNS } from "@/lib/i18n/dict-gallery";
 import { LIBRARY_EXACT, LIBRARY_PATTERNS } from "@/lib/i18n/dict-library";
@@ -21,6 +22,7 @@ export function translateText(text: string): string | null {
 }
 
 function lookup(core: string): string | null {
+  if (core in AUTH_EXACT) return AUTH_EXACT[core];
   if (core in GALLERY_EXACT) return GALLERY_EXACT[core];
   if (core in LIBRARY_EXACT) return LIBRARY_EXACT[core];
   if (core in STUDIO_EXACT) return STUDIO_EXACT[core];
