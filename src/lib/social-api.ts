@@ -463,7 +463,7 @@ export const listConversations = createServerFn({ method: "GET" }).handler(async
            or (c.sender_id = ${me.id} and c.recipient_id = m.id)) as last_id
     from members m
     left join chat_reads r on r.member_id = ${me.id} and r.peer_id = m.id
-    where m.id <> ${me.id}
+    where m.id <> ${me.id} and m.role <> 'guest'
     order by last_id desc nulls last, lower(m.display_name), m.id
   `;
   return rows.map((r) => ({
@@ -499,7 +499,7 @@ export const loadThread = createServerFn({ method: "POST" })
 
     if (peerId != null) {
       if (peerId === me.id) throw new Error("নিজেকে বার্তা পাঠানো যায় না");
-      const peer = await sql<{ id: number }>`select id from members where id = ${peerId} limit 1`;
+      const peer = await sql<{ id: number }>`select id from members where id = ${peerId} and role <> 'guest' limit 1`;
       if (!peer[0]) throw new Error("সদস্য পাওয়া যায়নি");
     }
 
@@ -615,7 +615,7 @@ export const sendMessage = createServerFn({ method: "POST" })
 
     if (data.peerId != null) {
       if (data.peerId === me.id) throw new Error("নিজেকে বার্তা পাঠানো যায় না");
-      const peer = await sql<{ id: number }>`select id from members where id = ${data.peerId} limit 1`;
+      const peer = await sql<{ id: number }>`select id from members where id = ${data.peerId} and role <> 'guest' limit 1`;
       if (!peer[0]) throw new Error("সদস্য পাওয়া যায়নি");
     }
     if (data.imageId != null) {
@@ -764,7 +764,7 @@ export const forwardMessage = createServerFn({ method: "POST" })
 
     if (data.peerId != null) {
       if (data.peerId === me.id) throw new Error("নিজেকে বার্তা পাঠানো যায় না");
-      const peer = await sql<{ id: number }>`select id from members where id = ${data.peerId} limit 1`;
+      const peer = await sql<{ id: number }>`select id from members where id = ${data.peerId} and role <> 'guest' limit 1`;
       if (!peer[0]) throw new Error("সদস্য পাওয়া যায়নি");
     }
 
