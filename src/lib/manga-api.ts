@@ -8,6 +8,7 @@ import {
   hiddenSet,
   isHidden,
   requireMember,
+  requireViewer,
 } from "@/lib/members-core";
 import { slugifyTitle } from "@/lib/book";
 
@@ -129,7 +130,7 @@ export const updateMangaChapterTitle = createServerFn({ method: "POST" })
   });
 
 export const listMangaSeries = createServerFn({ method: "GET" }).handler(async () => {
-  const me = await requireMember();
+  const me = await requireViewer();
   const hid = await hiddenSet("manga");
   const adults = await adultMap("manga");
   const sql = await getSql();
@@ -202,7 +203,7 @@ export const createMangaSeries = createServerFn({ method: "POST" })
 export const getMangaSeries = createServerFn({ method: "GET" })
   .validator(z.object({ slug: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const me = await requireViewer();
     const hiddenNow = await isHidden("manga", data.slug);
     if (me.role !== "admin" && hiddenNow) return null;
     const sql = await getSql();
@@ -392,7 +393,7 @@ export const reorderMangaPanels = createServerFn({ method: "POST" })
 export const getMangaChapterForReading = createServerFn({ method: "GET" })
   .validator(z.object({ seriesSlug: z.string().min(1), chapterSlug: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const me = await requireViewer();
     if (me.role !== "admin" && (await isHidden("manga", data.seriesSlug))) return null;
     const sql = await getSql();
     const seriesRows = await sql<{ id: number; slug: string; title: string }>`

@@ -1,5 +1,5 @@
 import { Link, useRouter, useRouteContext } from "@tanstack/react-router";
-import { LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { LogIn, LogOut, ShieldCheck, UserPlus } from "lucide-react";
 import { Avatar } from "@/components/members/avatar";
 import { logout } from "@/lib/members-api";
 
@@ -23,6 +23,31 @@ export function AccountChip() {
     await logout();
     await router.invalidate();
     await router.navigate({ to: "/login" });
+  }
+
+  // A guest has no profile: offer to become a member instead.
+  if (me.role === "guest") {
+    return (
+      <div className="flex items-center gap-0.5 font-sans text-xs text-muted">
+        <Link
+          to="/signup"
+          title="অ্যাকাউন্ট খুলুন"
+          className="pressable inline-flex h-10 items-center gap-1.5 rounded-full bg-accent px-3 text-accent-fg"
+        >
+          <UserPlus className="size-3.5" strokeWidth={1.75} />
+          <span className="hidden sm:inline">অ্যাকাউন্ট খুলুন</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => void out()}
+          aria-label="বের হন"
+          title="অতিথি হিসেবে দেখছেন — বের হন"
+          className="pressable grid size-10 place-items-center rounded-full hover:bg-surface-2 hover:text-fg"
+        >
+          <LogOut className="size-4" strokeWidth={1.75} />
+        </button>
+      </div>
+    );
   }
 
   return (

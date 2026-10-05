@@ -6,6 +6,7 @@ import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { createMangaSeries, listMangaSeries } from "@/lib/manga-api";
 import { mediaSrc } from "@/lib/media-url";
+import { useGuestGate } from "@/components/members/join-prompt";
 import { useMe } from "@/lib/use-me";
 
 export const Route = createFileRoute("/manga/")({
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/manga/")({
 function MangaHub() {
   const series = Route.useLoaderData();
   const me = useMe();
+  const gate = useGuestGate();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
@@ -50,7 +52,18 @@ function MangaHub() {
           চিত্রশালার ছবি দিয়ে প্যানেল সাজিয়ে নিজের মাঙ্গা তৈরি করুন, আর স্ক্রল করে মাঙ্গার মতো পড়ুন।
         </p>
 
-        {me ? (
+        {me?.role === "guest" ? (
+          <button
+            type="button"
+            onClick={() => gate("create")}
+            className="pressable mt-10 flex w-full flex-col items-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface"
+          >
+            <span className="font-display text-xl">নতুন মাঙ্গা</span>
+            <span className="mt-1 max-w-sm font-sans text-sm text-muted">
+              নিজের মাঙ্গা তৈরি করতে অ্যাকাউন্ট খুলুন।
+            </span>
+          </button>
+        ) : me ? (
           <form
             onSubmit={(e) => void onCreate(e)}
             className="mt-10 rounded-xl border border-border bg-surface p-5 sm:p-6"

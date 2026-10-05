@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { BookImage, BookOpen, Images, MessageCircle, PenLine, Users } from "lucide-react";
+import { BookImage, BookOpen, Images, Lock, MessageCircle, PenLine, Users } from "lucide-react";
 import { LangSwitch } from "@/components/i18n/lang-switch";
 import { AccountChip } from "@/components/members/account-chip";
+import { useGuestGate, type GuestFeature } from "@/components/members/join-prompt";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
@@ -14,8 +15,17 @@ const ITEMS = [
   { to: "/members", label: "সদস্য", icon: Users, id: "members" },
 ] as const;
 
+/** What a guest is told when they tap a members-only item. */
+const GUEST_LOCKED: Partial<Record<(typeof ITEMS)[number]["id"], GuestFeature>> = {
+  gallery: "gallery",
+  studio: "create",
+  chat: "chat",
+};
+
 export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] | "profile" }) {
   const me = useMe();
+  const gate = useGuestGate();
+  const isGuest = me?.role === "guest";
   const items = ITEMS.filter((item) => {
     if (item.id === "members") return me?.role === "admin";
     if (item.id === "studio" || item.id === "chat") return !!me;
@@ -34,10 +44,20 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] | "pr
           {items.map((item) => {
             const Icon = item.icon;
             const on = item.id === active;
+            const locked = isGuest ? GUEST_LOCKED[item.id] : undefined;
             return (
               <Link
                 key={item.id}
                 to={item.to}
+                onClick={
+                  locked
+                    ? (e) => {
+                        // Guests stay where they are and get the "create an account" popup.
+                        e.preventDefault();
+                        gate(locked);
+                      }
+                    : undefined
+                }
                 className={cn(
                   "pressable inline-flex h-10 items-center gap-1.5 rounded-full px-2.5 font-sans text-xs sm:px-3",
                   on ? "bg-accent text-accent-fg" : "text-muted hover:bg-surface-2 hover:text-fg",
@@ -45,6 +65,7 @@ export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] | "pr
               >
                 <Icon className="size-3.5" strokeWidth={1.75} />
                 <span className="hidden sm:inline">{item.label}</span>
+                {locked ? <Lock className="size-3 opacity-60" strokeWidth={1.75} aria-hidden="true" /> : null}
               </Link>
             );
           })}

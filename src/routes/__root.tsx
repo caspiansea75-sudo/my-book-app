@@ -6,6 +6,7 @@ import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { ThemeRoot } from "@/components/book/theme-root";
 import { MessageToasts } from "@/components/chat/message-toasts";
 import { PresenceHeartbeat } from "@/components/presence/presence";
+import { JoinPrompt } from "@/components/members/join-prompt";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "গল্প সংগ্রহ";
@@ -14,7 +15,8 @@ export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
     const me = await getMe();
     const authPage = location.pathname === "/login" || location.pathname === "/signup";
-    if (me && authPage) throw redirect({ to: "/" });
+    // A guest may open the login / sign-up pages (that is how a guest becomes a member).
+    if (me && me.role !== "guest" && authPage) throw redirect({ to: "/" });
     if (!me && !authPage) throw redirect({ to: "/login" });
     return { me };
   },
@@ -55,6 +57,7 @@ export const Route = createRootRoute({
             <Outlet />
             <MessageToasts />
             <PresenceHeartbeat />
+            <JoinPrompt />
           </ThemeRoot>
         </AuthProvider>
         <Scripts />

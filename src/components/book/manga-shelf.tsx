@@ -5,6 +5,8 @@ import { CoverArt } from "@/components/book/cover-art";
 import type { CardMeta } from "@/components/book/library-card";
 import { MangaCard } from "@/components/book/manga-card";
 import { fxIndex } from "@/components/media/fx";
+import { useGuestGate } from "@/components/members/join-prompt";
+import { useMe } from "@/lib/use-me";
 import { formatCount } from "@/lib/book";
 import {
   SHELF_LABEL,
@@ -328,6 +330,8 @@ export function MangaBody({
   stats?: Record<string, import("@/lib/engagement-api").ContentStats>;
 }) {
   const { prefs, filtered, metas, manga } = ml;
+  const isGuest = useMe()?.role === "guest";
+  const gate = useGuestGate();
   const manual = prefs.sort === "manual";
   const letters = useMemo(
     () => (prefs.sort === "az" && filtered.length >= 6 ? [...new Set(filtered.map((m) => initialOf(m.title)))] : []),
@@ -459,6 +463,14 @@ export function MangaBody({
         {canCreate && !searching ? (
           <Link
             to="/manga"
+            onClick={
+              isGuest
+                ? (e) => {
+                    e.preventDefault();
+                    gate("create");
+                  }
+                : undefined
+            }
             style={fxIndex(filtered.length)}
             className={cn(
               "mf-card mf-rise pressable flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface",

@@ -75,7 +75,7 @@ export function MessageToasts() {
   const baseTitle = useRef("");
 
   const dismiss = useCallback((key: number) => setToasts((t) => t.filter((x) => x.key !== key)), []);
-  const meId = me?.id ?? null;
+  const meId = me && me.role !== "guest" ? me.id : null;
   const meNameRef = useRef(me?.displayName ?? "");
   meNameRef.current = me?.displayName ?? "";
   const onChatPage = loc.path === "/chat";

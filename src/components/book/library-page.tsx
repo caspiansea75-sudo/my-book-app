@@ -39,6 +39,7 @@ import {
 } from "@/lib/library-store";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
 import { useContentStats } from "@/components/engagement/stats-line";
+import { useGuestGate } from "@/components/members/join-prompt";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
@@ -128,6 +129,8 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
   const lastByBook = useReaderStore((s) => s.lastByBook);
   const navigate = useNavigate();
   const me = useMe();
+  const isGuest = me?.role === "guest";
+  const gate = useGuestGate();
 
   // Personal data (saved in this browser) is applied only after mount so the server HTML matches.
   const [mounted, setMounted] = useState(false);
@@ -704,6 +707,14 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
           {me ? (
             <Link
               to="/studio"
+              onClick={
+                isGuest
+                  ? (e) => {
+                      e.preventDefault();
+                      gate("create");
+                    }
+                  : undefined
+              }
               style={fxIndex(filtered.length)}
               className={cn(
                 "mf-card mf-rise pressable flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/40 p-6 text-center hover:bg-surface",

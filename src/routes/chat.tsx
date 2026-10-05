@@ -40,6 +40,7 @@ import {
   type MessageState,
   type ThreadResult,
 } from "@/lib/social-api";
+import { redirectGuest } from "@/lib/auth/guest";
 import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n/locale";
@@ -65,6 +66,7 @@ export const Route = createFileRoute("/chat")({
   },
   beforeLoad: ({ context }) => {
     if (!context.me) throw redirect({ to: "/login" });
+    redirectGuest(context.me, "chat");
   },
   loader: () => listConversations(),
   component: ChatPage,

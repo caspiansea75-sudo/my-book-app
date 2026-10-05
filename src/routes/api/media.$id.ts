@@ -10,9 +10,13 @@ export const Route = createFileRoute("/api/media/$id")({
         if (!Number.isFinite(id) || id <= 0) {
           return new Response("Not found", { status: 404 });
         }
-        const { memberFromCookieHeader, isHidden } = await import("@/lib/members-core");
+        const { memberFromCookieHeader, isHidden, isMediaInPublicUse } = await import("@/lib/members-core");
         const viewer = await memberFromCookieHeader(request.headers.get("cookie"));
         if (!viewer) return new Response("Unauthorized", { status: 401 });
+        // Guests can see what is shown inside stories and manga, but cannot browse the gallery by id.
+        if (viewer.role === "guest" && !(await isMediaInPublicUse(id))) {
+          return new Response("Not found", { status: 404 });
+        }
         if (viewer.role !== "admin" && (await isHidden("media", String(id)))) {
           return new Response("Not found", { status: 404 });
         }

@@ -6,6 +6,7 @@ import {
   endSession,
   hashPassword,
   safeEqual,
+  startGuestSession,
   startSession,
   verifyPassword,
   type Me,
@@ -17,6 +18,14 @@ const adminName = () => norm(process.env.ADMIN_USERNAME ?? "");
 
 export const getMe = createServerFn({ method: "GET" }).handler(async (): Promise<Me | null> => {
   return currentMember();
+});
+
+/** "Continue as guest": read stories and manga, like and vote — nothing else. */
+export const continueAsGuest = createServerFn({ method: "POST" }).handler(async () => {
+  const me = await currentMember();
+  // Already signed in (member, admin or an earlier guest visit): keep that session.
+  if (!me) await startGuestSession();
+  return { ok: true };
 });
 
 export const signup = createServerFn({ method: "POST" })
@@ -31,11 +40,27 @@ export const signup = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
-    if (data.username === adminName()) throw new Error("এই ইউজারনেম নেওয়া যাবে না");
+    if (data.username === adminName() || data.username.startsWith("guest_")) {
+      throw new Error("এই ইউজারনেম নেওয়া যাবে না");
+    }
     const sql = await getSql();
     const taken = await sql<{ id: number }>`select id from members where username = ${data.username}`;
     if (taken[0]) throw new Error("এই ইউজারনেম আগে থেকেই আছে");
     const hash = await hashPassword(data.password);
+
+    // A guest who creates an account keeps their likes, votes and views: the same row becomes a member.
+    const current = await currentMember();
+    if (current?.role === "guest") {
+      await sql`
+        update members
+        set username = ${data.username}, display_name = ${data.displayName || data.username},
+            password_hash = ${hash}, role = 'member'
+        where id = ${current.id} and role = 'guest'
+      `;
+      await startSession(current.id);
+      return { ok: true };
+    }
+
     const rows = await sql<{ id: number }>`
       insert into members (username, display_name, password_hash, role)
       values (${data.username}, ${data.displayName || data.username}, ${hash}, 'member')
@@ -116,6 +141,7 @@ export const listMembers = createServerFn({ method: "GET" }).handler(async (): P
       (select count(*) from manga_series s where s.owner_id = m.id) as series,
       (select count(*) from media x where x.owner_id = m.id and x.deleted_at is null) as media
     from members m
+    where m.role <> 'guest'
     order by m.created_at desc, m.id desc
   `;
   return rows.map((r) => ({

@@ -5,6 +5,7 @@ import { SiteNav } from "@/components/book/site-nav";
 import { MultiUploader } from "@/components/media/multi-uploader";
 import { PanelPicker } from "@/components/manga/panel-picker";
 import { loadVault } from "@/lib/media-folders-api";
+import { redirectGuest } from "@/lib/auth/guest";
 import { canEditOwner } from "@/lib/use-me";
 import {
   addMangaPanels,
@@ -19,6 +20,7 @@ import {
 export const Route = createFileRoute("/manga/$seriesSlug/$chapterSlug/edit")({
   beforeLoad: ({ context }) => {
     if (!context.me) throw redirect({ to: "/login" });
+    redirectGuest(context.me, "create");
   },
   loader: async ({ params, context }) => {
     const [chapter, vault] = await Promise.all([

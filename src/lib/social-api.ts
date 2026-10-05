@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
-import { requireMember } from "@/lib/members-core";
+import { requireMember, requireViewer } from "@/lib/members-core";
 import { ALL_REACTIONS, REPORT_REASONS } from "@/lib/chat-emoji";
 
 /** Profiles, direct messages, the group chat and private chat pictures. Members only. */
@@ -112,7 +112,7 @@ function toMessage(r: MsgRow): ChatMessage {
 export const getProfile = createServerFn({ method: "GET" })
   .validator(z.object({ username: z.string().min(1).max(40).transform((s) => s.trim().toLowerCase()) }))
   .handler(async ({ data }): Promise<Profile | null> => {
-    const me = await requireMember();
+    const me = await requireViewer();
     const sql = await getSql();
     const rows = await sql<{
       id: number;
@@ -126,7 +126,7 @@ export const getProfile = createServerFn({ method: "GET" })
       select id, username, display_name, bio, role, avatar_id,
         to_char(created_at, 'YYYY-MM-DD') as joined
       from members
-      where username = ${data.username}
+      where username = ${data.username} and role <> 'guest'
       limit 1
     `;
     const r = rows[0];

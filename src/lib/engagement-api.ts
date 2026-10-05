@@ -2,9 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { getCanonBook } from "@/lib/book";
-import { isHidden, requireMember, type Me } from "@/lib/members-core";
+import { isHidden, requireMember, requireViewer, type Me } from "@/lib/members-core";
 
-/** Likes and comments on story chapters and manga chapters. Members only. */
+/**
+ * Likes and comments on story chapters and manga chapters.
+ * Guests may read, like, vote and count a view; commenting needs a real account.
+ */
 
 const MAX_COMMENT = 1000;
 const MAX_LIST = 100;
@@ -95,7 +98,7 @@ async function likeState(me: Me, t: Target): Promise<{ likeCount: number; liked:
 export const getEngagement = createServerFn({ method: "GET" })
   .validator(targetSchema)
   .handler(async ({ data }): Promise<Engagement> => {
-    const me = await requireMember();
+    const me = await requireViewer();
     await assertTarget(me, data);
     const sql = await getSql();
     const key = keyOf(data);
@@ -127,7 +130,7 @@ export const getEngagement = createServerFn({ method: "GET" })
 export const toggleLike = createServerFn({ method: "POST" })
   .validator(targetSchema)
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const me = await requireViewer();
     await assertTarget(me, data);
     const sql = await getSql();
     const key = keyOf(data);
@@ -208,7 +211,7 @@ export const deleteComment = createServerFn({ method: "POST" })
 export const recordView = createServerFn({ method: "POST" })
   .validator(targetSchema)
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const me = await requireViewer();
     await assertTarget(me, data);
     const sql = await getSql();
     await sql`
@@ -228,7 +231,7 @@ export type ContentStats = { views: number; likes: number; comments: number; sco
 export const getContentStats = createServerFn({ method: "GET" })
   .validator(z.object({ kind: z.enum(["story", "manga"]), parents: z.array(slugPart).max(300).optional() }))
   .handler(async ({ data }): Promise<Record<string, ContentStats>> => {
-    await requireMember();
+    await requireViewer();
     const sql = await getSql();
     const parents = data.parents ?? null;
     const out: Record<string, ContentStats> = {};
@@ -321,7 +324,7 @@ async function reputationOf(me: Me, kind: "story" | "manga", parent: string, own
 export const getReputation = createServerFn({ method: "GET" })
   .validator(parentSchema)
   .handler(async ({ data }): Promise<Reputation> => {
-    const me = await requireMember();
+    const me = await requireViewer();
     const { ownerId } = await assertParent(me, data.kind, data.parent);
     return reputationOf(me, data.kind, data.parent, ownerId);
   });
@@ -330,7 +333,7 @@ export const getReputation = createServerFn({ method: "GET" })
 export const castVote = createServerFn({ method: "POST" })
   .validator(parentSchema.extend({ value: z.union([z.literal(1), z.literal(-1), z.literal(0)]) }))
   .handler(async ({ data }): Promise<Reputation> => {
-    const me = await requireMember();
+    const me = await requireViewer();
     const { ownerId } = await assertParent(me, data.kind, data.parent);
     if (ownerId != null && ownerId === me.id) throw new Error("নিজের লেখায় ভোট দেওয়া যায় না");
     const sql = await getSql();

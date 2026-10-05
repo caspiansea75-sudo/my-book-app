@@ -10,7 +10,7 @@ const WATCH_MS = 15_000;
 /** Invisible. While a member has the site open and visible, it tells the server "I'm here". */
 export function PresenceHeartbeat() {
   const me = useMe();
-  const meId = me?.id ?? null;
+  const meId = me && me.role !== "guest" ? me.id : null;
   useEffect(() => {
     if (meId == null) return;
     const beat = () => {

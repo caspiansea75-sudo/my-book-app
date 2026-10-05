@@ -9,9 +9,13 @@ export type Me = {
   id: number;
   username: string;
   displayName: string;
-  role: "admin" | "member";
+  /** "guest" = browsing without an account: may read, like and vote, nothing else. */
+  role: "admin" | "member" | "guest";
   avatarUrl: string | null;
 };
+
+const GUEST_NAME = "অতিথি";
+const NEED_ACCOUNT = "এই কাজের জন্য অ্যাকাউন্ট দরকার";
 
 const COOKIE = "bk_session";
 const DAYS = 30;
@@ -69,7 +73,7 @@ export async function memberFromCookieHeader(header: string | null | undefined):
     id: r.id,
     username: r.username,
     displayName: r.display_name,
-    role: r.role === "admin" ? "admin" : "member",
+    role: r.role === "admin" ? "admin" : r.role === "guest" ? "guest" : "member",
     avatarUrl: r.avatar_id ? `/api/chat-image/${r.avatar_id}` : null,
   };
 }
@@ -79,19 +83,34 @@ export async function currentMember(): Promise<Me | null> {
   return memberFromCookieHeader(getRequestHeader("cookie"));
 }
 
-export async function requireMember(): Promise<Me> {
+/**
+ * Anyone with a session, guests included. Use ONLY for things a guest may do:
+ * reading stories and manga, liking, voting, counting a view.
+ */
+export async function requireViewer(): Promise<Me> {
   const me = await currentMember();
   if (!me) throw new Error("আগে লগইন করুন");
   return me;
 }
 
-export async function startSession(memberId: number): Promise<void> {
+/**
+ * A real member (or the admin). Guests are refused, so every feature that is
+ * not explicitly opened to guests (comments, creating, gallery, chat, profile…)
+ * stays closed to them by default.
+ */
+export async function requireMember(): Promise<Me> {
+  const me = await requireViewer();
+  if (me.role === "guest") throw new Error(NEED_ACCOUNT);
+  return me;
+}
+
+export async function startSession(memberId: number, days = DAYS): Promise<void> {
   const sql = await getSql();
   const token = randomBytes(32).toString("base64url");
   await sql`delete from member_sessions where expires_at < now()`;
   await sql`
     insert into member_sessions (token_hash, member_id, expires_at)
-    values (${sha256(token)}, ${memberId}, now() + interval '30 days')
+    values (${sha256(token)}, ${memberId}, now() + make_interval(days => ${days}))
   `;
   const { setCookie } = await import("@tanstack/react-start/server");
   setCookie(COOKIE, token, {
@@ -99,8 +118,60 @@ export async function startSession(memberId: number): Promise<void> {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: DAYS * 86400,
+    maxAge: days * 86400,
   });
+}
+
+/**
+ * Starts a guest visit: a throw-away member row (role "guest") with no usable
+ * password, so likes, votes and views work with the normal tables. Signing up
+ * later turns this same row into a real member and keeps those likes/votes.
+ */
+export async function startGuestSession(): Promise<void> {
+  const sql = await getSql();
+  // Tidy up: guests whose sessions are all gone and who left no likes or votes behind.
+  await sql`
+    delete from members m
+    where m.role = 'guest'
+      and m.created_at < now() - interval '1 day'
+      and not exists (select 1 from member_sessions s where s.member_id = m.id and s.expires_at > now())
+      and not exists (select 1 from content_likes l where l.member_id = m.id)
+      and not exists (select 1 from content_votes v where v.member_id = m.id)
+  `;
+  const name = `guest_${randomBytes(6).toString("hex")}`;
+  const rows = await sql<{ id: number }>`
+    insert into members (username, display_name, password_hash, role)
+    values (${name}, ${GUEST_NAME}, 'guest$none', 'guest')
+    returning id
+  `;
+  await startSession(rows[0].id, 90);
+}
+
+/**
+ * Guests may only fetch pictures that are actually shown in a story or a manga
+ * (panels, covers, inserted pictures) — never browse the gallery by id.
+ */
+export async function isMediaInPublicUse(id: number): Promise<boolean> {
+  const sql = await getSql();
+  const rows = await sql<{ ok: boolean }>`
+    select (
+      exists (select 1 from manga_panels where media_id = ${id})
+      or exists (select 1 from manga_series where cover_media_id = ${id})
+      or exists (select 1 from library_books where cover_media_id = ${id} and deleted_at is null)
+      or exists (select 1 from book_covers where media_id = ${id})
+      or exists (select 1 from chapter_inserts where media_id = ${id})
+      or exists (
+        select 1 from library_chapters c
+        where c.deleted_at is null
+          and jsonb_path_exists(
+            c.body,
+            '$.sections[*].paragraphs[*] ? (@.mediaId == $id)',
+            jsonb_build_object('id', ${id}::int)
+          )
+      )
+    ) as ok
+  `;
+  return Boolean(rows[0]?.ok);
 }
 
 export async function endSession(): Promise<void> {

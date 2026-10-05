@@ -3,6 +3,8 @@ import { MessageCircle, Pencil, ShieldCheck } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { Avatar } from "@/components/members/avatar";
 import { FxAurora } from "@/components/media/fx";
+import { useGuestGate } from "@/components/members/join-prompt";
+import { useMe } from "@/lib/use-me";
 import { getProfile } from "@/lib/social-api";
 
 export const Route = createFileRoute("/u/$username")({
@@ -19,6 +21,8 @@ export const Route = createFileRoute("/u/$username")({
 
 function ProfileView() {
   const p = Route.useLoaderData();
+  const isGuest = useMe()?.role === "guest";
+  const gate = useGuestGate();
   return (
     <main className="mf-page relative min-h-dvh">
       <FxAurora />
@@ -53,6 +57,14 @@ function ProfileView() {
               <Link
                 to="/chat"
                 search={{ with: p.id }}
+                onClick={
+                  isGuest
+                    ? (e) => {
+                        e.preventDefault();
+                        gate("chat");
+                      }
+                    : undefined
+                }
                 className="pressable inline-flex h-11 items-center gap-2 rounded-lg bg-accent px-5 font-sans text-sm text-accent-fg"
               >
                 <MessageCircle className="size-4" strokeWidth={1.75} />

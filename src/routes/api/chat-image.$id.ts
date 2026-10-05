@@ -3,7 +3,7 @@ import { getSql } from "@/lib/db";
 import { getMediaFile, isBlobUrl } from "@/lib/blob-store.server";
 
 /**
- * Chat pictures and avatars. Signed-in members only, and a picture is only
+ * Chat pictures and avatars. Signed-in members only (guests: avatars only), and a picture is only
  * served when the viewer is allowed to see it:
  *  - their own upload,
  *  - any member's avatar,
@@ -22,7 +22,16 @@ export const Route = createFileRoute("/api/chat-image/$id")({
         if (!me) return new Response("Unauthorized", { status: 401 });
 
         const sql = await getSql();
-        const rows = await sql<{ mime: string; data: string | null; url: string | null }>`
+        // Guests only ever see avatars (shown next to authors and comments), never chat pictures.
+        const rows =
+          me.role === "guest"
+            ? await sql<{ mime: string; data: string | null; url: string | null }>`
+                select i.mime, i.data, i.url
+                from chat_images i
+                where i.id = ${id} and exists (select 1 from members m where m.avatar_id = i.id)
+                limit 1
+              `
+            : await sql<{ mime: string; data: string | null; url: string | null }>`
           select i.mime, i.data, i.url
           from chat_images i
           where i.id = ${id}

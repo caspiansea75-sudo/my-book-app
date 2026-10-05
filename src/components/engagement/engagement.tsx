@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Eye, Heart, MessageCircle, Send, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/members/avatar";
+import { useGuestGate } from "@/components/members/join-prompt";
 import {
   addComment,
   deleteComment,
@@ -12,6 +13,7 @@ import {
   type Engagement as EngagementData,
 } from "@/lib/engagement-api";
 import { useLocale } from "@/lib/i18n/locale";
+import { useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -59,6 +61,9 @@ const msg = (e: unknown) => (e instanceof Error && e.message ? e.message : "ক�
 export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
   const t = TONES[tone];
   const locale = useLocale();
+  // Guests can read comments and like, but commenting opens the "create an account" popup.
+  const isGuest = useMe()?.role === "guest";
+  const gate = useGuestGate();
   const target = { kind, parent, item } as const;
   const [data, setData] = useState<EngagementData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +113,7 @@ export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
   }
 
   async function onPost() {
+    if (!gate("comment")) return;
     const body = draft.trim();
     if (!body || posting) return;
     setPosting(true);
@@ -187,6 +193,12 @@ export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
           }}
           rows={2}
           placeholder="আপনার মন্তব্য লিখুন…"
+          readOnly={isGuest}
+          onFocus={(e) => {
+            if (!isGuest) return;
+            e.currentTarget.blur();
+            gate("comment");
+          }}
           disabled={!data}
           className={cn(
             "min-h-[3.25rem] flex-1 resize-y rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-white/30 disabled:opacity-50",
@@ -196,7 +208,7 @@ export function Engagement({ kind, parent, item, tone = "theme" }: Props) {
         <button
           type="button"
           onClick={() => void onPost()}
-          disabled={!data || posting || !draft.trim()}
+          disabled={!data || (!isGuest && (posting || !draft.trim()))}
           aria-label="মন্তব্য পাঠান"
           className={cn(
             "pressable grid size-11 shrink-0 place-items-center rounded-lg disabled:opacity-40",

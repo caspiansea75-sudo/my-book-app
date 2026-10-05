@@ -889,3 +889,116 @@
     opacity: 1;
   }
 }
+
+
+/* --- Guest "create an account" popup --- */
+.jp-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  background: color-mix(in oklab, black 42%, transparent);
+  animation: jp-fade 0.16s ease-out;
+}
+@media (min-width: 640px) {
+  .jp-wrap {
+    align-items: center;
+  }
+}
+.jp-card {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 19rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 20px 18px;
+  text-align: center;
+  font-family: var(--font-sans);
+  color: var(--color-fg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px -12px rgb(0 0 0 / 0.5);
+  animation: jp-pop 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+.jp-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--color-muted);
+}
+.jp-close:hover {
+  background: var(--color-surface-2);
+  color: var(--color-fg);
+}
+.jp-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-surface-2);
+  color: var(--color-lamp);
+}
+.jp-title {
+  margin: 8px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.jp-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+.jp-primary {
+  display: inline-flex;
+  width: 100%;
+  height: 44px;
+  margin-top: 12px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-size: 14px;
+}
+.jp-link {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--color-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.jp-link:hover {
+  color: var(--color-fg);
+}
+@keyframes jp-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes jp-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jp-wrap,
+  .jp-card {
+    animation: none;
+  }
+}

@@ -8,6 +8,7 @@ import {
   hiddenSet,
   isHidden,
   requireMember,
+  requireViewer,
 } from "@/lib/members-core";
 import {
   emptyChapterBody,
@@ -286,7 +287,7 @@ function toMs(v: unknown): number {
 }
 
 export const listLibrary = createServerFn({ method: "GET" }).handler(async () => {
-  const me = await requireMember();
+  const me = await requireViewer();
   const hid = await hiddenSet("book");
   const sql = await getSql();
   const covers = await coverMap();
@@ -366,7 +367,7 @@ export const listLibrary = createServerFn({ method: "GET" }).handler(async () =>
 export const resolveBook = createServerFn({ method: "GET" })
   .validator(z.object({ slug: z.string().min(1), drafts: z.boolean().optional() }))
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const me = await requireViewer();
     if (me.role !== "admin" && (await isHidden("book", data.slug))) return null;
     const canon = getCanonBook(data.slug);
     const covers = await coverMap();
@@ -413,7 +414,7 @@ export const resolveBook = createServerFn({ method: "GET" })
 export const loadStudioChapter = createServerFn({ method: "GET" })
   .validator(z.object({ bookSlug: z.string().min(1), slug: z.string().min(1) }))
   .handler(async ({ data }) => {
-    const me = await requireMember();
+    const me = await requireViewer();
     if (me.role !== "admin" && (await isHidden("book", data.bookSlug))) return null;
     const sql = await getSql();
     const books = await sql<BookRow>`

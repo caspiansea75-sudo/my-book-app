@@ -12,7 +12,7 @@ import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
 import { ReputationVote } from "@/components/engagement/reputation-vote";
 import { StatsLine, useContentStats } from "@/components/engagement/stats-line";
-import { useCanEdit } from "@/lib/use-me";
+import { canEditOwner, useCanEdit } from "@/lib/use-me";
 import {
   createMangaChapter,
   deleteMangaChapter,
@@ -23,12 +23,12 @@ import {
 } from "@/lib/manga-api";
 
 export const Route = createFileRoute("/manga/$seriesSlug/")({
-  loader: async ({ params }) => {
-    const [series, media] = await Promise.all([
-      getMangaSeries({ data: { slug: params.seriesSlug } }),
-      listMedia(),
-    ]);
+  loader: async ({ params, context }) => {
+    const series = await getMangaSeries({ data: { slug: params.seriesSlug } });
     if (!series) throw notFound();
+    // The gallery list is only used by the cover picker, which only people who can edit this series see.
+    // (Guests are not allowed to use the gallery at all.)
+    const media = canEditOwner(context.me, series.ownerId) ? await listMedia() : [];
     return { series, media };
   },
   component: MangaSeriesPage,

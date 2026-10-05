@@ -52,6 +52,7 @@ import {
   type VaultFolder,
   type VaultItem,
 } from "@/lib/media-folders-api";
+import { redirectGuest } from "@/lib/auth/guest";
 import { useLang } from "@/lib/i18n/lang";
 import { useLocale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
@@ -60,6 +61,7 @@ import "@/components/media/media-effects.css";
 export const Route = createFileRoute("/gallery")({
   beforeLoad: ({ context }) => {
     if (!context.me) throw redirect({ to: "/login" });
+    redirectGuest(context.me, "gallery");
   },
   loader: () => loadVault(),
   component: MediaPage,

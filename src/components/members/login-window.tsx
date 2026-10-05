@@ -1,5 +1,5 @@
 import type { CSSProperties, FormEvent, ReactNode, RefObject } from "react";
-import { ArrowRight, BookOpen, Eye, EyeOff, Loader2, Lock, LogIn, ShieldCheck, Smile, User, UserPlus } from "lucide-react";
+import { ArrowRight, BookOpen, Eye, EyeOff, Loader2, Lock, LogIn, ShieldCheck, Smile, User, UserPlus, UserRound } from "lucide-react";
 import { FxWords } from "@/components/media/fx";
 import { LoginBackdrop } from "@/components/members/login-backdrop";
 import "@/components/members/login-stage.css";
@@ -26,6 +26,9 @@ export type LoginWindowProps = {
   onSubmit: (e: FormEvent) => void;
   onPointerMove?: (e: React.PointerEvent<HTMLElement>) => void;
   onPointerLeave?: () => void;
+  /** "Continue as guest" — read, like and vote without an account. Hidden when not given. */
+  onGuest?: () => void;
+  guestBusy?: boolean;
 };
 
 /**
@@ -137,6 +140,21 @@ export function LoginWindow(p: LoginWindowProps) {
                     {!p.busy ? <ArrowRight size={16} /> : null}
                   </button>
                 </form>
+
+                {p.onGuest ? (
+                  <div className="ls-guest">
+                    <button
+                      type="button"
+                      className="ls-guest-btn pressable"
+                      onClick={p.onGuest}
+                      disabled={p.busy || p.guestBusy}
+                    >
+                      {p.guestBusy ? <Loader2 size={16} className="ls-spin" /> : <UserRound size={16} strokeWidth={1.7} />}
+                      অতিথি হিসেবে ঢুকুন
+                    </button>
+                    <p className="ls-guest-hint">গল্প ও মাঙ্গা পড়া, লাইক ও ভোট দেওয়া যাবে। বাকি সবকিছুর জন্য অ্যাকাউন্ট লাগবে।</p>
+                  </div>
+                ) : null}
 
                 <p className="ls-note">
                   <ShieldCheck size={13} strokeWidth={1.7} />

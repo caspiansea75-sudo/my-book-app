@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { LangSwitch } from "@/components/i18n/lang-switch";
 import { LoginWindow } from "@/components/members/login-window";
-import { login, signup } from "@/lib/members-api";
+import { continueAsGuest, login, signup } from "@/lib/members-api";
 
 const reducedMotion = () =>
   typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -18,6 +18,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [busy, setBusy] = useState(false);
   const [shake, setShake] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [guestBusy, setGuestBusy] = useState(false);
   const stage = useRef<HTMLElement | null>(null);
   const frame = useRef(0);
 
@@ -65,6 +66,22 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     }
   }
 
+  async function enterAsGuest() {
+    setGuestBusy(true);
+    setError(null);
+    try {
+      await continueAsGuest();
+      setLeaving(true);
+      if (!reducedMotion()) await new Promise((r) => setTimeout(r, 520));
+      await router.invalidate();
+      await router.navigate({ to: "/" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "কাজটি হয়নি");
+      setLeaving(false);
+      setGuestBusy(false);
+    }
+  }
+
   return (
     <LoginWindow
       mode={mode}
@@ -93,6 +110,8 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       onDisplayName={setDisplayName}
       onTogglePassword={() => setShowPassword((v) => !v)}
       onSubmit={(e) => void submit(e)}
+      onGuest={() => void enterAsGuest()}
+      guestBusy={guestBusy}
       onPointerMove={onPointerMove}
       onPointerLeave={onPointerLeave}
     />

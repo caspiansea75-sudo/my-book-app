@@ -5,11 +5,13 @@ import { SiteNav } from "@/components/book/site-nav";
 import { Avatar } from "@/components/members/avatar";
 import { FxAurora, FxWords } from "@/components/media/fx";
 import { resizeToJpeg } from "@/lib/image-resize";
+import { redirectGuest } from "@/lib/auth/guest";
 import { getProfile, removeAvatar, setAvatar, updateProfile, uploadChatImage } from "@/lib/social-api";
 
 export const Route = createFileRoute("/profile")({
   beforeLoad: ({ context }) => {
     if (!context.me) throw redirect({ to: "/login" });
+    redirectGuest(context.me, "profile");
   },
   loader: async ({ context }) => {
     const profile = await getProfile({ data: { username: context.me!.username } });
