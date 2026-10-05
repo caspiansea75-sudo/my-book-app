@@ -6,6 +6,7 @@ import { AmbientAudio } from "@/components/book/ambient-audio";
 import { WarningGate } from "@/components/book/warning-gate";
 import { formatCount, type BookIndex } from "@/lib/book";
 import { THEMES, useReaderStore, type ThemeId } from "@/lib/reader-store";
+import { ReputationVote } from "@/components/engagement/reputation-vote";
 import { StatsLine, useContentStats } from "@/components/engagement/stats-line";
 import { canEditOwner, useMe } from "@/lib/use-me";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ export function BookCoverPage({ book }: { book: BookIndex }) {
             {book.description}
           </p>
           <StatsLine stats={totals[book.slug]} className="mt-4" />
+          <ReputationVote kind="story" parent={book.slug} className="mt-3" />
 
           <div className="mt-8 flex flex-wrap gap-3">
             <Link

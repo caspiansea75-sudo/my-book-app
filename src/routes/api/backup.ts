@@ -41,6 +41,7 @@ const PLAN: Plan[] = [
   },
   { table: "content_likes", order: "created_at, member_id" },
   { table: "content_comments", paged: true },
+  { table: "content_votes", order: "kind, parent, member_id" },
   { table: "chat_messages", paged: true },
   { table: "chat_reactions", order: "message_id, member_id" },
   { table: "chat_reports", order: "id" },

@@ -114,4 +114,11 @@ export const CHAT_EXACT: Record<string, string> = {
   "দেখেছেন": "Seen",
   "ভিউ": "Views",
   "অধ্যায় ও ছবি যোগ": "Add chapters & images",
+  "সুনাম": "Reputation",
+  "উপরে ভোট": "Vote up",
+  "নিচে ভোট": "Vote down",
+  "ভালো লাগলে উপরে ভোট দিন": "Vote up if you enjoyed it",
+  "পছন্দ না হলে নিচে ভোট দিন": "Vote down if it wasn't for you",
+  "উপরে ও নিচে ভোট": "Up votes and down votes",
+  "নিজের লেখায় ভোট দেওয়া যায় না": "You can't vote on your own work",
 };

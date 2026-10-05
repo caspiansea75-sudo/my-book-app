@@ -10,6 +10,7 @@ import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
 import { MediaUploader } from "@/components/studio/media-uploader";
 import { listMedia } from "@/lib/library-api";
 import { mediaSrc } from "@/lib/media-url";
+import { ReputationVote } from "@/components/engagement/reputation-vote";
 import { StatsLine, useContentStats } from "@/components/engagement/stats-line";
 import { useCanEdit } from "@/lib/use-me";
 import {
@@ -170,6 +171,7 @@ function MangaSeriesPage() {
               <>
                 <h1 className="font-display text-3xl font-semibold sm:text-4xl"><FxWords text={series.title} /></h1>
                 <StatsLine stats={totals[series.slug]} className="mt-2" />
+                <ReputationVote kind="manga" parent={series.slug} className="mt-3" />
                 <AuthorLine kind="manga" slug={series.slug} author={series.author} canEdit={canEdit} />
                 <div className="mt-3 flex flex-wrap gap-2">
                   <AdultToggle
