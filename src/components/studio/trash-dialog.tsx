@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { BookOpen, FileText, Image as ImageIcon, RotateCcw, Trash2, X } from "lucide-react";
-import { listTrash, purgeTrash, restoreTrash, type TrashItem } from "@/lib/library-api";
+import { listTrash, purgeAllTrash, purgeTrash, restoreTrash, type TrashItem } from "@/lib/library-api";
 import { cn } from "@/lib/utils";
 
 type Filter = "all" | TrashItem["kind"];
@@ -19,6 +19,7 @@ export function TrashDialog({ onClose, onChanged }: { onClose: () => void; onCha
   const [items, setItems] = useState<TrashItem[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [emptying, setEmptying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -60,6 +61,28 @@ export function TrashDialog({ onClose, onChanged }: { onClose: () => void; onCha
   }
 
   const shown = (items ?? []).filter((i) => filter === "all" || i.kind === filter);
+  const FILTER_NAME: Record<Filter, string> = { all: "ট্রাশের", book: "সব বইয়ের", chapter: "সব অধ্যায়ের", media: "সব ছবি ও ভিডিওর" };
+
+  /** Erase everything that is listed under the chosen filter, in one go. */
+  async function emptyAll() {
+    if (shown.length === 0 || emptying) return;
+    // The list shows at most 500 images/videos; the server erases all of them.
+    const more = shown.filter((i) => i.kind === "media").length >= 500 ? " (এবং তালিকার বাইরের বাকি সব)" : "";
+    const withChapters = filter === "all" || filter === "book" ? " বইয়ের সব অধ্যায়সহ" : "";
+    const msg = `${FILTER_NAME[filter]} ${shown.length.toLocaleString("bn-BD")}টি জিনিস${more}${withChapters} স্থায়ীভাবে মুছবেন? এটি আর ফেরত আসবে না।`;
+    if (!window.confirm(msg)) return;
+    setEmptying(true);
+    setError(null);
+    try {
+      await purgeAllTrash({ data: { kind: filter === "all" ? undefined : filter } });
+      await load();
+      onChanged?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "কাজটি হয়নি");
+    } finally {
+      setEmptying(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-modal="true" aria-label="ট্রাশ">
@@ -102,6 +125,23 @@ export function TrashDialog({ onClose, onChanged }: { onClose: () => void; onCha
             </button>
           ))}
         </div>
+
+        {shown.length > 0 ? (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-nsfw/30 bg-nsfw/5 px-3 py-2">
+            <p className="font-sans text-xs text-muted">
+              <span>{shown.length.toLocaleString("bn-BD")}</span> <span>টি জিনিস</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => void emptyAll()}
+              disabled={emptying || busyKey != null}
+              className="pressable inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-nsfw/60 px-3 font-sans text-xs text-nsfw disabled:opacity-50"
+            >
+              <Trash2 className="size-3.5" />
+              {emptying ? "মুছছে…" : filter === "all" ? "ট্রাশ খালি করুন" : "এই তালিকা খালি করুন"}
+            </button>
+          </div>
+        ) : null}
 
         {error ? <p className="mt-3 font-sans text-xs text-nsfw">{error}</p> : null}
 

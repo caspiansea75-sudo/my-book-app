@@ -999,4 +999,52 @@ export const purgeTrash = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * "Empty the trash": really erases everything in the trash that the caller can see —
+ * the admin sees everyone's, a member only their own. Pass `kind` to empty just one kind.
+ * Never touches anything that is not already in the trash.
+ */
+export const purgeAllTrash = createServerFn({ method: "POST" })
+  .validator(z.object({ kind: trashKind.optional() }))
+  .handler(async ({ data }): Promise<{ books: number; chapters: number; media: number }> => {
+    const me = await requireMember();
+    const admin = me.role === "admin";
+    const sql = await getSql();
+    const done = { books: 0, chapters: 0, media: 0 };
+
+    // Chapters that were deleted on their own (their book is still alive).
+    if (!data.kind || data.kind === "chapter") {
+      const gone = await sql<{ id: number }>`
+        delete from library_chapters c using library_books b
+        where b.id = c.book_id and c.deleted_at is not null and b.deleted_at is null
+          and (${admin}::boolean or b.owner_id = ${me.id})
+        returning c.id
+      `;
+      done.chapters = gone.length;
+    }
+    // Books (their chapters go with them).
+    if (!data.kind || data.kind === "book") {
+      const gone = await sql<{ id: number }>`
+        delete from library_books
+        where deleted_at is not null and (${admin}::boolean or owner_id = ${me.id})
+        returning id
+      `;
+      done.books = gone.length;
+    }
+    // Images and videos, plus their files in the blob store.
+    if (!data.kind || data.kind === "media") {
+      const gone = await sql<{ url: string | null }>`
+        delete from media
+        where deleted_at is not null and (${admin}::boolean or owner_id = ${me.id})
+        returning url
+      `;
+      done.media = gone.length;
+      const { deleteMediaFile } = await import("@/lib/blob-store.server");
+      for (let i = 0; i < gone.length; i += 8) {
+        await Promise.all(gone.slice(i, i + 8).map((m) => deleteMediaFile(m.url)));
+      }
+    }
+    return done;
+  });
+
 export { mergeInserts };

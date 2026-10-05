@@ -122,4 +122,8 @@ export const CHAT_EXACT: Record<string, string> = {
   "উপরে ও নিচে ভোট": "Up votes and down votes",
   "নিজের লেখায় ভোট দেওয়া যায় না": "You can't vote on your own work",
   "সাম্প্রতিক আপডেট": "Recently updated",
+  "টি জিনিস": "items",
+  "মুছছে…": "Deleting…",
+  "ট্রাশ খালি করুন": "Empty trash",
+  "এই তালিকা খালি করুন": "Empty this list",
 };
