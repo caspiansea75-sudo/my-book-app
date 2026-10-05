@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSql } from "@/lib/db";
 import {
   adultMap,
+  assertMediaUsable,
   assertPanelAccess,
   assertSeriesAccess,
   hiddenSet,
@@ -83,6 +84,7 @@ export const setMangaCover = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     await assertSeriesAccess(me, data.slug);
+    if (data.mediaId != null) await assertMediaUsable(me, [data.mediaId]);
     const sql = await getSql();
     await sql`update manga_series set cover_media_id = ${data.mediaId} where slug = ${data.slug}`;
     return { ok: true };
@@ -348,6 +350,7 @@ export const addMangaPanel = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     await assertSeriesAccess(me, data.seriesSlug);
+    await assertMediaUsable(me, [data.mediaId]);
     const sql = await getSql();
     const rows = await sql<{ id: number }>`
       select c.id from manga_chapters c
@@ -456,6 +459,7 @@ export const addMangaPanels = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     await assertSeriesAccess(me, data.seriesSlug);
+    await assertMediaUsable(me, data.mediaIds);
     const sql = await getSql();
     const rows = await sql<{ id: number }>`
       select c.id from manga_chapters c

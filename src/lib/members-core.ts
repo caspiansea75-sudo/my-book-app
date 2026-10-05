@@ -239,6 +239,51 @@ export async function assertPanelAccess(me: Me, panelIds: number[]): Promise<voi
   if (rows.some((r) => !owns(me, r.owner_id))) throw new Error(NOT_YOURS);
 }
 
+/* ---- locks (a member can lock their own images/videos and folders) --------
+   A locked file, or any file inside a locked folder (at any depth), is invisible to
+   every other member: not in the gallery, not in the pickers, not fetchable by id.
+   The owner and the admin are never locked out. Files already shown inside a story
+   or manga keep showing to its readers (see /api/media/$id). */
+
+const MEDIA_LOCKED = "এই ছবি/ভিডিওটি মালিক লক করে রেখেছেন, তাই ব্যবহার করা যাবে না";
+
+const LOCKED_FOLDERS_CTE = `with recursive lf(id) as (
+    select id from media_folders where locked
+    union
+    select f.id from media_folders f join lf on f.parent_id = lf.id
+  )`;
+
+/** Ids (out of `only`, or of every file) that are locked against `me`. Empty for the admin. */
+export async function lockedMediaIds(me: Me, only?: number[]): Promise<Set<number>> {
+  if (me.role === "admin") return new Set();
+  const sql = await getSql();
+  const rows = await sql.query<{ id: number }>(
+    `${LOCKED_FOLDERS_CTE}
+     select m.id from media m
+     left join media_folder_items i on i.media_id = m.id
+     where (m.locked or i.folder_id in (select id from lf))
+       and m.owner_id is distinct from $1::int
+       and ($2::int[] is null or m.id = any($2::int[]))`,
+    [me.id, only ?? null],
+  );
+  return new Set(rows.map((r) => Number(r.id)));
+}
+
+export async function isMediaLockedFor(me: Me, id: number): Promise<boolean> {
+  return (await lockedMediaIds(me, [id])).has(id);
+}
+
+/**
+ * Refuses to put someone else's locked file into your own story, manga or cover.
+ * `alreadyUsed` = files the thing already contained before this save, so that a lock
+ * set later never breaks re-saving something that was fine when it was made.
+ */
+export async function assertMediaUsable(me: Me, ids: number[], alreadyUsed: Set<number> = new Set()): Promise<void> {
+  const check = [...new Set(ids)].filter((id) => !alreadyUsed.has(id));
+  if (check.length === 0) return;
+  if ((await lockedMediaIds(me, check)).size > 0) throw new Error(MEDIA_LOCKED);
+}
+
 /* ---- hidden items (admin can hide stories, manga, images/videos) ---------- */
 
 export type HiddenKind = "book" | "manga" | "media";

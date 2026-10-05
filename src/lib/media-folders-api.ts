@@ -11,6 +11,11 @@ export type VaultFolder = {
   name: string;
   createdAt: string;
   itemCount: number;
+  ownerId: number | null;
+  /** The owner switched the lock on for this folder itself. */
+  locked: boolean;
+  /** Locked only because a folder above it is locked. */
+  lockedViaParent: boolean;
 };
 
 export type VaultItem = {
@@ -30,6 +35,11 @@ export type VaultItem = {
   folderId: number | null;
   /** In how many distinct places (manga, stories, covers) this file is used. */
   usageCount: number;
+  ownerId: number | null;
+  /** The owner switched the lock on for this file itself. */
+  locked: boolean;
+  /** Locked only because the folder it sits in (or one above it) is locked. */
+  lockedViaFolder: boolean;
 };
 
 export type MediaUsage = {
@@ -54,6 +64,8 @@ type ItemRow = {
   bytes: number;
   created_at: string | Date;
   folder_id: number | null;
+  owner_id: number | null;
+  locked: boolean;
 };
 
 type FolderRow = {
@@ -62,13 +74,15 @@ type FolderRow = {
   name: string;
   created_at: string | Date;
   item_count: number;
+  owner_id: number | null;
+  locked: boolean;
 };
 
 function iso(value: string | Date): string {
   return new Date(value).toISOString();
 }
 
-function asItem(row: ItemRow, usageCount: number): VaultItem {
+function asItem(row: ItemRow, usageCount: number, lockedViaFolder: boolean): VaultItem {
   const uploaded = row.source === "upload";
   const thumbSrc = row.thumb_url
     ? row.thumb_url
@@ -92,6 +106,9 @@ function asItem(row: ItemRow, usageCount: number): VaultItem {
     createdAt: iso(row.created_at),
     folderId: row.folder_id,
     usageCount,
+    ownerId: row.owner_id,
+    locked: Boolean(row.locked),
+    lockedViaFolder,
   };
 }
 
@@ -164,13 +181,11 @@ async function collectUsage(sql: Sql): Promise<Map<number, MediaUsage[]>> {
 
 /** Everything the media page needs in one round trip (no heavy blob columns). */
 export const loadVault = createServerFn({ method: "GET" }).handler(async (): Promise<Vault> => {
-    const me = await requireMember();
-    const hid = await hiddenSet("media");
+  const me = await requireMember();
+  const hid = await hiddenSet("media");
   const sql = await getSql();
   const folderRows = await sql<FolderRow>`
-    select f.id, f.parent_id, f.name, f.created_at,
-      (select count(*) from media_folder_items i join media x on x.id = i.media_id
-        where i.folder_id = f.id and x.deleted_at is null) as item_count
+    select f.id, f.parent_id, f.name, f.created_at, f.owner_id, f.locked, 0 as item_count
     from media_folders f
     order by lower(f.name), f.id
   `;
@@ -178,7 +193,7 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
     select m.id, m.kind, m.title, m.mime, m.source, m.url,
       case when m.thumb like 'http%' then m.thumb else null end as thumb_url,
       (m.thumb is not null) as has_thumb,
-      m.width, m.height, m.bytes, m.created_at, i.folder_id
+      m.width, m.height, m.bytes, m.created_at, i.folder_id, m.owner_id, m.locked
     from media m
     left join media_folder_items i on i.media_id = m.id
     where m.deleted_at is null
@@ -186,17 +201,52 @@ export const loadVault = createServerFn({ method: "GET" }).handler(async (): Pro
     limit 2000
   `;
   const usage = await collectUsage(sql);
+  const admin = me.role === "admin";
+
+  // A folder is locked if it is switched on itself or sits anywhere below a locked folder.
+  const parentOf = new Map(folderRows.map((f) => [f.id, f.parent_id]));
+  const selfLocked = new Set(folderRows.filter((f) => f.locked).map((f) => f.id));
+  const lockedFolder = (id: number): boolean => {
+    const seen = new Set<number>();
+    let cur: number | null | undefined = id;
+    while (cur != null && !seen.has(cur)) {
+      if (selfLocked.has(cur)) return true;
+      seen.add(cur);
+      cur = parentOf.get(cur);
+    }
+    return false;
+  };
+  const folderLockedAbove = (id: number): boolean => {
+    const above = parentOf.get(id);
+    return above != null && lockedFolder(above);
+  };
+
+  // Other members never see what is locked; the owner and the admin always do.
+  const shownItems = itemRows.filter((r) => {
+    if (!admin && hid.has(String(r.id))) return false;
+    if (admin || r.owner_id === me.id) return true;
+    return !r.locked && !(r.folder_id != null && lockedFolder(r.folder_id));
+  });
+  const shownFolders = folderRows.filter((f) => admin || f.owner_id === me.id || !lockedFolder(f.id));
+
+  const counts = new Map<number, number>();
+  for (const r of shownItems) if (r.folder_id != null) counts.set(r.folder_id, (counts.get(r.folder_id) ?? 0) + 1);
+
   return {
-    folders: folderRows.map((r) => ({
+    folders: shownFolders.map((r) => ({
       id: r.id,
       parentId: r.parent_id,
       name: r.name,
       createdAt: iso(r.created_at),
-      itemCount: Number(r.item_count),
+      itemCount: counts.get(r.id) ?? 0,
+      ownerId: r.owner_id,
+      locked: Boolean(r.locked),
+      lockedViaParent: !r.locked && folderLockedAbove(r.id),
     })),
-    items: itemRows
-      .filter((r) => me.role === "admin" || !hid.has(String(r.id)))
-      .map((r) => ({ ...asItem(r, usage.get(r.id)?.length ?? 0), hidden: hid.has(String(r.id)) })),
+    items: shownItems.map((r) => ({
+      ...asItem(r, usage.get(r.id)?.length ?? 0, r.folder_id != null && lockedFolder(r.folder_id)),
+      hidden: hid.has(String(r.id)),
+    })),
   };
 });
 
@@ -319,6 +369,31 @@ export const renameMedia = createServerFn({ method: "POST" })
     await assertMediaAccess(me, [data.id]);
     const sql = await getSql();
     await sql`update media set title = ${data.title.trim()} where id = ${data.id}`;
+    return { ok: true };
+  });
+
+/**
+ * Lock or unlock your own pictures/videos. Locked files disappear from the gallery
+ * and the pickers of every other member (the admin still sees them).
+ */
+export const setMediaLocked = createServerFn({ method: "POST" })
+  .validator(z.object({ ids: z.array(z.number().int().positive()).min(1).max(500), locked: z.boolean() }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertMediaAccess(me, data.ids);
+    const sql = await getSql();
+    await sql.query(`update media set locked = $2 where id = any($1::int[])`, [data.ids, data.locked]);
+    return { ok: true };
+  });
+
+/** Lock or unlock a folder you own. Everything inside it (sub-folders too) is locked along with it. */
+export const setFolderLocked = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int().positive(), locked: z.boolean() }))
+  .handler(async ({ data }) => {
+    const me = await requireMember();
+    await assertFolderAccess(me, data.id);
+    const sql = await getSql();
+    await sql`update media_folders set locked = ${data.locked} where id = ${data.id}`;
     return { ok: true };
   });
 

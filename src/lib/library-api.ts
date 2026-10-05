@@ -5,8 +5,11 @@ import {
   adultMap,
   assertBookAccess,
   assertMediaAccess,
+  assertMediaUsable,
   hiddenSet,
   isHidden,
+  isMediaLockedFor,
+  lockedMediaIds,
   requireMember,
   requireViewer,
 } from "@/lib/members-core";
@@ -487,8 +490,9 @@ export const listMedia = createServerFn({ method: "GET" }).handler(async () => {
     order by created_at desc
     limit 240
   `;
+  const locked = await lockedMediaIds(me);
   const all = rows.map((r) => ({ ...asMedia(r), hidden: hid.has(String(r.id)) }));
-  return me.role === "admin" ? all : all.filter((m) => !m.hidden);
+  return me.role === "admin" ? all : all.filter((m) => !m.hidden && !locked.has(m.id));
 });
 
 export const getMediaRecord = createServerFn({ method: "GET" })
@@ -496,6 +500,7 @@ export const getMediaRecord = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     if (me.role !== "admin" && (await isHidden("media", String(data.id)))) return null;
+    if (await isMediaLockedFor(me, data.id)) return null;
     const sql = await getSql();
     const rows = await sql<MediaRow & { data: string | null }>`
       select id, kind, title, mime, source, url, thumb, width, height, bytes, created_at, data
@@ -684,6 +689,7 @@ export const setBookCover = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = await requireMember();
     await assertBookAccess(me, data.slug);
+    if (data.mediaId != null) await assertMediaUsable(me, [data.mediaId]);
     const sql = await getSql();
     const studio = await sql<{ id: number }>`select id from library_books where slug = ${data.slug} limit 1`;
     if (studio[0]) {
@@ -798,6 +804,20 @@ export const saveStudioChapter = createServerFn({ method: "POST" })
         ? data.slug
         : uniqueSlug(data.slug || String(nextNumber).padStart(2, "0"), taken);
     const sortOrder = live.find((c) => c.slug === slug)?.sort_order ?? existing.length + 1;
+    // Someone else's locked pictures cannot be newly placed in this chapter; ones it already had stay.
+    const usedNow = sections.flatMap((sec) => sec.paragraphs.map((p) => p.mediaId)).filter((v): v is number => typeof v === "number");
+    if (usedNow.length > 0) {
+      const prev = await sql<{ body: unknown }>`
+        select body from library_chapters where book_id = ${book.id} and slug = ${slug} limit 1
+      `;
+      const had = new Set<number>();
+      if (prev[0]) {
+        for (const sec of parseBody(prev[0].body).sections) {
+          for (const p of sec.paragraphs) if (typeof p.mediaId === "number") had.add(p.mediaId);
+        }
+      }
+      await assertMediaUsable(me, usedNow, had);
+    }
     const body = JSON.stringify({ sections });
     await sql.query(
       `insert into library_chapters (book_id, slug, title, title_en, excerpt, sort_order, body, status, published_at)
@@ -837,6 +857,15 @@ export const saveChapterInserts = createServerFn({ method: "POST" })
     await assertBookAccess(me, data.bookSlug);
     if (!getCanonBook(data.bookSlug)) throw new Error("শুধু আসল বইয়ে ছবি যোগ করা যায় এই পথে");
     const sql = await getSql();
+    // Only newly added pictures are checked: ones already in the chapter keep working even if their owner locks them later.
+    const before = await sql<{ media_id: number }>`
+      select media_id from chapter_inserts where book_slug = ${data.bookSlug} and chapter_slug = ${data.chapterSlug}
+    `;
+    await assertMediaUsable(
+      me,
+      data.items.map((i) => i.mediaId),
+      new Set(before.map((r) => Number(r.media_id))),
+    );
     await sql`delete from chapter_inserts where book_slug = ${data.bookSlug} and chapter_slug = ${data.chapterSlug}`;
     let order = 0;
     for (const item of data.items) {

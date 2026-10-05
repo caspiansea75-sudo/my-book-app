@@ -22,6 +22,8 @@ import {
   LayoutGrid,
   Link2,
   List,
+  Lock,
+  LockOpen,
   Pencil,
   Search,
   ShieldAlert,
@@ -47,12 +49,15 @@ import {
   moveMedia,
   renameFolder,
   renameMedia,
+  setFolderLocked,
+  setMediaLocked,
   type MediaUsage,
   type Vault,
   type VaultFolder,
   type VaultItem,
 } from "@/lib/media-folders-api";
 import { redirectGuest } from "@/lib/auth/guest";
+import { canEditOwner, useMe } from "@/lib/use-me";
 import { useLang } from "@/lib/i18n/lang";
 import { useLocale } from "@/lib/i18n/locale";
 import { cn } from "@/lib/utils";
@@ -150,6 +155,7 @@ function sortItems(items: VaultItem[], sort: SortKey): VaultItem[] {
 
 function MediaPage() {
   const initial = Route.useLoaderData();
+  const me = useMe();
   const lang = useLang();
   const locale = useLocale();
   const [vault, setVault] = useState<Vault>(initial);
@@ -507,6 +513,23 @@ function MediaPage() {
     await run(() => deleteFolder({ data: { id: folder.id } }));
   }
 
+  /** Lock or unlock one or more of my own files. Others' files in the selection are left alone. */
+  async function lockItems(ids: number[], locked: boolean) {
+    const mine = ids.filter((id) => {
+      const it = vault.items.find((x) => x.id === id);
+      return it != null && canEditOwner(me, it.ownerId);
+    });
+    if (mine.length === 0) {
+      setNotice("শুধু নিজের আপলোড করা ফাইল লক করা যায়।");
+      return;
+    }
+    await run(async () => {
+      await setMediaLocked({ data: { ids: mine, locked } });
+      if (mine.length < ids.length) setNotice("অন্যের ফাইল বাদ দিয়ে শুধু আপনার ফাইলগুলো বদলানো হয়েছে।");
+    });
+    exitSelect();
+  }
+
   function renderItem(item: VaultItem, i: number) {
     const isSel = selected.has(item.id);
     const where = flat && item.folderId != null ? pathOf(item.folderId) : "";
@@ -527,9 +550,31 @@ function MediaPage() {
           {bn(item.usageCount)}
         </span>
       ) : null;
+    const lockBadge =
+      item.locked || item.lockedViaFolder ? (
+        <span
+          title={
+            item.locked
+              ? "লক করা — শুধু আপনি আর অ্যাডমিন দেখতে পাবেন"
+              : "লক করা ফোল্ডারের ভেতরে — শুধু আপনি আর অ্যাডমিন দেখতে পাবেন"
+          }
+          className="inline-flex h-6 items-center gap-1 rounded-full bg-bg/80 px-2 font-sans text-[0.65rem] text-lamp backdrop-blur-sm"
+        >
+          <Lock className="size-3" strokeWidth={2} />
+          লক
+        </span>
+      ) : null;
     const actions = (
       <>
         <HideToggle kind="media" id={item.id} hidden={!!item.hidden} variant="tile" onChanged={() => void refresh()} />
+        {canEditOwner(me, item.ownerId) ? (
+          <TileBtn
+            label={item.locked ? "আনলক করুন — সবাই দেখতে পাবে" : "লক করুন — অন্য সদস্যরা দেখতে পাবে না"}
+            onClick={() => void run(() => setMediaLocked({ data: { ids: [item.id], locked: !item.locked } }))}
+          >
+            {item.locked ? <Lock className="size-4 text-lamp" /> : <LockOpen className="size-4" />}
+          </TileBtn>
+        ) : null}
         <TileBtn label="নাম বদলান" onClick={() => setModal({ type: "rename-item", item })}>
           <Pencil className="size-4" />
         </TileBtn>
@@ -594,6 +639,7 @@ function MediaPage() {
           {item.hidden ? (
             <span className="rounded-full bg-bg/80 px-2 py-0.5 font-sans text-[0.65rem] text-lamp">লুকানো</span>
           ) : null}
+          {lockBadge}
           {!selectMode ? <div className="flex shrink-0 gap-1">{actions}</div> : null}
         </li>
       );
@@ -649,6 +695,11 @@ function MediaPage() {
             লুকানো
           </span>
         ) : null}
+        {lockBadge ? (
+          <span className={cn("pointer-events-none absolute right-2 z-10", covers ? "bottom-2" : "bottom-11")}>
+            {lockBadge}
+          </span>
+        ) : null}
         {usageBadge ? (
           <span
             className={cn(
@@ -692,7 +743,7 @@ function MediaPage() {
         </h1>
         <p className="mt-3 max-w-xl font-sans text-sm leading-relaxed text-muted">
           ফোল্ডার ও সাবফোল্ডার বানিয়ে ছবি ও ভিডিও গুছিয়ে রাখুন। সাজান, খুঁজুন, ফিল্টার করুন, একসাথে অনেকগুলো বেছে সরান —
-          ফাইল টেনে ফোল্ডারে ছেড়েও দেওয়া যায়।
+          ফাইল টেনে ফোল্ডারে ছেড়েও দেওয়া যায়। নিজের ছবি, ভিডিও বা ফোল্ডারে তালা (🔒) দিলে অন্য সদস্যরা সেগুলো দেখতে পাবেন না।
         </p>
         <button
           type="button"
@@ -998,7 +1049,16 @@ function MediaPage() {
                     >
                       <Folder className="mf-folder-icon size-6 shrink-0 text-lamp" strokeWidth={1.5} />
                       <span className="min-w-0">
-                        <span className="mf-name block truncate font-sans text-sm text-fg">{f.name}</span>
+                        <span className="mf-name flex items-center gap-1.5 truncate font-sans text-sm text-fg">
+                          <span className="truncate">{f.name}</span>
+                          {f.locked || f.lockedViaParent ? (
+                            <Lock
+                              className="size-3 shrink-0 text-lamp"
+                              strokeWidth={2}
+                              aria-label="লক করা"
+                            />
+                          ) : null}
+                        </span>
                         {searching && f.parentId != null ? (
                           <span className="block truncate font-sans text-[0.65rem] text-subtle">{pathOf(f.parentId)}</span>
                         ) : null}
@@ -1010,6 +1070,18 @@ function MediaPage() {
                       </span>
                     </button>
                     <div className="flex shrink-0 items-center opacity-70 group-hover:opacity-100 focus-within:opacity-100">
+                      {canEditOwner(me, f.ownerId) ? (
+                        <IconBtn
+                          label={
+                            f.locked
+                              ? "ফোল্ডার আনলক করুন"
+                              : "ফোল্ডার লক করুন — ভেতরের সবকিছু অন্য সদস্যদের কাছে লুকোবে"
+                          }
+                          onClick={() => void run(() => setFolderLocked({ data: { id: f.id, locked: !f.locked } }))}
+                        >
+                          {f.locked ? <Lock className="size-4 text-lamp" /> : <LockOpen className="size-4" />}
+                        </IconBtn>
+                      ) : null}
                       <IconBtn label="সাবফোল্ডার বানান" onClick={() => setModal({ type: "new-folder", parentId: f.id })}>
                         <FolderPlus className="size-4" />
                       </IconBtn>
@@ -1081,6 +1153,22 @@ function MediaPage() {
             >
               <FolderInput className="size-4" />
               সরান
+            </button>
+            <button
+              type="button"
+              onClick={() => void lockItems([...selected], true)}
+              className="pressable inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 font-sans text-xs text-fg"
+            >
+              <Lock className="size-4" />
+              লক
+            </button>
+            <button
+              type="button"
+              onClick={() => void lockItems([...selected], false)}
+              className="pressable inline-flex h-10 items-center gap-1.5 rounded-lg border border-border px-3 font-sans text-xs text-fg"
+            >
+              <LockOpen className="size-4" />
+              আনলক
             </button>
             <button
               type="button"
