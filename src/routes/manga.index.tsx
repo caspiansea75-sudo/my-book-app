@@ -4,10 +4,10 @@ import { BookImage } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import { SiteNav } from "@/components/book/site-nav";
 import { FxAurora, FxWords, fxIndex } from "@/components/media/fx";
-import { createMangaSeries, listMangaSeries } from "@/lib/manga-api";
+import { createMangaSeries, listMangaSeries, type MangaSeriesCard } from "@/lib/manga-api";
 import { mediaSrc } from "@/lib/media-url";
 import { useGuestGate } from "@/components/members/join-prompt";
-import { useMe } from "@/lib/use-me";
+import { canEditOwner, useMe } from "@/lib/use-me";
 
 export const Route = createFileRoute("/manga/")({
   loader: () => listMangaSeries(),
@@ -15,8 +15,11 @@ export const Route = createFileRoute("/manga/")({
 });
 
 function MangaHub() {
-  const series = Route.useLoaderData();
   const me = useMe();
+  // The studio is for making manga: members see only their own series, the admin sees all (like the story studio).
+  const series = (Route.useLoaderData() as (MangaSeriesCard & { hidden?: boolean })[]).filter((s) => canEditOwner(me, s.ownerId));
+  const isAdmin = me?.role === "admin";
+  const isGuest = me?.role === "guest";
   const gate = useGuestGate();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
@@ -104,9 +107,20 @@ function MangaHub() {
           </form>
         ) : null}
 
-        <h2 className="mt-14 font-display text-2xl">সব মাঙ্গা</h2>
+        {isGuest ? (
+          <p className="mt-14 font-sans text-sm text-muted">
+            <Link to="/" className="text-lamp underline-offset-4 hover:underline">সবার মাঙ্গা পড়তে হোম পেজে যান →</Link>
+          </p>
+        ) : (
+          <>
+            <h2 className="mt-14 font-display text-2xl">{isAdmin ? "সব মাঙ্গা" : "আপনার মাঙ্গা"}</h2>
+            {!isAdmin ? (
+              <p className="mt-2 font-sans text-sm text-muted">
+                <Link to="/" className="text-lamp underline-offset-4 hover:underline">সবার মাঙ্গা পড়তে হোম পেজে যান →</Link>
+              </p>
+            ) : null}
         {series.length === 0 ? (
-          <p className="mt-4 font-sans text-sm text-muted">এখনো কোনো মাঙ্গা তৈরি হয়নি।</p>
+          <p className="mt-4 font-sans text-sm text-muted">{isAdmin ? "এখনো কোনো মাঙ্গা তৈরি হয়নি।" : "আপনি এখনো কোনো মাঙ্গা তৈরি করেননি।"}</p>
         ) : (
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {series.map((s, i) => (
@@ -131,6 +145,8 @@ function MangaHub() {
               </Link>
             ))}
           </div>
+        )}
+          </>
         )}
       </section>
     </main>

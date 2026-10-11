@@ -44,6 +44,11 @@ export const GALLERY_EXACT: Record<string, string> = {
   "পোকেমন": "Pokémon",
   "পোকেমন লড়াইয়ে নামতে অ্যাকাউন্ট দরকার": "An account is needed to battle in Pokémon",
 
+  // Manga studio shows the creator's own manga
+  "আপনার মাঙ্গা": "Your manga",
+  "আপনি এখনো কোনো মাঙ্গা তৈরি করেননি।": "You haven't created any manga yet.",
+  "সবার মাঙ্গা পড়তে হোম পেজে যান →": "Go to the home page to read everyone's manga →",
+
   // Mini chat window
   "বন্ধ করুন": "Close",
   "চ্যাট খুলুন": "Open chat",
