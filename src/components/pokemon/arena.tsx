@@ -20,7 +20,7 @@ import {
 
 /* ============================================================ the scene */
 
-type FxKind = "ring" | "mega" | "flash" | "zbeam" | "zaura" | "cloud" | "shards" | "sparks" | "arrow" | "label" | "num" | "banner" | "aura" | "burst" | "typefx" | "ball" | "band";
+type FxKind = "ring" | "mega" | "flash" | "zbeam" | "zaura" | "cloud" | "shards" | "sparks" | "arrow" | "label" | "num" | "banner" | "aura" | "burst" | "typefx" | "ball" | "band" | "shield";
 type Fx = { id: number; kind: FxKind; side?: SideId; to?: SideId; color?: string; text?: string; up?: boolean; extra?: string; delay?: number };
 
 const CENTER = { me: { x: 27, y: 62 }, foe: { x: 72, y: 33 } };
@@ -44,6 +44,137 @@ const TYPE_FX: Record<string, { e: string[]; mode: "out" | "up" | "down" | "spir
 };
 const SLASH_TYPES = new Set(["Normal", "Fighting", "Steel", "Bug", "Dark", "Rock", "Dragon", "Flying", "Ground"]);
 const SCREEN_FX = new Set<FxKind>(["band", "banner", "num"]);
+
+
+/* ------------------------------------------------- how Pokémon move when they attack and get hit */
+
+type Motion = "dash" | "jump" | "spin" | "dig" | "bite" | "uppercut" | "slam" | "charge" | "dance" | "curl" | "heal" | "roar" | "quake";
+const RX = {
+  quake: /^(earthquake|magnitude|bulldoze|stomping tantrum|fissure|precipice blades)$/i,
+  dig: /^(dig|burrow|sand tomb)$/i,
+  jump: /(jump|bounce|flying press|sky|dive|pounce|leap|brave bird|^fly$|acrobatics|dragon ascent|aerial|stomp|plunge|hyperspace)/i,
+  spin: /(spin|gyro|twister|whirl|roll|tornado|drill|screw|blade|wheel|pinwheel)/i,
+  bite: /(bite|crunch|fang|chomp|gnaw|peck|horn|pierce|sting|claw|slash|scratch|cut|shear)/i,
+  slam: /(slam|hammer|smash|crush|body|double.edge|take down|giga impact|wild charge|head|explosion|self-destruct|tackle|bulk)/i,
+  curl: /(protect|detect|harden|withdraw|defense curl|iron defense|barrier|acid armor|cotton guard|shelter|endure|spiky shield|king's shield|baneful bunker|obstruct|substitute|light screen|reflect|aurora veil|mist|safeguard|wide guard|quick guard|mat block|silk trap|burning bulwark)/i,
+  heal: /(recover|roost|heal|synthesis|moonlight|morning sun|soft-?boiled|slack off|milk drink|rest|wish|shore up|life dew|jungle healing|aqua ring|ingrain|strength sap)/i,
+  dance: /(dance|swords|nasty plot|calm mind|bulk up|agility|growth|work up|coil|shell smash|tail glow|geomancy|meditate|hone claws|sharpen|howl|cosmic power|amnesia|minimize|rock polish|autotomize|belly drum|victory)/i,
+};
+function motionFor(name: string, type: string, cat?: string): Motion {
+  if (cat === "Status") {
+    if (RX.curl.test(name)) return "curl";
+    if (RX.heal.test(name)) return "heal";
+    if (RX.dance.test(name)) return "dance";
+    return "roar";
+  }
+  if (RX.quake.test(name)) return "quake";
+  if (RX.dig.test(name)) return "dig";
+  if (cat === "Special") return "charge";
+  if (RX.jump.test(name)) return "jump";
+  if (RX.spin.test(name)) return "spin";
+  if (RX.bite.test(name)) return "bite";
+  if (RX.slam.test(name)) return "slam";
+  if (type === "Fighting") return "uppercut";
+  return "dash";
+}
+
+/** One animation frame; every frame uses the same list of transform functions so the browser blends them smoothly. */
+const fk = (offset: number, x: number, y: number, rot = 0, sx = 1, sy = 1, b = 1, glow = "transparent", r = 0, opacity = 1): Keyframe => ({
+  offset,
+  transform: `translate(${x}%, ${y}%) rotate(${rot}deg) scale(${sx}, ${sy})`,
+  filter: `brightness(${b}) drop-shadow(0 0 ${r}px ${glow})`,
+  opacity,
+});
+
+function attackAnim(m: Motion, d: { x: number; y: number }, g: string): { frames: Keyframe[]; ms: number } {
+  const sg = d.x > 0 ? 1 : -1;
+  switch (m) {
+    case "jump":
+      return { ms: 800, frames: [fk(0, 0, 0), fk(0.12, 0, 5, 0, 1.06, 0.88), fk(0.42, d.x * 0.45, d.y * 0.45 - 40, -12 * sg, 1, 1.05), fk(0.62, d.x, d.y, 8 * sg, 1.12, 1.12, 1.3, g, 12), fk(0.72, d.x, d.y, 0, 1.14, 0.88), fk(1, 0, 0)] };
+    case "spin":
+      return { ms: 720, frames: [fk(0, 0, 0), fk(0.5, d.x * 0.9, d.y * 0.9, 360 * sg, 1.1, 1.1, 1.3, g, 10), fk(1, 0, 0, 720 * sg)] };
+    case "dig":
+      return { ms: 950, frames: [fk(0, 0, 0), fk(0.25, 0, 60, 0, 0.8, 0.4, 0.7, "transparent", 0, 0.3), fk(0.55, d.x, d.y + 50, 0, 0.8, 0.4, 0.7, "transparent", 0, 0.3), fk(0.7, d.x, d.y - 12, 0, 1.1, 1.25, 1.2), fk(1, 0, 0)] };
+    case "bite":
+      return { ms: 720, frames: [fk(0, 0, 0), fk(0.3, d.x, d.y, 0, 1.1, 1.1), fk(0.38, d.x + 3, d.y, -4 * sg, 1.1, 1.1), fk(0.46, d.x - 3, d.y, 4 * sg, 1.1, 1.1), fk(0.54, d.x + 3, d.y, -4 * sg, 1.1, 1.1), fk(0.62, d.x - 2, d.y, 3 * sg, 1.1, 1.1), fk(1, 0, 0)] };
+    case "uppercut":
+      return { ms: 720, frames: [fk(0, 0, 0), fk(0.18, 0, 6, 0, 1.05, 0.82), fk(0.5, d.x * 0.8, d.y * 0.8 - 30, -18 * sg, 1.05, 1.15, 1.3, g, 12), fk(0.65, d.x * 0.9, d.y * 0.9 - 12, -10 * sg, 1.08, 1.08), fk(1, 0, 0)] };
+    case "slam":
+      return { ms: 740, frames: [fk(0, 0, 0), fk(0.3, d.x * 0.3, d.y * 0.3 - 22, -6 * sg, 1.05, 1.1), fk(0.5, d.x, d.y, 10 * sg, 1.15, 0.95, 1.3, g, 12), fk(0.62, d.x, d.y, 0, 1.18, 0.85), fk(1, 0, 0)] };
+    case "charge":
+      return { ms: 820, frames: [fk(0, 0, 0), fk(0.35, -d.x * 0.1, -d.y * 0.1, -6 * sg, 0.96, 1.05, 1.4, g, 22), fk(0.55, -d.x * 0.12, -d.y * 0.12, -6 * sg, 0.96, 1.05, 1.6, g, 28), fk(0.7, d.x * 0.18, d.y * 0.18, 4 * sg, 1.1, 1, 1.8, g, 30), fk(1, 0, 0)] };
+    case "dance":
+      return { ms: 1000, frames: [fk(0, 0, 0), fk(0.15, -4, -2, -8, 1, 1, 1.2, g, 10), fk(0.3, 4, -2, 8, 1, 1, 1.2, g, 10), fk(0.45, -4, -2, -8, 1, 1, 1.2, g, 10), fk(0.6, 4, -2, 8, 1, 1, 1.2, g, 10), fk(0.8, 0, -6, 0, 1.06, 1.06, 1.4, g, 14), fk(1, 0, 0)] };
+    case "curl":
+      return { ms: 900, frames: [fk(0, 0, 0), fk(0.3, 0, 6, 0, 0.82, 0.8, 1.5, g, 16), fk(0.75, 0, 6, 0, 0.82, 0.8, 1.5, g, 16), fk(1, 0, 0)] };
+    case "heal":
+      return { ms: 900, frames: [fk(0, 0, 0), fk(0.3, 0, -6, 0, 1.05, 1.08, 1.3, "#6df08a", 12), fk(0.55, 0, 0), fk(0.75, 0, -5, 0, 1.04, 1.06, 1.3, "#6df08a", 12), fk(1, 0, 0)] };
+    case "roar":
+      return { ms: 800, frames: [fk(0, 0, 0), fk(0.12, 0, 0, 0, 1.14, 1.14, 1.2, g, 12), fk(0.2, -2, 0, -2, 1.14, 1.14), fk(0.3, 2, 0, 2, 1.14, 1.14), fk(0.4, -2, 0, -2, 1.14, 1.14), fk(0.5, 2, 0, 2, 1.14, 1.14), fk(0.6, -1, 0, -1, 1.12, 1.12), fk(0.8, 0, 0, 0, 1.1, 1.1), fk(1, 0, 0)] };
+    case "quake":
+      return { ms: 650, frames: [fk(0, 0, 0), fk(0.25, 0, -16, 0, 0.96, 1.1), fk(0.45, 0, 3, 0, 1.12, 0.86), fk(0.55, 0, 0), fk(1, 0, 0)] };
+    default:
+      return { ms: 560, frames: [fk(0, 0, 0), fk(0.42, d.x, d.y, 0, 1.08, 1.08, 1.15, g, 8), fk(1, 0, 0)] };
+  }
+}
+
+const fil = (b = 1, h = 0, sat = 1, blur = 0) => `brightness(${b}) hue-rotate(${h}deg) saturate(${sat}) blur(${blur}px)`;
+const rk = (offset: number, x = 0, rot = 0, sx = 1, sy = 1, filter = fil(), opacity = 1): Keyframe => ({
+  offset,
+  transform: `translate(${x}%, 0%) rotate(${rot}deg) scale(${sx}, ${sy})`,
+  filter,
+  opacity,
+});
+/** How a Pokémon reacts to being hit by an attack of this type. `k` is -1 / 1: which way it is knocked back. */
+function reactAnim(type: string, k: number): { frames: Keyframe[]; ms: number } {
+  switch (type) {
+    case "Electric": {
+      const f = [rk(0)];
+      for (let i = 1; i <= 9; i++) f.push(rk(i / 10, i % 2 ? 5 : -5, 0, 1, 1, i % 2 ? fil(2.4, 0, 1.6) : fil(1.1)));
+      f.push(rk(1));
+      return { ms: 520, frames: f };
+    }
+    case "Fire": return { ms: 640, frames: [rk(0), rk(0.15, 2, 0, 1, 1, fil(1.6, -25, 3)), rk(0.3, -2), rk(0.45, 2, 0, 1, 1, fil(1.6, -25, 3)), rk(0.6), rk(0.75, 0, 0, 1, 1, fil(1.5, -25, 3)), rk(1)] };
+    case "Ice": return { ms: 900, frames: [rk(0), rk(0.12, 0, 0, 0.96, 0.96, fil(1.8, 170, 2.2)), rk(0.7, 0, 0, 0.96, 0.96, fil(1.6, 170, 2)), rk(1)] };
+    case "Water": return { ms: 600, frames: [rk(0), rk(0.2, k * 8, 0, 1.14, 0.86, fil(1.2, 190, 1.4)), rk(0.5, k * 3, 0, 0.94, 1.06), rk(1)] };
+    case "Grass": return { ms: 640, frames: [rk(0), rk(0.2, -2, -9), rk(0.4, 2, 9), rk(0.6, -1, -6), rk(0.8, 0, 3), rk(1)] };
+    case "Poison": return { ms: 640, frames: [rk(0), rk(0.2, 2, -4, 1, 1, fil(1.1, 250, 2)), rk(0.4, -2, 4, 1, 1, fil(1.1, 250, 2)), rk(0.7, 1, -2, 1, 1, fil(1.1, 250, 2)), rk(1)] };
+    case "Psychic": return { ms: 700, frames: [rk(0), rk(0.2, 0, -9, 1, 1, fil(1.3, 300, 1.5)), rk(0.45, 0, 9, 1, 1, fil(1.3, 300, 1.5)), rk(0.7, 0, -5, 1, 1, fil(1.2, 300, 1.4)), rk(1)] };
+    case "Ghost": return { ms: 800, frames: [rk(0), rk(0.2, 0, 0, 1, 1, fil(1, 0, 1, 1.5), 0.2), rk(0.4), rk(0.6, 0, 0, 1, 1, fil(1, 0, 1, 1.5), 0.2), rk(0.8), rk(1)] };
+    case "Dark": return { ms: 640, frames: [rk(0), rk(0.15, 0, 0, 1, 1, fil(0.35)), rk(0.3, 3, 0, 1, 1, fil(0.35)), rk(0.45, -3, 0, 1, 1, fil(0.4)), rk(0.7, 0, 0, 1, 1, fil(0.55)), rk(1)] };
+    case "Fairy": return { ms: 640, frames: [rk(0), rk(0.2, 0, 0, 1.12, 1.12, fil(1.7, 0, 1.6)), rk(0.4, 0, 0, 0.94, 0.94), rk(0.6, 0, 0, 1.08, 1.08, fil(1.4, 0, 1.4)), rk(1)] };
+    case "Flying": return { ms: 640, frames: [rk(0), rk(0.5, k * 14, k * 180, 1, 1, fil(1.4)), rk(1, 0, k * 360)] };
+    case "Bug": return { ms: 520, frames: [rk(0), rk(0.1, 2.5, 0, 1, 1, fil(1.5)), rk(0.2, -2.5), rk(0.3, 2.5, 0, 1, 1, fil(1.5)), rk(0.4, -2.5), rk(0.5, 2, 0, 1, 1, fil(1.5)), rk(0.6, -2), rk(1)] };
+    case "Steel": return { ms: 560, frames: [rk(0), rk(0.1, 0, 0, 1, 1, fil(3, 0, 0.2)), rk(0.2, k * -3), rk(0.35, k * 3, 0, 1, 1, fil(1.6)), rk(1)] };
+    default: return { ms: 620, frames: [rk(0), rk(0.18, k * 13, k * 7, 1, 1, fil(2.4)), rk(0.4, k * 9, k * 4, 1, 1, fil(1.2)), rk(0.7, k * 3), rk(1)] };
+  }
+}
+
+/** The wiggle a flying attack takes on its way across, in percent of the scene height. */
+function pathY(type: string, t: number): number {
+  const arc = Math.sin(Math.PI * t);
+  switch (type) {
+    case "Fire": return -13 * arc;
+    case "Water": return -4 * arc;
+    case "Electric": return (Math.floor(t * 8) % 2 ? 7 : -7) * arc;
+    case "Psychic": case "Ghost": case "Fairy": return 7 * Math.sin(t * Math.PI * 4);
+    case "Grass": case "Bug": return 5 * Math.sin(t * Math.PI * 6);
+    case "Ice": case "Steel": case "Rock": return 0;
+    default: return -8 * arc;
+  }
+}
+
+const hashStr = (str: string) => Array.from(str).reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+const SIG_KIDS: Record<string, number> = { Fire: 3, Ice: 5, Psychic: 3, Ground: 2, Poison: 3, Flying: 3, Grass: 3, Bug: 3 };
+function Sig({ type, style }: { type: string; style: CSSProperties }) {
+  return (
+    <div className={`pk-sig pk-sig-${type.toLowerCase()}`} style={style}>
+      {Array.from({ length: SIG_KIDS[type] ?? 1 }).map((_, i) => (
+        <i key={i} />
+      ))}
+    </div>
+  );
+}
 
 const spriteOf = (sprites: Record<string, SpriteInfo>, species: string): SpriteInfo => sprites[species] ?? { id: guessSpriteId(species), num: 0, types: [] };
 
@@ -87,27 +218,30 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
         const type = cue.moveType ?? "Normal";
         const c = color(type);
         const dir = from === mine ? { x: 42, y: -26 } : { x: -42, y: 26 };
+        const motion = motionFor(cue.moveName ?? "", type, cue.cat);
+        const anim = attackAnim(motion, dir, c);
+        refOf(from)?.animate(anim.frames, { duration: anim.ms, easing: "ease-in-out" });
         add({ kind: "band", side: from, text: cue.moveName, color: c, extra: from === mine ? "me" : "foe" }, 1250);
         if (cue.cat === "Status") {
           add({ kind: "aura", side: from, color: c }, 1000);
           add({ kind: "typefx", side: from, to: from, text: type, extra: "self" }, 1700);
-          jolt(refOf(from), [{ transform: "scale(1)" }, { transform: "scale(1.12) translateY(-4%)", offset: 0.4 }, { transform: "scale(1)" }], 650);
+          if (motion === "roar") [0, 160, 320].forEach((d) => add({ kind: "ring", side: from, color: c, delay: d }, 1400));
+          if (motion === "curl") add({ kind: "shield", side: from, color: c }, 1400);
+          if (motion === "heal") add({ kind: "sparks", side: from, color: "#6df08a" }, 1100);
+          if (motion === "dance") add({ kind: "sparks", side: from, color: c }, 1100);
         } else if (cue.cat === "Special") {
           add({ kind: "typefx", side: from, to, text: type, extra: "travel" }, 1800);
-          jolt(refOf(from), [{ transform: "translate(0,0)" }, { transform: `translate(${-dir.x * 0.08}%, ${-dir.y * 0.08}%) scale(1.07)`, offset: 0.4 }, { transform: "translate(0,0)" }], 520);
         } else {
-          jolt(refOf(from), [{ transform: "translate(0,0)" }, { transform: `translate(${dir.x}%, ${dir.y}%) scale(1.08)`, offset: 0.42 }, { transform: "translate(0,0)" }], 560);
           add({ kind: "typefx", side: from, to, text: type, extra: "impact" }, 1700);
+          if (motion === "quake") window.setTimeout(shakeScene, 300);
         }
         break;
       }
       case "hit": {
         const side = cue.side;
         const c = color(cue.moveType);
-        jolt(refOf(side), [
-          { transform: "translateX(0)", filter: "brightness(1)" }, { transform: "translateX(-7%)", filter: "brightness(2.6)" }, { transform: "translateX(6%)", filter: "brightness(1)" },
-          { transform: "translateX(-4%)", filter: "brightness(2.1)" }, { transform: "translateX(2%)", filter: "brightness(1)" }, { transform: "translateX(0)" },
-        ], 480);
+        const react = reactAnim(cue.moveType ?? "Normal", side === mine ? -1 : 1);
+        refOf(side)?.animate(react.frames, { duration: react.ms, easing: "ease-out" });
         if (cue.amount) add({ kind: "num", side, text: `−${cue.amount}%` }, 1200);
         add({ kind: "burst", side, color: c }, 800);
         if ((cue.amount ?? 0) >= 30 || cue.effect === "crit") zoom(0.06);
@@ -167,6 +301,17 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
       case "form":
         add({ kind: "flash", side: cue.side }, 700);
         break;
+      case "win":
+        (["p1", "p2"] as SideId[]).forEach((sd) => {
+          const el = refOf(sd);
+          const mon = state.sides[sd].active;
+          if (!el || !mon || mon.fainted) return;
+          if (state.sides[sd].name === cue.text) {
+            el.animate([fk(0, 0, 0), fk(0.4, 0, -22, 0, 1.04, 1.1, 1.3, "#ffcb05", 14), fk(0.6, 0, 0, 0, 1.08, 0.9), fk(1, 0, 0)], { duration: 720, iterations: 6, easing: "ease-out" });
+            add({ kind: "sparks", side: sd, color: "#ffcb05" }, 1500);
+          } else el.animate([fk(0, 0, 0), fk(1, 0, 8, -6, 0.96, 0.94, 0.7)], { duration: 900, fill: "forwards", easing: "ease-out" });
+        });
+        break;
       case "ability":
       case "item":
         add({ kind: "label", side: cue.side, text: cue.text, color: "#3a86ff" }, 1500);
@@ -200,8 +345,28 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
             <i key={i} className="pk-cloud" style={{ ["--y" as string]: c.y, ["--w" as string]: c.w, ["--d" as string]: c.d, ["--dl" as string]: c.dl }} />
           ))}
         </div>
+        <div className="pk-deco-back" aria-hidden="true">
+          <i className="pk-d pk-d-sun" /> <i className="pk-d pk-d-moon" /> <i className="pk-d pk-d-planet" /> <i className="pk-d pk-d-aurora" />
+          <i className="pk-d pk-d-spot" /> <i className="pk-d pk-d-city" /> <i className="pk-d pk-d-dunes" /> <i className="pk-d pk-d-trees" />
+          <div className="pk-d pk-d-lantern">{["🏮", "🏮", "🏮", "🏮", "🏮"].map((e, i) => <span key={i}>{e}</span>)}</div>
+        </div>
         <div className="pk-hills" />
         <div className="pk-floor" />
+        <div className="pk-deco-front" aria-hidden="true">
+          <i className="pk-d pk-d-sea" /> <i className="pk-d pk-d-lava" /> <i className="pk-d pk-d-fog" /> <i className="pk-d pk-d-grid" /> <i className="pk-d pk-d-caustic" />
+          <div className="pk-d pk-d-fish">
+            {[["🐟", "22%", "18s", "-3s"], ["🐠", "55%", "24s", "-14s"], ["🐡", "8%", "30s", "-20s"]].map(([e, y, d, dl], i) => (
+              <span key={i} style={{ ["--y" as string]: y, ["--d" as string]: d, ["--dl" as string]: dl }}>{e}</span>
+            ))}
+          </div>
+          <div className="pk-d pk-d-bats">
+            {[["🦇", "10%", "11s", "-2s"], ["🦇", "40%", "15s", "-9s"], ["🦇", "24%", "9s", "-6s"]].map(([e, y, d, dl], i) => (
+              <span key={i} style={{ ["--y" as string]: y, ["--d" as string]: d, ["--dl" as string]: dl }}>{e}</span>
+            ))}
+          </div>
+          <div className="pk-d pk-d-tombs">{["🪦", "🌲", "🪦", "🪦", "🌲", "🪦"].map((e, i) => <span key={i}>{e}</span>)}</div>
+        </div>
+        <div className="pk-tint" />
         <div className="pk-ground-glow" />
         <div className="pk-platform foe" />
         <div className="pk-platform me" />
@@ -238,6 +403,7 @@ function MonView({ mon, side, sprites, anim, back }: { mon: Mon | null; side: "m
       data-gmax={mon?.dynamax && mon.gmax ? "1" : "0"}
       data-tera={mon?.tera ? "1" : "0"}
       data-mega={mon?.mega ? "1" : "0"}
+      data-idle={mon ? hashStr(mon.species) % 4 : 0}
       style={{ "--tera": TYPE_COLOR[mon?.tera ?? ""] ?? "#fff" } as CSSProperties}
     >
       <i className="pk-shadow" />
@@ -352,18 +518,19 @@ function TypeFx({ fx, mine }: { fx: Fx; mine: SideId }) {
     root.querySelectorAll<HTMLElement>("[data-t]").forEach((el) => {
       const j = Number(el.dataset.i ?? 0);
       if (el.dataset.t === "trav") {
-        const mx = (a.x + b.x) / 2;
-        const my = (a.y + b.y) / 2 - 10;
-        el.animate(
-          [
-            { left: `${a.x}%`, top: `${a.y}%`, opacity: 0, transform: "translate(-50%,-50%) scale(.4)" },
-            { opacity: 1, offset: 0.18 },
-            { left: `${mx}%`, top: `${my}%`, transform: "translate(-50%,-50%) scale(1)", offset: 0.55 },
-            { left: `${b.x}%`, top: `${b.y}%`, opacity: 1, transform: "translate(-50%,-50%) scale(1.25)", offset: 0.92 },
-            { left: `${b.x}%`, top: `${b.y}%`, opacity: 0, transform: "translate(-50%,-50%) scale(1.5)" },
-          ],
-          { duration: 470, delay: j * 55, easing: "ease-in", fill: "both" },
-        );
+        const frames: Keyframe[] = [];
+        const steps = 10;
+        for (let kk = 0; kk <= steps; kk++) {
+          const t = kk / steps;
+          frames.push({
+            left: `${a.x + (b.x - a.x) * t}%`,
+            top: `${a.y + (b.y - a.y) * t + pathY(type, t)}%`,
+            opacity: kk === 0 || kk === steps ? 0 : 1,
+            transform: `translate(-50%,-50%) scale(${0.5 + t * 0.8}) rotate(${t * (spec.mode === "spiral" ? 540 : 120)}deg)`,
+            offset: t,
+          });
+        }
+        el.animate(frames, { duration: 470, delay: j * 55, easing: "ease-in", fill: "both" });
       } else {
         const ang = (j / spec.n) * Math.PI * 2 + (j % 2) * 0.3;
         const r = 46 + (j % 3) * 18;
@@ -406,6 +573,7 @@ function TypeFx({ fx, mine }: { fx: Fx; mine: SideId }) {
         </span>
       ))}
       <div className="pk-shock" style={at} />
+      <Sig type={type} style={at} />
       {type === "Electric" ? (
         <svg className="pk-bolt" viewBox="0 0 40 100" style={at}>
           <polyline points="22,0 8,46 20,46 10,100 34,38 22,38 32,0" fill="#fff6a0" stroke={color} strokeWidth="3" strokeLinejoin="round" />
@@ -452,6 +620,7 @@ function FxView({ fx, mine }: { fx: Fx; mine: SideId }) {
     case "zaura": return <div className="pk-fx pk-zaura" style={style} />;
     case "cloud": return <div className="pk-fx pk-dyna-cloud" style={style} />;
     case "aura": return <div className="pk-fx pk-aura" style={style} />;
+    case "shield": return <div className="pk-fx pk-shield" style={style} />;
     case "ball": return <div ref={ref} className="pk-ballfx" style={{ left: `${at.x}%`, top: `${at.y}%` }} />;
     case "typefx": return <TypeFx fx={fx} mine={mine} />;
     case "shards":

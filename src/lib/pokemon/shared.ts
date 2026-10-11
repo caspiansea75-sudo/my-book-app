@@ -99,6 +99,26 @@ export const CPU_LEVELS: { id: CpuLevel; bn: string; en: string }[] = [
   { id: "hard", bn: "কঠিন", en: "Hard" },
 ];
 
+/* ------------------------------------------------------------------ arenas */
+
+/** Battle backgrounds. "Auto" gives each battle its own, picked from its number. */
+export const ARENAS: { id: number; bn: string; en: string; emoji: string }[] = [
+  { id: 0, bn: "সবুজ মাঠ", en: "Meadow", emoji: "🌳" },
+  { id: 1, bn: "সূর্যাস্তের সৈকত", en: "Sunset coast", emoji: "🌅" },
+  { id: 2, bn: "রাতের স্টেডিয়াম", en: "Night stadium", emoji: "🏟️" },
+  { id: 3, bn: "স্বপ্নের মেঘলোক", en: "Dreamland", emoji: "🌸" },
+  { id: 4, bn: "আগ্নেয়গিরি", en: "Volcano", emoji: "🌋" },
+  { id: 5, bn: "বরফের রাজ্য", en: "Glacier", emoji: "🧊" },
+  { id: 6, bn: "মরুভূমির ধ্বংসাবশেষ", en: "Desert ruins", emoji: "🏜️" },
+  { id: 7, bn: "গভীর সাগর", en: "Deep sea", emoji: "🌊" },
+  { id: 8, bn: "ভুতুড়ে কবরস্থান", en: "Haunted graveyard", emoji: "👻" },
+  { id: 9, bn: "নিয়ন শহর", en: "Neon city", emoji: "🌃" },
+  { id: 10, bn: "মহাকাশ", en: "Outer space", emoji: "🪐" },
+  { id: 11, bn: "গভীর জঙ্গল", en: "Jungle", emoji: "🌴" },
+  { id: 12, bn: "ডোজো", en: "Dojo", emoji: "🥋" },
+];
+export const arenaForBattle = (battleId: number) => ARENAS[((battleId * 7) % ARENAS.length + ARENAS.length) % ARENAS.length].id;
+
 /* ------------------------------------------------------------------- shapes */
 
 /** One Pokémon as a member builds it. */

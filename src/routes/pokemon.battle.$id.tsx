@@ -15,7 +15,7 @@ import {
   type BattleView,
 } from "@/lib/pokemon-api";
 import { applyLine, initialState, replayAll, unknownMoves, type BState, type Cue } from "@/lib/pokemon/protocol";
-import { formatByGen, guessSpriteId, type MoveInfo } from "@/lib/pokemon/shared";
+import { ARENAS, arenaForBattle, formatByGen, guessSpriteId, type MoveInfo } from "@/lib/pokemon/shared";
 
 export const Route = createFileRoute("/pokemon/battle/$id")({
   loader: ({ params }) => getBattle({ data: { id: Number(params.id), since: 0 } }),
@@ -44,6 +44,22 @@ function Arena({ initial }: { initial: BattleView }) {
   const [showResult, setShowResult] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
   const [intro, setIntro] = useState(false);
+  const [arena, setArena] = useState<string>("auto");
+  useEffect(() => {
+    try {
+      setArena(window.localStorage.getItem("pk-arena") || "auto");
+    } catch {
+      /* private mode: keep auto */
+    }
+  }, []);
+  const pickArena = (v: string) => {
+    setArena(v);
+    try {
+      window.localStorage.setItem("pk-arena", v);
+    } catch {
+      /* ignore */
+    }
+  };
   const pendingIngest = useRef<(() => void) | null>(null);
 
   const metaRef = useRef(meta);
@@ -231,7 +247,16 @@ function Arena({ initial }: { initial: BattleView }) {
         </span>
         <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs text-muted">{t(fmt.bn, fmt.en)} · {t("টার্ন", "Turn")} {Math.max(bstate.turn, 0)}</span>
         {meta.status === "done" ? <span className="rounded-full bg-lamp/20 px-2.5 py-0.5 text-xs text-lamp">{t("শেষ", "Finished")}</span> : null}
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-muted">
+        <span className="ml-auto flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          <label className="flex items-center gap-1">
+            🎨
+            <select value={arena} onChange={(e) => pickArena(e.target.value)} className="rounded-full border border-border bg-bg px-2 py-0.5 text-fg" aria-label={t("আরেনা", "Arena")}>
+              <option value="auto">{t("অটো (প্রতিবার আলাদা)", "Auto (varies each battle)")}</option>
+              {ARENAS.map((a) => (
+                <option key={a.id} value={a.id}>{a.emoji} {t(a.bn, a.en)}</option>
+              ))}
+            </select>
+          </label>
           {t("গতি", "Speed")}
           {([1, 2] as const).map((s) => (
             <button key={s} type="button" onClick={() => setSpeed(s)} className={`pressable rounded-full border px-2.5 py-0.5 ${speed === s ? "border-lamp bg-surface-2 text-fg" : "border-border"}`}>{s}×</button>
@@ -242,7 +267,7 @@ function Arena({ initial }: { initial: BattleView }) {
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="relative lg:col-start-1 lg:row-start-1">
-          <BattleScene state={bstate} you={you} sprites={meta.sprites} cue={cue} theme={meta.id % 4}>
+          <BattleScene state={bstate} you={you} sprites={meta.sprites} cue={cue} theme={arena === "auto" ? arenaForBattle(meta.id) : Number(arena)}>
             {intro ? <VsIntro names={names} people={meta.people} you={you} onDone={finishIntro} /> : null}
             {showResult && meta.status === "done" ? <ResultOverlay view={meta} state={bstate} onReplay={() => void onReplay()} onRematch={meta.cpu && meta.mySets ? () => void onRematch() : undefined} /> : null}
           </BattleScene>
