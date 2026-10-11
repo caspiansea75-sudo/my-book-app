@@ -281,7 +281,7 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
     if (!set) return setLearn([]);
     let live = true;
     pokeMoves({ data: { species: set.species, gen } }).then((r) => live && setLearn(r)).catch(() => live && setLearn([]));
-    if (gen === 6 || gen === 7) pokeSpecies({ data: { name: set.species } }).then((r) => live && setDetail(r)).catch(() => undefined);
+    if (gen === 6 || gen === 7 || gen === 9) pokeSpecies({ data: { name: set.species } }).then((r) => live && setDetail(r)).catch(() => undefined);
     return () => {
       live = false;
     };
@@ -345,7 +345,7 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
         ) : null}
       </div>
 
-      {gen === 6 || gen === 7 ? (
+      {gen === 6 || gen === 7 || gen === 9 ? (
         <div className="rounded-xl border border-border bg-surface-2 p-3 font-sans text-xs text-muted">
           {detail?.megas.length ? (
             <p className="flex flex-wrap items-center gap-2">
@@ -361,7 +361,7 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
               {detail?.zsig ? <button type="button" onClick={() => up({ item: detail.zsig!.crystal })} className="pressable ml-2 rounded-full border border-border bg-bg px-2.5 py-1 text-fg">💠 {detail.zsig.crystal}</button> : null}
             </p>
           ) : null}
-          {!detail?.megas.length && gen === 6 ? <p>{t("এই পোকেমনের মেগা রূপ নেই।", "This Pokémon has no Mega form.")}</p> : null}
+          {!detail?.megas.length ? <p>{t("এই পোকেমনের মেগা রূপ নেই।", "This Pokémon has no Mega form.")}</p> : null}
         </div>
       ) : null}
 

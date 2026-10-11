@@ -40,6 +40,14 @@ export function localize(msg: string, lang: Lang): string {
   return msg;
 }
 
+/** The 48 Mega Evolutions from Gen 6–7. Any other Mega (and every "-Z" form) is one of the new ones from Legends: Z-A. */
+const CLASSIC_MEGA_BASES = new Set(
+  "Venusaur Charizard Blastoise Beedrill Pidgeot Alakazam Slowbro Gengar Kangaskhan Pinsir Gyarados Aerodactyl Mewtwo Ampharos Steelix Scizor Heracross Houndoom Tyranitar Sceptile Blaziken Swampert Gardevoir Sableye Mawile Aggron Medicham Manectric Sharpedo Camerupt Altaria Banette Absol Glalie Salamence Metagross Latias Latios Rayquaza Lopunny Garchomp Lucario Abomasnow Gallade Audino Diancie".split(" "),
+);
+export function isNewMega(base: string, forme: string): boolean {
+  return /^Mega/.test(forme) && (!CLASSIC_MEGA_BASES.has(base) || /-Z$/.test(forme) || forme === "Mega-Z");
+}
+
 export const toId = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
 export const TYPES = [
@@ -71,7 +79,7 @@ export type FormatPreset = {
   gimmickEn: string;
 };
 export const FORMATS: FormatPreset[] = [
-  { gen: 9, id: "gen9customgame", bn: "জেন ৯", en: "Gen 9", gimmick: "tera", gimmickBn: "টেরাস্টালাইজ (ক্রিস্টাল টাইপ বদল)", gimmickEn: "Terastallization (crystal type change)" },
+  { gen: 9, id: "gen9customgame", bn: "জেন ৯", en: "Gen 9", gimmick: "tera", gimmickBn: "টেরাস্টালাইজ (ক্রিস্টাল টাইপ বদল) + মেগা ইভোলিউশন (নতুন Z-A মেগা সহ)", gimmickEn: "Terastallization (crystal type change) + Mega Evolution (incl. the new Z-A Megas)" },
   { gen: 8, id: "gen8customgame", bn: "জেন ৮", en: "Gen 8", gimmick: "dynamax", gimmickBn: "ডায়ানাক্স ও গিগান্টাম্যাক্স", gimmickEn: "Dynamax & Gigantamax" },
   { gen: 7, id: "gen7customgame", bn: "জেন ৭", en: "Gen 7", gimmick: "mega-z", gimmickBn: "মেগা, জেড-মুভ, আল্ট্রা বার্স্ট", gimmickEn: "Mega, Z-Moves, Ultra Burst" },
   { gen: 6, id: "gen6customgame", bn: "জেন ৬", en: "Gen 6", gimmick: "mega", gimmickBn: "মেগা ইভোলিউশন ও প্রাইমাল", gimmickEn: "Mega Evolution & Primal Reversion" },

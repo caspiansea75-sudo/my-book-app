@@ -9,6 +9,7 @@ import { Battle, Dex, Teams } from "@pkmn/sim";
 import {
   STAT_KEYS,
   TYPES,
+  isNewMega,
   toId,
   typeMult,
   type CpuLevel,
@@ -68,8 +69,11 @@ function zSignatures(): Record<string, { crystal: string; move: string }> {
   return out;
 }
 
+/** Every Pokémon and form the Pokédex shows. Megas stay in even when the engine files them under "Future" (the new Z-A ones). */
 const keepSpecies = (sp: any): boolean =>
-  sp.exists && sp.num > 0 && (!sp.isNonstandard || ["Past", "Unobtainable", "Gigantamax"].includes(sp.isNonstandard));
+  sp.exists &&
+  sp.num > 0 &&
+  (!sp.isNonstandard || ["Past", "Unobtainable", "Gigantamax"].includes(sp.isNonstandard) || (sp.isMega && !["CAP", "Custom"].includes(sp.isNonstandard)));
 
 export function dexList(): DexEntry[] {
   if (dexCache) return dexCache.list;
@@ -84,6 +88,7 @@ export function dexList(): DexEntry[] {
     if (kind === "base" || kind === "regional" || kind === "other") {
       const formes: any[] = (sp.otherFormes ?? []).map((f: string) => d.species.get(f));
       if (formes.some((f) => f.isMega)) g.push("mega");
+      if (formes.some((f) => f.isMega && isNewMega(sp.baseSpecies || sp.name, f.forme))) g.push("megaza");
       if (formes.some((f) => f.isPrimal)) g.push("primal");
       if (formes.some((f) => f.forme === "Ultra")) g.push("ultra");
       if (sp.canGigantamax || formes.some((f) => f.forme === "Gmax")) g.push("gmax");
@@ -93,6 +98,7 @@ export function dexList(): DexEntry[] {
       g.push("tera");
     } else {
       g.push(kind);
+      if (kind === "mega" && isNewMega(sp.baseSpecies || sp.name, sp.forme)) g.push("megaza");
     }
     list.push({
       n: sp.num,
@@ -226,10 +232,11 @@ export function itemsList(gen: number): ItemInfo[] {
   const dex = dexFor(gen);
   const out: ItemInfo[] = [];
   for (const it of dex.items.all()) {
-    if (!it.exists || it.gen > gen || it.isPokeball || (it.isNonstandard && it.isNonstandard !== "Past")) continue;
+    const oddButUsable = !!it.megaStone && gen === 9 && !["CAP", "Custom"].includes(it.isNonstandard ?? "");
+    if (!it.exists || it.gen > gen || it.isPokeball || (it.isNonstandard && it.isNonstandard !== "Past" && !oddButUsable)) continue;
     const kind: ItemInfo["kind"] = it.megaStone ? "mega" : it.zMove ? "z" : it.onPrimal ? "orb" : "item";
     // Mega stones, Z-Crystals and the Primal orbs only exist in the generations that have those gimmicks.
-    if (kind === "mega" && (gen < 6 || gen > 7)) continue;
+    if (kind === "mega" && (gen < 6 || gen === 8)) continue;
     if (kind === "z" && gen !== 7) continue;
     out.push({ name: it.name, kind, desc: it.shortDesc || "" });
   }
@@ -379,9 +386,11 @@ function tryBuildSet(dex: any, sp: any, gen: number): PokeSet | null {
     const extra: Partial<PokeSet> = {};
     if (gen === 9) extra.teraType = Math.random() < 0.55 ? pick(sp.types) : pick(TYPES as readonly string[]);
     if (gen === 8 && sp.canGigantamax && Math.random() < 0.6) extra.gigantamax = true;
-    if (gen === 6 || gen === 7) {
+    if (gen === 6 || gen === 7 || gen === 9) {
       const forms: any[] = (sp.otherFormes ?? []).map((f: string) => dex.species.get(f)).filter((f: any) => f.isMega && f.requiredItem);
-      if (sp.name === "Kyogre" || sp.name === "Groudon") item = sp.name === "Kyogre" ? "Blue Orb" : "Red Orb";
+      if (gen === 9) {
+        if (forms.length && Math.random() < 0.4) item = pick(forms).requiredItem;
+      } else if (sp.name === "Kyogre" || sp.name === "Groudon") item = sp.name === "Kyogre" ? "Blue Orb" : "Red Orb";
       else if (sp.name === MEGA_ITEM_NOTE && !moves.includes("Dragon Ascent")) {
         moves[moves.length - 1] = "Dragon Ascent";
         item = "";

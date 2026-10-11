@@ -131,6 +131,7 @@ export function StatBars({ bs }: { bs: number[] }) {
 
 export const GIMMICK: Record<string, { icon: string; bn: string; en: string; color: string }> = {
   mega: { icon: "🧬", bn: "মেগা", en: "Mega", color: "#f95587" },
+  megaza: { icon: "⚡", bn: "নতুন মেগা (Z-A)", en: "New Mega (Z-A)", color: "#8338ec" },
   primal: { icon: "🌋", bn: "প্রাইমাল", en: "Primal", color: "#ee8130" },
   ultra: { icon: "🌟", bn: "আল্ট্রা বার্স্ট", en: "Ultra Burst", color: "#f7d02c" },
   gmax: { icon: "🦖", bn: "গিগান্টাম্যাক্স", en: "Gigantamax", color: "#e63946" },

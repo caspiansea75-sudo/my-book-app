@@ -18,10 +18,10 @@ export const Route = createFileRoute("/pokemon/dex")({
 
 const PAGE = 72;
 const FORM_KINDS = ["mega", "primal", "ultra", "gmax"];
-const GIMMICK_FILTERS = ["mega", "primal", "ultra", "gmax", "z", "zsig", "dyna", "tera"] as const;
+const GIMMICK_FILTERS = ["mega", "megaza", "primal", "ultra", "gmax", "z", "zsig", "dyna", "tera"] as const;
 
 /** The timeline of battle gimmicks. `sim` = can be used in this site's battles. */
-const GUIDE: { icon: string; gen: string; bn: string; en: string; descBn: string; descEn: string; sim: boolean; note?: [string, string] }[] = [
+const GUIDE: { icon: string; gen: string; bn: string; en: string; descBn: string; descEn: string; sim: boolean; za?: boolean; note?: [string, string] }[] = [
   { icon: "🧬", gen: "Gen 6 · 2013", bn: "মেগা ইভোলিউশন", en: "Mega Evolution", sim: true,
     descBn: "মেগা স্টোন ধরে থাকা পোকেমন যুদ্ধের মাঝে মেগা রূপে বদলে যায় — নতুন স্ট্যাট, কখনও নতুন টাইপ বা অ্যাবিলিটি। প্রতি লড়াইয়ে একবার।",
     descEn: "A Pokémon holding its Mega Stone transforms mid-battle with new stats and sometimes a new type or ability. Once per battle." },
@@ -37,10 +37,9 @@ const GUIDE: { icon: string; gen: string; bn: string; en: string; descBn: string
   { icon: "💎", gen: "Gen 9 · 2022", bn: "টেরাস্টালাইজেশন", en: "Terastallization", sim: true,
     descBn: "যেকোনো পোকেমন ক্রিস্টালে ঢেকে নিজের টেরা-টাইপে বদলে যায়। টেরা-টাইপের চালের শক্তি বাড়ে। প্রতি লড়াইয়ে একবার।",
     descEn: "Any Pokémon can crystallize and change into its Tera Type, boosting moves of that type. Once per battle." },
-  { icon: "⚡", gen: "Legends Z-A · 2025", bn: "মেগা-র প্রত্যাবর্তন ও জেড-মেগা", en: "Mega returns & Z-Mega forms", sim: false,
-    descBn: "Legends Z-A-তে মেগা ইভোলিউশন ফিরে এসেছে, নতুন মেগা রূপসহ। Pokémon Champions-এ ২০২৬ সালের সেপ্টেম্বরে জেড-মেগা (যেমন Mega Lucario Z) আসে।",
-    descEn: "Mega Evolution came back in Legends Z-A with brand-new Megas. Z-Mega forms (like Mega Lucario Z) reached Pokémon Champions in September 2026.",
-    note: ["এই সাইটের লড়াইয়ে এখনও নেই — ইঞ্জিন সমর্থন দিলে যোগ হবে।", "Not in this site's battles yet — it depends on the battle engine adding support."] },
+  { icon: "⚡", gen: "Legends Z-A · 2025–26", bn: "নতুন মেগা (Z-A) ও জেড-মেগা", en: "New Megas (Z-A) & Z-Mega forms", sim: true, za: true,
+    descBn: "Legends Z-A-তে মেগা ইভোলিউশন ফিরে এসেছে — Clefable, Starmie, Dragonite, Meganium, Feraligatr-সহ প্রায় ৩৪টি নতুন মেগা (Mega Dimension DLC-তে আরও), আর Lucario, Absol ও Garchomp-এর জেড-মেগা রূপ। Pokémon Champions-এ ২০২৬ সালের সেপ্টেম্বরে জেড-মেগা আসে, নতুন অ্যাবিলিটিসহ। এই সাইটে জেন ৯ লড়াইয়ে মেগা স্টোন দিয়ে এগুলো ব্যবহার করা যায়।",
+    descEn: "Mega Evolution returned in Legends Z-A with about 34 brand-new Megas (Clefable, Starmie, Dragonite, Meganium, Feraligatr and more, with extras in the Mega Dimension DLC), plus Z-Mega forms of Lucario, Absol and Garchomp. Z-Megas reached Pokémon Champions in September 2026 with new abilities. Here you can use them in Gen 9 battles by giving the Pokémon its Mega Stone." },
   { icon: "🌊", gen: "Gen 10 · 2027", bn: "জেন ১০ (Winds / Waves)", en: "Gen 10 (Winds / Waves)", sim: false,
     descBn: "২০২৬ সালের ফেব্রুয়ারিতে ঘোষিত, ২০২৭-এ আসছে। নতুন গিমিক নিয়ে এখনও শুধু গুজব ('Netsu' নাম শোনা যাচ্ছে) — অফিশিয়াল কিছু নেই।",
     descEn: "Announced in February 2026 for a 2027 release. The new gimmick is only rumour so far (the name 'Netsu' is floating around) — nothing official yet.",
@@ -62,9 +61,11 @@ function DexPage() {
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const out = list.filter((e) => {
-      const formKind = FORM_KINDS.includes(gimmick);
+      const formKind = FORM_KINDS.includes(gimmick) || gimmick === "megaza";
       if (!forms && !formKind && e.kind !== "base") return false;
-      if (formKind) {
+      if (gimmick === "megaza") {
+        if (e.kind !== "mega" || !e.g.includes("megaza")) return false;
+      } else if (formKind) {
         if (e.kind !== gimmick) return false;
       } else if (gimmick && !e.g.includes(gimmick)) return false;
       if (gen && e.gen !== gen) return false;
@@ -80,6 +81,7 @@ function DexPage() {
 
   useEffect(() => setLimit(PAGE), [q, gen, type, gimmick, forms, sort]);
 
+  const newMegas = useMemo(() => list.filter((e) => e.kind === "mega" && e.g.includes("megaza")).length, [list]);
   const counts = useMemo(() => {
     const base = list.filter((e) => e.kind === "base");
     return { species: base.length, forms: list.length - base.length };
@@ -111,7 +113,13 @@ function DexPage() {
                 </div>
                 <p className="mt-1.5 font-sans text-[13px] leading-relaxed text-muted">{t(g.descBn, g.descEn)}</p>
                 <p className="mt-2 font-sans text-xs">
-                  {g.sim ? (
+                  {g.za ? (
+                    newMegas > 0 ? (
+                      <span className="text-[#6df08a]">✔ {t(`ইঞ্জিনে ${newMegas}টি নতুন মেগা পাওয়া গেছে — জেন ৯ লড়াইয়ে খেলা যায়`, `${newMegas} new Megas found in the battle engine — playable in Gen 9 battles`)}</span>
+                    ) : (
+                      <span className="text-lamp">⏳ {t("ইনস্টল করা লড়াইয়ের ইঞ্জিনে এখনও এই মেগাগুলো নেই — @pkmn/sim আপডেট করুন", "The installed battle engine doesn't have these Megas yet — update @pkmn/sim")}</span>
+                    )
+                  ) : g.sim ? (
                     <span className="text-[#6df08a]">✔ {t("এই সাইটের লড়াইয়ে আছে", "Playable in this site's battles")}</span>
                   ) : (
                     <span className="text-lamp">⏳ {g.note ? t(g.note[0], g.note[1]) : ""}</span>
@@ -189,7 +197,7 @@ function DexPage() {
                 <Sprite info={{ id: e.sp, num: e.n, types: e.t }} still className="h-20 w-20 object-contain transition group-hover:scale-110" />
                 <span className="font-sans text-sm text-fg">{e.name}</span>
                 <span className="flex gap-1">{e.t.map((x) => <TypeBadge key={x} type={x} small />)}</span>
-                <GimmickPills tags={e.g} only={e.kind === "base" ? ["mega", "primal", "ultra", "gmax", "zsig"] : [e.kind]} />
+                <GimmickPills tags={e.g} only={e.kind === "base" ? ["mega", "megaza", "primal", "ultra", "gmax", "zsig"] : e.g.includes("megaza") ? ["megaza"] : [e.kind]} />
               </button>
             </li>
           ))}
