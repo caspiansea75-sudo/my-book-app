@@ -169,6 +169,8 @@ export type DexEntry = {
   bs: number[];
   ab: string[];
   hidden: string;
+  /** fully evolved (has no further evolution) */
+  fe: boolean;
   /** mega primal ultra gmax z zsig dyna tera */
   g: string[];
   sp: string;
@@ -256,6 +258,41 @@ export function typeMult(attack: string, defend: readonly string[]): number {
     else if (NVE[attack]?.includes(d)) m *= 0.5;
   }
   return m;
+}
+
+/** What a Pokémon of these types is weak to, resists, and is immune to. */
+export function matchups(types: readonly string[]) {
+  const weak: [string, number][] = [];
+  const resist: [string, number][] = [];
+  const immune: string[] = [];
+  for (const t of TYPES) {
+    const m = typeMult(t, types);
+    if (m === 0) immune.push(t);
+    else if (m > 1) weak.push([t, m]);
+    else if (m < 1) resist.push([t, m]);
+  }
+  return { weak, resist, immune };
+}
+
+const GOOD_STATUS_IDS = new Set([
+  "recover", "roost", "softboiled", "synthesis", "moonlight", "slackoff", "swordsdance", "nastyplot", "calmmind", "dragondance",
+  "bulkup", "quiverdance", "irondefense", "agility", "toxic", "thunderwave", "willowisp", "stealthrock", "spikes", "protect",
+  "substitute", "rest", "trickroom", "taunt", "leechseed", "reflect", "lightscreen", "wish", "shellsmash", "spore", "defog",
+]);
+/** A sensible 4-move set from a list of learnable moves: two same-type attacks, one coverage move, one useful status move. */
+export function suggestMoves(learn: MoveInfo[], types: readonly string[], physical: boolean): string[] {
+  const attacks = learn.filter((m) => m.cat !== "Status" && m.bp >= 50);
+  const preferred = attacks.filter((m) => m.cat === (physical ? "Physical" : "Special"));
+  const pool = preferred.length >= 3 ? preferred : attacks;
+  const byPower = (a: MoveInfo, b: MoveInfo) => b.bp - a.bp;
+  const chosen: MoveInfo[] = [];
+  const add = (m?: MoveInfo) => m && !chosen.includes(m) && chosen.length < 4 && chosen.push(m);
+  pool.filter((m) => types.includes(m.type)).sort(byPower).slice(0, 2).forEach(add);
+  const usedTypes = new Set(chosen.map((m) => m.type));
+  add(pool.filter((m) => !usedTypes.has(m.type)).sort(byPower)[0]);
+  add(learn.find((m) => GOOD_STATUS_IDS.has(m.id)));
+  for (const m of [...pool].sort(byPower)) add(m);
+  return chosen.map((m) => m.name);
 }
 
 /* ------------------------------------------------------------- battle log views */

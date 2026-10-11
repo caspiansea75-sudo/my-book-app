@@ -291,7 +291,7 @@ export function applyLine(prev: BState, line: string, ctx: Ctx): Step {
       say.push(L(`${label(src.mon)} ব্যবহার করল ${moveName}!`, `${label(src.mon)} used ${moveName}!`));
       c = cue({ kind: "move", from: src.id.side, side: targetSide, moveName, moveType: info?.type, cat: info?.cat });
       if (miss) say.push(L("কিন্তু লাগল না! 💨", "But it missed! 💨"));
-      wait = 800;
+      wait = 760;
       break;
     }
     case "cant": {

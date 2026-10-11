@@ -246,3 +246,84 @@
 .pk-anim { display: grid; place-items: end center; width: 100%; height: 100%; }
 .pk-shake { animation: pk-scene-shake 0.5s linear; }
 @keyframes pk-scene-shake { 10%, 90% { transform: translate(-1px, 1px); } 20%, 80% { transform: translate(3px, -2px); } 30%, 50%, 70% { transform: translate(-5px, 2px); } 40%, 60% { transform: translate(5px, -2px); } }
+
+
+/* =================================================================== richer scenery */
+.pk-scene { --hill1: #6cb36a; --hill2: #58a05a; }
+.pk-scene[data-theme="1"][data-weather=""] { background: linear-gradient(#ff7e5f 0%, #feb47b 38%, #ffd9a0 46%, #3c8f86 46.4%, #266c6a 100%); --hill1: #2f7a77; --hill2: #256a6b; }
+.pk-scene[data-theme="2"][data-weather=""] { background: linear-gradient(#0b1030 0%, #1d2b63 46%, #2c3b50 46.4%, #1b2530 100%); --hill1: #1a2540; --hill2: #142038; }
+.pk-scene[data-theme="3"][data-weather=""] { background: linear-gradient(#a18cd1 0%, #fbc2eb 46%, #8fd3a8 46.4%, #5fb383 100%); --hill1: #7cc79a; --hill2: #6bb88b; }
+.pk-scene[data-weather="Snow"], .pk-scene[data-weather="Hail"] { --hill1: #dfe9f3; --hill2: #c8d8e8; }
+.pk-scene[data-weather="Sandstorm"] { --hill1: #c9a96e; --hill2: #b48f55; }
+.pk-scene[data-weather="RainDance"], .pk-scene[data-weather="PrimordialSea"] { --hill1: #4a7a63; --hill2: #3b6a55; }
+.pk-camera { position: absolute; inset: 0; transform-origin: 50% 62%; }
+.pk-sky { position: absolute; inset: 0 0 50% 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.pk-rays { position: absolute; right: -16%; top: -52%; width: 75%; aspect-ratio: 1; border-radius: 50%; background: repeating-conic-gradient(rgba(255, 255, 255, 0.16) 0 6deg, transparent 6deg 22deg); -webkit-mask: radial-gradient(circle, #000 0 18%, transparent 68%); mask: radial-gradient(circle, #000 0 18%, transparent 68%); animation: pk-spin 70s linear infinite; }
+@keyframes pk-spin { to { transform: rotate(360deg); } }
+.pk-cloud { position: absolute; top: var(--y); left: -30%; width: var(--w); height: calc(var(--w) * 0.26); border-radius: 99px; background: rgba(255, 255, 255, 0.88); box-shadow: calc(var(--w) * 0.18) calc(var(--w) * -0.1) 0 calc(var(--w) * -0.03) rgba(255, 255, 255, 0.92), calc(var(--w) * 0.46) calc(var(--w) * -0.05) 0 0 rgba(255, 255, 255, 0.86); animation: pk-cloud var(--d) linear var(--dl) infinite; }
+@keyframes pk-cloud { to { transform: translateX(180vw); } }
+.pk-scene[data-theme="2"] .pk-cloud { opacity: 0.15; }
+.pk-scene[data-theme="2"] .pk-sky::after { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle, #fff 0 1px, transparent 1.5px), radial-gradient(circle, #cfe2ff 0 1px, transparent 1.5px); background-size: 90px 70px, 53px 61px; background-position: 10px 12px, 30px 40px; animation: pk-twinkle 3s ease-in-out infinite alternate; }
+@keyframes pk-twinkle { from { opacity: 0.45; } to { opacity: 1; } }
+.pk-hills { position: absolute; left: 0; right: 0; top: 27%; height: 23%; z-index: 0; pointer-events: none; }
+.pk-hills::before, .pk-hills::after { content: ""; position: absolute; bottom: 0; border-radius: 50% 50% 0 0; }
+.pk-hills::before { left: -12%; width: 72%; height: 92%; background: var(--hill1); }
+.pk-hills::after { right: -14%; width: 78%; height: 68%; background: var(--hill2); }
+.pk-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 54%; z-index: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.07) 0 3px, transparent 3px 26px), radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.16), transparent 60%); }
+.pk-platform { border: 2px solid rgba(255, 255, 255, 0.38); background: radial-gradient(ellipse at 50% 38%, rgba(255, 255, 255, 0.24), rgba(0, 0, 0, 0.3) 72%); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28); }
+.pk-platform::after { content: ""; position: absolute; inset: 16%; border-radius: 50%; border: 1px dashed rgba(255, 255, 255, 0.4); animation: pk-spin 24s linear infinite; }
+.pk-mote { position: absolute; left: var(--x); bottom: -3%; width: var(--s); height: var(--s); border-radius: 50%; background: rgba(255, 255, 210, 0.85); box-shadow: 0 0 8px rgba(255, 255, 190, 0.95); animation: pk-mote var(--d) linear var(--dl) infinite; z-index: 2; pointer-events: none; }
+@keyframes pk-mote { 0% { transform: translate(0, 0); opacity: 0; } 15% { opacity: 1; } 50% { transform: translate(14px, -170px); } 100% { transform: translate(-10px, -340px); opacity: 0; } }
+.pk-mon .pk-shadow { position: absolute; bottom: 2%; left: 50%; width: 55%; height: 8%; transform: translateX(-50%); border-radius: 50%; background: rgba(0, 0, 0, 0.3); filter: blur(3px); animation: pk-shadow 2.6s ease-in-out infinite; }
+@keyframes pk-shadow { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(0.88); opacity: 0.7; } }
+.pk-hp { animation: pk-hp-in 0.5s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
+@keyframes pk-hp-in { from { transform: translateX(var(--from, -30px)); opacity: 0; } to { transform: none; opacity: 1; } }
+.pk-hp.me { --from: 40px; }
+
+/* ================================================================= attack effects */
+.pk-fx-root { position: absolute; inset: 0; pointer-events: none; z-index: 8; }
+.pk-em { position: absolute; opacity: 0; font-size: var(--sz, 22px); line-height: 1; filter: drop-shadow(0 0 6px var(--c, #fff)); will-change: transform, opacity; }
+.pk-shock { position: absolute; width: 34%; aspect-ratio: 1; border-radius: 50%; border: 5px solid var(--c); box-shadow: 0 0 24px var(--c), inset 0 0 24px var(--c); opacity: 0; animation: pk-shock 0.7s ease-out var(--dl, 0.4s) both; transform: translate(-50%, -50%); }
+@keyframes pk-shock { 0% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.1); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); } }
+.pk-bolt { position: absolute; width: 14%; height: 52%; transform: translate(-50%, -88%); opacity: 0; animation: pk-bolt 0.55s steps(1) var(--dl, 0.4s) both; filter: drop-shadow(0 0 8px var(--c)) drop-shadow(0 0 16px var(--c)); }
+@keyframes pk-bolt { 0% { opacity: 1; } 18% { opacity: 0; } 34% { opacity: 1; } 52% { opacity: 0; } 70% { opacity: 1; } 100% { opacity: 0; } }
+.pk-slash { position: absolute; width: 30%; height: 30%; transform: translate(-50%, -50%) rotate(-28deg); opacity: 0; animation: pk-slash 0.45s ease-out var(--dl, 0.15s) both; }
+.pk-slash i { position: absolute; left: 0; right: 0; height: 5px; border-radius: 99px; background: linear-gradient(90deg, transparent, #fff 25%, var(--c) 70%, transparent); box-shadow: 0 0 12px var(--c); }
+.pk-slash i:nth-child(1) { top: 20%; } .pk-slash i:nth-child(2) { top: 48%; left: 8%; } .pk-slash i:nth-child(3) { top: 76%; left: 16%; }
+@keyframes pk-slash { 0% { opacity: 0; clip-path: inset(0 100% 0 0); } 20% { opacity: 1; } 60% { opacity: 1; clip-path: inset(0 0 0 0); } 100% { opacity: 0; clip-path: inset(0 0 0 0); } }
+.pk-band { position: absolute; z-index: 12; left: 0; right: 0; top: 40%; height: 14%; display: flex; align-items: center; pointer-events: none; overflow: hidden; animation: pk-band 1.15s ease both; }
+.pk-band::before { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent, var(--c) 16%, color-mix(in oklab, var(--c) 55%, #000) 84%, transparent); transform: skewX(-14deg); opacity: 0.9; }
+.pk-band b { position: relative; margin-left: 9%; font: 900 clamp(15px, 3.8vw, 28px) var(--font-display); color: #fff; letter-spacing: 0.05em; text-transform: uppercase; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); }
+.pk-band small { position: relative; margin-left: 12px; font: 600 12px var(--font-sans); color: #fff; opacity: 0.9; }
+@keyframes pk-band { 0% { transform: translateX(-100%); opacity: 0; } 16% { transform: translateX(0); opacity: 1; } 74% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(100%); opacity: 0; } }
+.pk-ballfx { position: absolute; z-index: 9; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(#e0413b 0 46%, #1b1b1f 46% 54%, #f4f4f4 54%); box-shadow: inset 0 0 0 2px #1b1b1f, 0 0 10px rgba(255, 255, 255, 0.7); opacity: 0; }
+
+/* =================================================================== VS intro */
+.pk-vs { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: radial-gradient(circle, rgba(10, 12, 30, 0.5), rgba(10, 12, 30, 0.92)); cursor: pointer; animation: pk-fade 0.25s both; }
+.pk-vs::before { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(100deg, transparent 0 40px, rgba(255, 255, 255, 0.05) 40px 80px); animation: pk-sand 1.2s linear infinite; }
+.pk-vs-row { position: relative; display: flex; align-items: center; justify-content: center; gap: 4%; width: 94%; }
+.pk-vs-card { display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 34%; color: #fff; text-align: center; font: 700 clamp(12px, 2.8vw, 20px) var(--font-sans); animation: pk-vs-l 0.7s cubic-bezier(0.2, 1.2, 0.4, 1) both; }
+.pk-vs-card.r { animation-name: pk-vs-r; }
+.pk-vs-card span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.pk-vs-mid { font: 900 clamp(40px, 12vw, 96px) var(--font-display); color: #ffcb05; -webkit-text-stroke: 3px #1b1b1f; paint-order: stroke fill; text-shadow: 0 0 34px #ff7a00; animation: pk-vs-pop 0.7s cubic-bezier(0.2, 1.6, 0.4, 1) 0.3s both; }
+@keyframes pk-vs-l { from { transform: translateX(-120%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pk-vs-r { from { transform: translateX(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes pk-vs-pop { from { transform: scale(0.1) rotate(-20deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+
+/* ============================================================ move panel (always on screen) */
+.pk-dock { position: sticky; bottom: 8px; z-index: 40; padding: 10px; border-radius: 16px; border: 1px solid var(--color-border); background: color-mix(in oklab, var(--color-surface) 93%, transparent); backdrop-filter: blur(10px); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4); }
+@media (min-width: 1024px) { .pk-dock { top: 12px; bottom: auto; } }
+.pk-ribbon { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px; border-radius: 99px; background: linear-gradient(100deg, #ffcb05, #ee8130); color: #1b1b1f; font: 800 12px var(--font-sans); letter-spacing: 0.03em; animation: pk-badge 1.4s ease-in-out infinite; }
+.pk-kbd { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 5px; background: rgba(0, 0, 0, 0.35); font: 700 10px var(--font-sans); color: #fff; }
+.pk-sheet { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); max-height: 50vh; overflow-y: auto; padding: 10px; border-radius: 16px; border: 1px solid var(--color-border); background: var(--color-surface); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); animation: pk-pop 0.2s ease both; z-index: 50; }
+@media (min-width: 1024px) { .pk-sheet { bottom: auto; top: calc(100% + 8px); } }
+.pk-dots span { display: inline-block; width: 6px; height: 6px; margin: 0 2px; border-radius: 50%; background: currentColor; animation: pk-dot 1s ease-in-out infinite; }
+.pk-dots span:nth-child(2) { animation-delay: 0.15s; } .pk-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes pk-dot { 0%, 80%, 100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-5px); opacity: 1; } }
+
+/* ============================================================ team-builder picker */
+.pk-dexcard { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px 6px; border-radius: 14px; border: 1px solid var(--color-border); background: var(--color-surface); text-align: center; transition: transform 0.15s, box-shadow 0.2s, border-color 0.2s; }
+.pk-dexcard:hover { transform: translateY(-3px) scale(1.03); border-color: var(--color-lamp); box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3); z-index: 2; }
+.pk-dexcard[data-taken="1"] { opacity: 0.55; }
+.pk-dexcard[data-taken="1"]::after { content: "✓"; position: absolute; top: 4px; right: 6px; color: #6df08a; font-weight: 800; }
+@media (prefers-reduced-motion: reduce) { .pk-cloud, .pk-rays, .pk-mote, .pk-mon .pk-shadow, .pk-platform::after, .pk-ribbon { animation: none !important; } }

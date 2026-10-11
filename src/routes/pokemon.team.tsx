@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Dices, Plus, Save, Trash2 } from "lucide-react";
-import { NATURES, PokeHeader, Sprite, TypeBadge, useT } from "@/components/pokemon/ui";
+import { ArrowLeft, ArrowRight, Dices, Plus, Save, Search, Sparkles, Trash2, X } from "lucide-react";
+import { GimmickPills, NATURES, PokeHeader, Sprite, StatBars, TypeBadge, useT } from "@/components/pokemon/ui";
 import {
   deleteTeam,
   listTeams,
@@ -16,7 +16,7 @@ import {
   type PokeTeam,
   type SpeciesDetail,
 } from "@/lib/pokemon-api";
-import { FORMATS, STAT_KEYS, STAT_LABEL, TYPES, formatByGen, type MoveInfo, type PokeSet, type StatKey } from "@/lib/pokemon/shared";
+import { FORMATS, STAT_KEYS, STAT_LABEL, TYPES, TYPE_COLOR, formatByGen, matchups, suggestMoves, type MoveInfo, type PokeSet, type StatKey } from "@/lib/pokemon/shared";
 
 export const Route = createFileRoute("/pokemon/team")({
   loader: () => listTeams(),
@@ -80,6 +80,15 @@ function TeamPage() {
   const fmt = formatByGen(draft.gen);
 
   const patch = (i: number, s: PokeSet | null) => setDraft((d) => ({ ...d, sets: d.sets.map((x, j) => (j === i ? s : x)) }));
+  const firstFilled = draft.sets.findIndex(Boolean);
+  const moveSlot = (from: number, to: number) => {
+    setDraft((d) => {
+      const next = [...d.sets];
+      [next[from], next[to]] = [next[to], next[from]];
+      return { ...d, sets: next };
+    });
+    setSlot(to);
+  };
 
   async function onSave() {
     setMsg(null);
@@ -192,24 +201,41 @@ function TeamPage() {
             {draft.sets.map((s, i) => {
               const e = s ? dex.find((x) => x.name === s.species) : null;
               return (
-                <button key={i} type="button" onClick={() => setSlot(i)} className={`pressable flex aspect-square flex-col items-center justify-center rounded-xl border bg-surface p-1 text-center ${slot === i ? "border-lamp shadow-soft" : "border-border"}`}>
+                <div key={i} className="relative">
+                  <button type="button" onClick={() => setSlot(i)} className={`pressable flex aspect-square w-full flex-col items-center justify-center rounded-xl border bg-surface p-1 text-center ${slot === i ? "border-lamp shadow-soft" : "border-border"}`}>
+                    {s ? (
+                      <>
+                        <Sprite info={e ? { id: e.sp, num: e.n, types: e.t } : null} still className="h-14 w-14 object-contain" />
+                        <span className="w-full truncate font-sans text-[11px]">{s.species}</span>
+                      </>
+                    ) : (
+                      <span className="font-sans text-2xl text-subtle">＋</span>
+                    )}
+                  </button>
+                  {s && i === firstFilled ? <span className="pointer-events-none absolute left-1.5 top-1 font-sans text-[10px] font-bold text-lamp">★ {t("লিড", "Lead")}</span> : null}
                   {s ? (
-                    <>
-                      <Sprite info={e ? { id: e.sp, num: e.n, types: e.t } : null} still className="h-12 w-12 object-contain" />
-                      <span className="w-full truncate font-sans text-[11px]">{s.species}</span>
-                    </>
-                  ) : (
-                    <span className="font-sans text-2xl text-subtle">＋</span>
-                  )}
-                </button>
+                    <button type="button" aria-label={t("সরান", "Remove")} onClick={() => patch(i, null)} className="pressable absolute right-1 top-1 grid size-5 place-items-center rounded-full bg-bg/80 text-subtle hover:text-nsfw">
+                      <X className="size-3" />
+                    </button>
+                  ) : null}
+                </div>
               );
             })}
           </div>
+          {draft.sets[slot] ? (
+            <div className="flex flex-wrap items-center gap-2 font-sans text-xs text-muted">
+              <button type="button" disabled={slot === 0} onClick={() => moveSlot(slot, slot - 1)} className="pressable inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1 disabled:opacity-40"><ArrowLeft className="size-3" /> {t("আগে আনুন", "Move earlier")}</button>
+              <button type="button" disabled={slot === 5} onClick={() => moveSlot(slot, slot + 1)} className="pressable inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1 disabled:opacity-40">{t("পরে নিন", "Move later")} <ArrowRight className="size-3" /></button>
+              {slot !== firstFilled ? <button type="button" onClick={() => moveSlot(slot, 0)} className="pressable rounded-full border border-border bg-surface px-3 py-1">★ {t("লিড করুন", "Make lead")}</button> : null}
+              <span className="text-subtle">{t("প্রথম পোকেমনই লড়াই শুরু করে।", "The first Pokémon starts the battle.")}</span>
+            </div>
+          ) : null}
 
           <SlotEditor
             key={`${slot}-${draft.gen}-${draft.sets[slot]?.species ?? "x"}`}
             gen={draft.gen}
             set={draft.sets[slot]}
+            taken={new Set(filled.map((x) => x.species))}
             dex={dex}
             items={items}
             onChange={(s) => patch(slot, s)}
@@ -231,7 +257,7 @@ function SpeciesIcon({ name, dex }: { name: string; dex: DexEntry[] }) {
 
 /* --------------------------------------------------------------- one slot */
 
-type Opt = { key: string; label: string; sub?: string; badge?: string };
+type Opt = { key: string; label: string; sub?: string; badge?: string; color?: string };
 
 function Picker({ value, options, onPick, placeholder, allowClear }: { value: string; options: Opt[]; onPick: (key: string) => void; placeholder: string; allowClear?: boolean }) {
   const [q, setQ] = useState("");
@@ -258,6 +284,7 @@ function Picker({ value, options, onPick, placeholder, allowClear }: { value: st
           {shown.map((o) => (
             <li key={o.key}>
               <button type="button" onMouseDown={(e) => { e.preventDefault(); onPick(o.key); setOpen(false); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-left font-sans text-sm hover:bg-surface-2">
+                {o.color ? <i className="size-2.5 shrink-0 rounded-full" style={{ background: o.color }} /> : null}
                 {o.badge ? <span className="rounded bg-surface-2 px-1 text-[10px] text-lamp">{o.badge}</span> : null}
                 <span className="flex-1 truncate">{o.label}</span>
                 {o.sub ? <span className="truncate text-[11px] text-subtle">{o.sub}</span> : null}
@@ -271,10 +298,105 @@ function Picker({ value, options, onPick, placeholder, allowClear }: { value: st
   );
 }
 
-function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: number; set: PokeSet | null; dex: DexEntry[]; items: ItemInfo[]; onChange: (s: PokeSet | null) => void; onRandomOne: () => Promise<void> }) {
+/** A visual grid of every Pokémon you can bring in this generation. */
+function PokemonPicker({ gen, dex, taken, current, onPick, onRandom, onCancel }: { gen: number; dex: DexEntry[]; taken: Set<string>; current?: string; onPick: (e: DexEntry) => void; onRandom: () => void; onCancel?: () => void }) {
+  const { t } = useT();
+  const [q, setQ] = useState("");
+  const [type, setType] = useState("");
+  const [fe, setFe] = useState(true);
+  const [gim, setGim] = useState(false);
+  const [sort, setSort] = useState<"num" | "bst" | "name">("num");
+  const [limit, setLimit] = useState(48);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => inputRef.current?.focus(), []);
+
+  const gimTags = gen === 8 ? ["gmax"] : gen === 7 ? ["mega", "zsig", "ultra"] : gen === 6 ? ["mega", "primal"] : gen === 9 ? ["mega"] : [];
+  const pool = useMemo(() => dex.filter((e) => e.gen <= gen && (e.kind === "base" || e.kind === "regional" || e.kind === "other")), [dex, gen]);
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase().replace("#", "");
+    const bst = (e: DexEntry) => e.bs.reduce((a, b) => a + b, 0);
+    const out = pool.filter(
+      (e) =>
+        (!fe || e.fe) &&
+        (!type || e.t.includes(type)) &&
+        (!gim || gimTags.some((g) => e.g.includes(g))) &&
+        (!needle || e.name.toLowerCase().includes(needle) || String(e.n) === needle),
+    );
+    if (sort === "bst") out.sort((a, b) => bst(b) - bst(a));
+    else if (sort === "name") out.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool, q, type, fe, gim, sort, gen]);
+  useEffect(() => setLimit(48), [q, type, fe, gim, sort]);
+
+  return (
+    <div className="pk-card space-y-3 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-display text-lg">{t("পোকেমন বেছে নিন", "Choose a Pokémon")}</h3>
+        <div className="flex gap-2">
+          <button type="button" onClick={onRandom} className="pressable inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-3 py-1.5 font-sans text-xs">
+            <Dices className="size-3.5" /> {t("র‍্যান্ডম", "Surprise me")}
+          </button>
+          {onCancel ? (
+            <button type="button" onClick={onCancel} className="pressable rounded-full border border-border px-3 py-1.5 font-sans text-xs text-muted">✕ {t("বাতিল", "Cancel")}</button>
+          ) : null}
+        </div>
+      </div>
+      <label className="relative block">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" aria-hidden="true" />
+        <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("নাম বা নম্বর লিখুন… (যেমন: Char)", "Type a name or number… (e.g. Char)")} className="h-11 w-full rounded-lg border border-border bg-bg pl-9 pr-3 font-sans text-sm" />
+      </label>
+      <div className="flex flex-wrap gap-1">
+        {TYPES.map((tp) => (
+          <button key={tp} type="button" onClick={() => setType(type === tp ? "" : tp)} className="rounded-md px-2 py-0.5 text-[11px] font-bold uppercase text-white transition" style={{ background: TYPE_COLOR[tp], opacity: !type || type === tp ? 1 : 0.35 }}>
+            {tp}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-4 font-sans text-xs text-muted">
+        <label className="flex items-center gap-1.5"><input type="checkbox" checked={fe} onChange={(e) => setFe(e.target.checked)} /> {t("শুধু পূর্ণ বিবর্তিত", "Fully evolved only")}</label>
+        {gimTags.length ? (
+          <label className="flex items-center gap-1.5"><input type="checkbox" checked={gim} onChange={(e) => setGim(e.target.checked)} /> {t("এই জেনারেশনের গিমিক আছে", "Has this generation's gimmick")}</label>
+        ) : null}
+        <label className="flex items-center gap-1.5">
+          {t("সাজান", "Sort")}
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="rounded-md border border-border bg-bg px-2 py-1 text-fg">
+            <option value="num">{t("নম্বর", "Number")}</option>
+            <option value="bst">{t("মোট স্ট্যাট", "Total stats")}</option>
+            <option value="name">{t("নাম", "Name")}</option>
+          </select>
+        </label>
+        <span className="ml-auto text-subtle">{shown.length} {t("টি", "found")}</span>
+      </div>
+      {dex.length === 0 ? <p className="py-8 text-center font-sans text-sm text-muted">{t("লোড হচ্ছে…", "Loading…")}</p> : null}
+      <ul className="grid max-h-[62vh] grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4 md:grid-cols-5">
+        {shown.slice(0, limit).map((e) => (
+          <li key={e.id}>
+            <button type="button" data-taken={taken.has(e.name) && e.name !== current ? "1" : "0"} onClick={() => onPick(e)} className="pk-dexcard w-full">
+              <span className="self-start pl-1 font-sans text-[10px] text-subtle">#{e.n}</span>
+              <Sprite info={{ id: e.sp, num: e.n, types: e.t }} still className="h-16 w-16 object-contain" />
+              <span className="w-full truncate px-1 font-sans text-[12px] text-fg">{e.name}</span>
+              <span className="flex gap-0.5">{e.t.map((x) => <TypeBadge key={x} type={x} small />)}</span>
+              <span className="font-sans text-[10px] text-subtle">{e.bs.reduce((a, b) => a + b, 0)}</span>
+              <GimmickPills tags={e.g} only={gimTags} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {limit < shown.length ? (
+        <div className="text-center">
+          <button type="button" onClick={() => setLimit((n) => n + 48)} className="pressable rounded-full border border-border bg-surface px-5 py-1.5 font-sans text-sm hover:bg-surface-2">{t("আরও দেখান", "Show more")}</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SlotEditor({ gen, set, dex, items, taken, onChange, onRandomOne }: { gen: number; set: PokeSet | null; dex: DexEntry[]; items: ItemInfo[]; taken: Set<string>; onChange: (s: PokeSet | null) => void; onRandomOne: () => Promise<void> }) {
   const { t } = useT();
   const [learn, setLearn] = useState<MoveInfo[]>([]);
   const [detail, setDetail] = useState<SpeciesDetail | null>(null);
+  const [picking, setPicking] = useState(!set);
   const entry = set ? dex.find((x) => x.name === set.species) ?? null : null;
 
   useEffect(() => {
@@ -287,11 +409,7 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
     };
   }, [set?.species, gen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const speciesOptions = useMemo<Opt[]>(
-    () => dex.filter((e) => e.gen <= gen && (e.kind === "base" || e.kind === "regional" || e.kind === "other")).map((e) => ({ key: e.name, label: e.name, sub: `#${e.n}` })),
-    [dex, gen],
-  );
-  const moveOptions = useMemo<Opt[]>(() => learn.map((m) => ({ key: m.name, label: m.name, sub: `${m.type} · ${m.bp || "—"}`, badge: m.cat === "Status" ? "S" : m.cat === "Physical" ? "P" : "SP" })), [learn]);
+  const moveOptions = useMemo<Opt[]>(() => learn.map((m) => ({ key: m.name, label: m.name, sub: `${m.type} · ${m.bp || "—"}`, badge: m.cat === "Status" ? "S" : m.cat === "Physical" ? "P" : "SP", color: TYPE_COLOR[m.type] })), [learn]);
   const itemOptions = useMemo<Opt[]>(
     () => items.map((i) => ({ key: i.name, label: i.name, sub: i.desc.slice(0, 40), badge: i.kind === "mega" ? "🧬" : i.kind === "z" ? "✨" : i.kind === "orb" ? "🌋" : undefined })),
     [items],
@@ -300,17 +418,20 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
   const totalEv = set ? STAT_KEYS.reduce((a, k) => a + (set.evs[k] || 0), 0) : 0;
   const up = (p: Partial<PokeSet>) => set && onChange({ ...set, ...p });
 
-  if (!set) {
+  if (!set || picking) {
     return (
-      <div className="pk-card space-y-3 p-4">
-        <h3 className="font-display text-lg">{t("পোকেমন বেছে নিন", "Choose a Pokémon")}</h3>
-        <Picker value="" options={speciesOptions} placeholder={t("নাম লিখে খুঁজুন…", "Type a name…")} onPick={(k) => { const e = dex.find((x) => x.name === k); if (e) onChange(blankSet(e, gen)); }} />
-        <button type="button" onClick={() => void onRandomOne()} className="pressable inline-flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2 font-sans text-sm">
-          <Dices className="size-4" /> {t("একটি র‍্যান্ডম পোকেমন", "A random Pokémon")}
-        </button>
-      </div>
+      <PokemonPicker
+        gen={gen}
+        dex={dex}
+        taken={taken}
+        current={set?.species}
+        onCancel={set ? () => setPicking(false) : undefined}
+        onPick={(e) => onChange(set ? { ...blankSet(e, gen), item: set.item } : blankSet(e, gen))}
+        onRandom={() => void onRandomOne()}
+      />
     );
   }
+  const matchup = entry && gen >= 6 ? matchups(entry.t) : null;
 
   return (
     <div className="pk-card space-y-4 p-4">
@@ -320,13 +441,24 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
           <h3 className="font-display text-xl">{set.species}</h3>
           <div className="mt-1 flex gap-1.5">{entry?.t.map((x) => <TypeBadge key={x} type={x} />)}</div>
         </div>
-        <button type="button" onClick={() => onChange(null)} className="pressable rounded-lg border border-border px-3 py-1.5 font-sans text-xs text-muted hover:text-nsfw">{t("সরান", "Remove")}</button>
+        <div className="flex flex-col gap-1.5 sm:flex-row">
+          <button type="button" onClick={() => setPicking(true)} className="pressable rounded-lg border border-border bg-surface-2 px-3 py-1.5 font-sans text-xs">🔄 {t("পোকেমন বদলান", "Change")}</button>
+          <button type="button" onClick={() => onChange(null)} className="pressable rounded-lg border border-border px-3 py-1.5 font-sans text-xs text-muted hover:text-nsfw">{t("সরান", "Remove")}</button>
+        </div>
       </div>
 
-      <label className="block font-sans text-xs text-muted">
-        {t("পোকেমন বদলান", "Change Pokémon")}
-        <Picker value={set.species} options={speciesOptions} placeholder={t("নাম…", "Name…")} onPick={(k) => { const e = dex.find((x) => x.name === k); if (e) onChange({ ...blankSet(e, gen), item: set.item }); }} />
-      </label>
+      {entry ? (
+        <div className="grid gap-4 rounded-xl border border-border bg-surface-2 p-3 sm:grid-cols-2">
+          <StatBars bs={entry.bs} />
+          {matchup ? (
+            <div className="space-y-1.5 font-sans text-[11px] text-muted">
+              <p><b className="text-fg">{t("দুর্বল:", "Weak to:")}</b> {matchup.weak.length ? matchup.weak.map(([tp, m]) => <span key={tp} className="mr-1.5 inline-flex items-center gap-0.5"><TypeBadge type={tp} small /><b className="text-nsfw">×{m}</b></span>) : "—"}</p>
+              <p><b className="text-fg">{t("প্রতিরোধ:", "Resists:")}</b> {matchup.resist.length ? matchup.resist.map(([tp]) => <span key={tp} className="mr-1 inline-block"><TypeBadge type={tp} small /></span>) : "—"}</p>
+              {matchup.immune.length ? <p><b className="text-fg">{t("ইমিউন:", "Immune:")}</b> {matchup.immune.map((tp) => <span key={tp} className="mr-1 inline-block"><TypeBadge type={tp} small /></span>)}</p> : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {gen >= 3 ? (
@@ -381,7 +513,13 @@ function SlotEditor({ gen, set, dex, items, onChange, onRandomOne }: { gen: numb
       ) : null}
 
       <div>
-        <p className="mb-1.5 font-sans text-xs text-muted">{t("চাল (১–৪টি)", "Moves (1–4)")}</p>
+        <div className="mb-1.5 flex flex-wrap items-center gap-2 font-sans text-xs text-muted">
+          <span>{t("চাল (১–৪টি)", "Moves (1–4)")}</span>
+          <button type="button" disabled={!learn.length || !entry} onClick={() => entry && up({ moves: suggestMoves(learn, entry.t, entry.bs[1] >= entry.bs[3]) })} className="pressable inline-flex items-center gap-1 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-fg disabled:opacity-40">
+            <Sparkles className="size-3" /> {t("সেরা চাল বেছে দিন", "Suggest moves")}
+          </button>
+          {set.moves.length ? <button type="button" onClick={() => up({ moves: [] })} className="pressable text-subtle hover:text-nsfw">{t("মুছুন", "Clear")}</button> : null}
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {[0, 1, 2, 3].map((i) => (
             <Picker

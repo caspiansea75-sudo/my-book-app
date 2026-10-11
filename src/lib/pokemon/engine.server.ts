@@ -112,6 +112,7 @@ export function dexList(): DexEntry[] {
       bs: STAT_KEYS.map((k) => sp.baseStats[k]),
       ab: [abilities["0"], abilities["1"]].filter(Boolean),
       hidden: abilities["H"] ?? "",
+      fe: !(sp.evos && sp.evos.length),
       g,
       sp: spriteIdOf(sp),
       req: sp.requiredItem ?? "",

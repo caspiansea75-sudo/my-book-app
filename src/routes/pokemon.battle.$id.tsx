@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FastForward } from "lucide-react";
-import { ActionPanel, BattleLog, BattleScene, ResultOverlay, Roster, type LogLine } from "@/components/pokemon/arena";
+import { ActionPanel, BattleLog, BattleScene, ResultOverlay, Roster, VsIntro, type LogLine } from "@/components/pokemon/arena";
 import { Sprite, useInterval, useT } from "@/components/pokemon/ui";
 import { Avatar } from "@/components/members/avatar";
 import {
@@ -43,6 +43,8 @@ function Arena({ initial }: { initial: BattleView }) {
   const [err, setErr] = useState("");
   const [showResult, setShowResult] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
+  const [intro, setIntro] = useState(false);
+  const pendingIngest = useRef<(() => void) | null>(null);
 
   const metaRef = useRef(meta);
   const stateRef = useRef<BState>(initialState());
@@ -122,17 +124,27 @@ function Arena({ initial }: { initial: BattleView }) {
     [drain],
   );
 
-  // First load: a finished battle (or a brand-new one) is played from the start; one in progress jumps to now.
+  // First load: a finished battle (or a brand-new one) is played from the start, after a short VS splash;
+  // one already in progress jumps straight to now.
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    ingest(initial, initial.status === "done" || initial.turn <= 1);
+    if (initial.status === "done" || initial.turn <= 1) {
+      setIntro(true);
+      pendingIngest.current = () => ingest(initial, true);
+    } else ingest(initial, false);
   }, [initial, ingest]);
+  const finishIntro = useCallback(() => {
+    setIntro(false);
+    const go = pendingIngest.current;
+    pendingIngest.current = null;
+    go?.();
+  }, []);
 
   const poll = useCallback(async () => {
     const m = metaRef.current;
-    if (polling.current || running.current || m.status === "done") return;
+    if (polling.current || running.current || pendingIngest.current || m.status === "done") return;
     polling.current = true;
     try {
       const r = await getBattle({ data: { id: m.id, since: seen.current, rev: m.rev } });
@@ -207,7 +219,7 @@ function Arena({ initial }: { initial: BattleView }) {
   }
 
   return (
-    <section className="mx-auto max-w-5xl px-3 pb-20 pt-5 sm:px-6">
+    <section className="mx-auto max-w-6xl px-3 pb-24 pt-4 sm:px-6">
       <div className="mb-3 flex flex-wrap items-center gap-3 font-sans text-sm">
         <Link to="/pokemon" className="pressable inline-flex items-center gap-1.5 text-muted hover:text-fg"><ArrowLeft className="size-4" /> {t("লবি", "Lobby")}</Link>
         <span className="flex items-center gap-2">
@@ -228,24 +240,22 @@ function Arena({ initial }: { initial: BattleView }) {
         </span>
       </div>
 
-      <div className="relative">
-        <BattleScene state={bstate} you={you} sprites={meta.sprites} cue={cue}>
-          {showResult && meta.status === "done" ? <ResultOverlay view={meta} state={bstate} onReplay={() => void onReplay()} onRematch={meta.cpu && meta.mySets ? () => void onRematch() : undefined} /> : null}
-        </BattleScene>
-      </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="relative lg:col-start-1 lg:row-start-1">
+          <BattleScene state={bstate} you={you} sprites={meta.sprites} cue={cue} theme={meta.id % 4}>
+            {intro ? <VsIntro names={names} people={meta.people} you={you} onDone={finishIntro} /> : null}
+            {showResult && meta.status === "done" ? <ResultOverlay view={meta} state={bstate} onReplay={() => void onReplay()} onRematch={meta.cpu && meta.mySets ? () => void onRematch() : undefined} /> : null}
+          </BattleScene>
+        </div>
 
-      <div className="mt-3 flex flex-wrap justify-between gap-3">
-        <Roster state={bstate} side={mineSide} you={you} />
-        <Roster state={bstate} side={foeSide} you={you} />
-      </div>
-
-      {err ? <p className="mt-3 rounded-lg border border-nsfw/40 bg-nsfw/10 px-3 py-2 font-sans text-sm text-nsfw">{te(err)}</p> : null}
-
-      <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-        <div className="order-2 md:order-1">
-          <ActionPanel view={meta} state={bstate} moves={moves.current} sprites={meta.sprites} busy={busy} locked={animating} onChoose={onChoose} onForfeit={onForfeit} onClaim={onClaim} />
+        <div className="space-y-3 lg:col-start-1 lg:row-start-2">
+          <div className="flex flex-wrap justify-between gap-3">
+            <Roster state={bstate} side={mineSide} you={you} />
+            <Roster state={bstate} side={foeSide} you={you} />
+          </div>
+          {err ? <p className="rounded-lg border border-nsfw/40 bg-nsfw/10 px-3 py-2 font-sans text-sm text-nsfw">{te(err)}</p> : null}
           {meta.status === "done" ? (
-            <div className="pk-card mt-3 p-4">
+            <div className="pk-card p-4">
               <div className="flex flex-wrap items-center gap-2 font-sans text-sm">
                 {meta.winner && meta.winner !== "tie" ? <b>🏆 {names[meta.winner]}</b> : <b>🤝</b>}
                 <button type="button" onClick={() => void onReplay()} className="pressable rounded-full border border-border bg-surface-2 px-3 py-1">↺ {t("রিপ্লে", "Replay")}</button>
@@ -276,7 +286,11 @@ function Arena({ initial }: { initial: BattleView }) {
             </div>
           ) : null}
         </div>
-        <div className="order-1 md:order-2"><BattleLog lines={log} /></div>
+
+        <ActionPanel className="lg:col-start-2 lg:row-start-1 lg:self-start" view={meta} state={bstate} moves={moves.current} sprites={meta.sprites} busy={busy} locked={animating || intro} onChoose={onChoose} onForfeit={onForfeit} onClaim={onClaim} />
+        <div className={meta.status === "done" || !you ? "lg:col-start-2 lg:row-span-2 lg:row-start-1" : "lg:col-start-2 lg:row-start-2"}>
+          <BattleLog lines={log} />
+        </div>
       </div>
     </section>
   );
