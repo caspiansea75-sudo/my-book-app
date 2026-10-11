@@ -40,6 +40,10 @@ export const GALLERY_EXACT: Record<string, string> = {
   "সব অধ্যায় মিলিয়ে ভিউ, পছন্দ, মন্তব্য ও ভোট": "Views, likes, comments and votes across all chapters",
   "ভোট": "Votes",
 
+  // Pokémon section (the rest of its text is written in both languages in the page itself)
+  "পোকেমন": "Pokémon",
+  "পোকেমন লড়াইয়ে নামতে অ্যাকাউন্ট দরকার": "An account is needed to battle in Pokémon",
+
   // Mini chat window
   "বন্ধ করুন": "Close",
   "চ্যাট খুলুন": "Open chat",

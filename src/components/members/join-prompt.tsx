@@ -12,7 +12,7 @@ import { useMe } from "@/lib/use-me";
  * `useGuestGate()`, or by redirecting to `/?join=<feature>` (see `redirectGuest` in `@/lib/auth/guest`).
  */
 
-export type GuestFeature = "comment" | "create" | "gallery" | "chat" | "profile";
+export type GuestFeature = "comment" | "create" | "gallery" | "chat" | "profile" | "pokemon";
 
 const COPY: Record<GuestFeature, string> = {
   comment: "মন্তব্য করতে অ্যাকাউন্ট দরকার",
@@ -20,6 +20,7 @@ const COPY: Record<GuestFeature, string> = {
   gallery: "চিত্রশালা ব্যবহার করতে অ্যাকাউন্ট দরকার",
   chat: "চ্যাট করতে অ্যাকাউন্ট দরকার",
   profile: "প্রোফাইল ব্যবহার করতে অ্যাকাউন্ট দরকার",
+  pokemon: "পোকেমন লড়াইয়ে নামতে অ্যাকাউন্ট দরকার",
 };
 
 export const isGuestFeature = (v: unknown): v is GuestFeature =>

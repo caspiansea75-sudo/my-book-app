@@ -16,20 +16,26 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MangaRouteImport } from './routes/manga'
 import { Route as MediaRouteImport } from './routes/media'
 import { Route as MembersRouteImport } from './routes/members'
+import { Route as PokemonRouteImport } from './routes/pokemon'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
+import { Route as ApiBackupRouteImport } from './routes/api/backup'
 import { Route as BookBookSlugRouteImport } from './routes/book.$bookSlug'
 import { Route as MangaIndexRouteImport } from './routes/manga.index'
 import { Route as MangaSeriesSlugRouteImport } from './routes/manga.$seriesSlug'
+import { Route as PokemonIndexRouteImport } from './routes/pokemon.index'
+import { Route as PokemonBoardRouteImport } from './routes/pokemon.board'
+import { Route as PokemonDexRouteImport } from './routes/pokemon.dex'
+import { Route as PokemonTeamRouteImport } from './routes/pokemon.team'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
 import { Route as UUsernameRouteImport } from './routes/u.$username'
 import { Route as ApiChatImageIdRouteImport } from './routes/api/chat-image.$id'
-import { Route as ApiBackupRouteImport } from './routes/api/backup'
 import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
 import { Route as MangaSeriesSlugIndexRouteImport } from './routes/manga.$seriesSlug.index'
 import { Route as MangaSeriesSlugChapterSlugRouteImport } from './routes/manga.$seriesSlug.$chapterSlug'
+import { Route as PokemonBattleIdRouteImport } from './routes/pokemon.battle.$id'
 import { Route as ReadBookSlugSlugRouteImport } from './routes/read.$bookSlug.$slug'
 import { Route as StudioBookSlugIndexRouteImport } from './routes/studio.$bookSlug.index'
 import { Route as StudioBookSlugSlugRouteImport } from './routes/studio.$bookSlug.$slug'
@@ -71,6 +77,11 @@ const MembersRoute = MembersRouteImport.update({
   path: '/members',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PokemonRoute = PokemonRouteImport.update({
+  id: '/pokemon',
+  path: '/pokemon',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -84,6 +95,11 @@ const SignupRoute = SignupRouteImport.update({
 const StudioRoute = StudioRouteImport.update({
   id: '/studio',
   path: '/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBackupRoute = ApiBackupRouteImport.update({
+  id: '/api/backup',
+  path: '/api/backup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BookBookSlugRoute = BookBookSlugRouteImport.update({
@@ -100,6 +116,26 @@ const MangaSeriesSlugRoute = MangaSeriesSlugRouteImport.update({
   id: '/$seriesSlug',
   path: '/$seriesSlug',
   getParentRoute: () => MangaRoute,
+} as any)
+const PokemonIndexRoute = PokemonIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PokemonRoute,
+} as any)
+const PokemonBoardRoute = PokemonBoardRouteImport.update({
+  id: '/board',
+  path: '/board',
+  getParentRoute: () => PokemonRoute,
+} as any)
+const PokemonDexRoute = PokemonDexRouteImport.update({
+  id: '/dex',
+  path: '/dex',
+  getParentRoute: () => PokemonRoute,
+} as any)
+const PokemonTeamRoute = PokemonTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => PokemonRoute,
 } as any)
 const StudioIndexRoute = StudioIndexRouteImport.update({
   id: '/',
@@ -121,11 +157,6 @@ const ApiChatImageIdRoute = ApiChatImageIdRouteImport.update({
   path: '/api/chat-image/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiBackupRoute = ApiBackupRouteImport.update({
-  id: '/api/backup',
-  path: '/api/backup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiMediaIdRoute = ApiMediaIdRouteImport.update({
   id: '/api/media/$id',
   path: '/api/media/$id',
@@ -142,6 +173,11 @@ const MangaSeriesSlugChapterSlugRoute =
     path: '/$chapterSlug',
     getParentRoute: () => MangaSeriesSlugRoute,
   } as any)
+const PokemonBattleIdRoute = PokemonBattleIdRouteImport.update({
+  id: '/battle/$id',
+  path: '/battle/$id',
+  getParentRoute: () => PokemonRoute,
+} as any)
 const ReadBookSlugSlugRoute = ReadBookSlugSlugRouteImport.update({
   id: '/read/$bookSlug/$slug',
   path: '/read/$bookSlug/$slug',
@@ -178,19 +214,25 @@ export interface FileRoutesByFullPath {
   '/manga': typeof MangaRouteWithChildren
   '/media': typeof MediaRoute
   '/members': typeof MembersRoute
+  '/pokemon': typeof PokemonRouteWithChildren
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRouteWithChildren
+  '/api/backup': typeof ApiBackupRoute
   '/book/$bookSlug': typeof BookBookSlugRoute
   '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
+  '/pokemon/board': typeof PokemonBoardRoute
+  '/pokemon/dex': typeof PokemonDexRoute
+  '/pokemon/team': typeof PokemonTeamRoute
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
   '/u/$username': typeof UUsernameRoute
   '/manga/': typeof MangaIndexRoute
+  '/pokemon/': typeof PokemonIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
-  '/api/backup': typeof ApiBackupRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
+  '/pokemon/battle/$id': typeof PokemonBattleIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
   '/manga/$seriesSlug/': typeof MangaSeriesSlugIndexRoute
@@ -207,13 +249,18 @@ export interface FileRoutesByTo {
   '/members': typeof MembersRoute
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
+  '/api/backup': typeof ApiBackupRoute
   '/book/$bookSlug': typeof BookBookSlugRoute
+  '/pokemon/board': typeof PokemonBoardRoute
+  '/pokemon/dex': typeof PokemonDexRoute
+  '/pokemon/team': typeof PokemonTeamRoute
   '/u/$username': typeof UUsernameRoute
   '/manga': typeof MangaIndexRoute
+  '/pokemon': typeof PokemonIndexRoute
   '/studio': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
-  '/api/backup': typeof ApiBackupRoute
   '/api/media/$id': typeof ApiMediaIdRoute
+  '/pokemon/battle/$id': typeof PokemonBattleIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
   '/manga/$seriesSlug': typeof MangaSeriesSlugIndexRoute
@@ -230,19 +277,25 @@ export interface FileRoutesById {
   '/manga': typeof MangaRouteWithChildren
   '/media': typeof MediaRoute
   '/members': typeof MembersRoute
+  '/pokemon': typeof PokemonRouteWithChildren
   '/profile': typeof ProfileRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRouteWithChildren
+  '/api/backup': typeof ApiBackupRoute
   '/book/$bookSlug': typeof BookBookSlugRoute
   '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
+  '/pokemon/board': typeof PokemonBoardRoute
+  '/pokemon/dex': typeof PokemonDexRoute
+  '/pokemon/team': typeof PokemonTeamRoute
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
   '/u/$username': typeof UUsernameRoute
   '/manga/': typeof MangaIndexRoute
+  '/pokemon/': typeof PokemonIndexRoute
   '/studio/': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
-  '/api/backup': typeof ApiBackupRoute
   '/api/media/$id': typeof ApiMediaIdRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
+  '/pokemon/battle/$id': typeof PokemonBattleIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
   '/manga/$seriesSlug/': typeof MangaSeriesSlugIndexRoute
@@ -260,19 +313,25 @@ export interface FileRouteTypes {
     | '/manga'
     | '/media'
     | '/members'
+    | '/pokemon'
     | '/profile'
     | '/signup'
     | '/studio'
+    | '/api/backup'
     | '/book/$bookSlug'
     | '/manga/$seriesSlug'
+    | '/pokemon/board'
+    | '/pokemon/dex'
+    | '/pokemon/team'
     | '/studio/$bookSlug'
     | '/u/$username'
     | '/manga/'
+    | '/pokemon/'
     | '/studio/'
     | '/api/chat-image/$id'
-    | '/api/backup'
     | '/api/media/$id'
     | '/manga/$seriesSlug/$chapterSlug'
+    | '/pokemon/battle/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
     | '/manga/$seriesSlug/'
@@ -289,13 +348,18 @@ export interface FileRouteTypes {
     | '/members'
     | '/profile'
     | '/signup'
+    | '/api/backup'
     | '/book/$bookSlug'
+    | '/pokemon/board'
+    | '/pokemon/dex'
+    | '/pokemon/team'
     | '/u/$username'
     | '/manga'
+    | '/pokemon'
     | '/studio'
     | '/api/chat-image/$id'
-    | '/api/backup'
     | '/api/media/$id'
+    | '/pokemon/battle/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
     | '/manga/$seriesSlug'
@@ -311,19 +375,25 @@ export interface FileRouteTypes {
     | '/manga'
     | '/media'
     | '/members'
+    | '/pokemon'
     | '/profile'
     | '/signup'
     | '/studio'
+    | '/api/backup'
     | '/book/$bookSlug'
     | '/manga/$seriesSlug'
+    | '/pokemon/board'
+    | '/pokemon/dex'
+    | '/pokemon/team'
     | '/studio/$bookSlug'
     | '/u/$username'
     | '/manga/'
+    | '/pokemon/'
     | '/studio/'
     | '/api/chat-image/$id'
-    | '/api/backup'
     | '/api/media/$id'
     | '/manga/$seriesSlug/$chapterSlug'
+    | '/pokemon/battle/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
     | '/manga/$seriesSlug/'
@@ -340,13 +410,14 @@ export interface RootRouteChildren {
   MangaRoute: typeof MangaRouteWithChildren
   MediaRoute: typeof MediaRoute
   MembersRoute: typeof MembersRoute
+  PokemonRoute: typeof PokemonRouteWithChildren
   ProfileRoute: typeof ProfileRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRouteWithChildren
+  ApiBackupRoute: typeof ApiBackupRoute
   BookBookSlugRoute: typeof BookBookSlugRoute
   UUsernameRoute: typeof UUsernameRoute
   ApiChatImageIdRoute: typeof ApiChatImageIdRoute
-  ApiBackupRoute: typeof ApiBackupRoute
   ApiMediaIdRoute: typeof ApiMediaIdRoute
   ReadBookSlugSlugRoute: typeof ReadBookSlugSlugRoute
 }
@@ -402,6 +473,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MembersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pokemon': {
+      id: '/pokemon'
+      path: '/pokemon'
+      fullPath: '/pokemon'
+      preLoaderRoute: typeof PokemonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile': {
       id: '/profile'
       path: '/profile'
@@ -421,6 +499,13 @@ declare module '@tanstack/react-router' {
       path: '/studio'
       fullPath: '/studio'
       preLoaderRoute: typeof StudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/backup': {
+      id: '/api/backup'
+      path: '/api/backup'
+      fullPath: '/api/backup'
+      preLoaderRoute: typeof ApiBackupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/book/$bookSlug': {
@@ -443,6 +528,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/manga/$seriesSlug'
       preLoaderRoute: typeof MangaSeriesSlugRouteImport
       parentRoute: typeof MangaRoute
+    }
+    '/pokemon/': {
+      id: '/pokemon/'
+      path: '/'
+      fullPath: '/pokemon/'
+      preLoaderRoute: typeof PokemonIndexRouteImport
+      parentRoute: typeof PokemonRoute
+    }
+    '/pokemon/board': {
+      id: '/pokemon/board'
+      path: '/board'
+      fullPath: '/pokemon/board'
+      preLoaderRoute: typeof PokemonBoardRouteImport
+      parentRoute: typeof PokemonRoute
+    }
+    '/pokemon/dex': {
+      id: '/pokemon/dex'
+      path: '/dex'
+      fullPath: '/pokemon/dex'
+      preLoaderRoute: typeof PokemonDexRouteImport
+      parentRoute: typeof PokemonRoute
+    }
+    '/pokemon/team': {
+      id: '/pokemon/team'
+      path: '/team'
+      fullPath: '/pokemon/team'
+      preLoaderRoute: typeof PokemonTeamRouteImport
+      parentRoute: typeof PokemonRoute
     }
     '/studio/': {
       id: '/studio/'
@@ -472,13 +585,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatImageIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/backup': {
-      id: '/api/backup'
-      path: '/api/backup'
-      fullPath: '/api/backup'
-      preLoaderRoute: typeof ApiBackupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/media/$id': {
       id: '/api/media/$id'
       path: '/api/media/$id'
@@ -499,6 +605,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/manga/$seriesSlug/$chapterSlug'
       preLoaderRoute: typeof MangaSeriesSlugChapterSlugRouteImport
       parentRoute: typeof MangaSeriesSlugRoute
+    }
+    '/pokemon/battle/$id': {
+      id: '/pokemon/battle/$id'
+      path: '/battle/$id'
+      fullPath: '/pokemon/battle/$id'
+      preLoaderRoute: typeof PokemonBattleIdRouteImport
+      parentRoute: typeof PokemonRoute
     }
     '/read/$bookSlug/$slug': {
       id: '/read/$bookSlug/$slug'
@@ -580,6 +693,25 @@ const MangaRouteChildren: MangaRouteChildren = {
 
 const MangaRouteWithChildren = MangaRoute._addFileChildren(MangaRouteChildren)
 
+interface PokemonRouteChildren {
+  PokemonBoardRoute: typeof PokemonBoardRoute
+  PokemonDexRoute: typeof PokemonDexRoute
+  PokemonTeamRoute: typeof PokemonTeamRoute
+  PokemonIndexRoute: typeof PokemonIndexRoute
+  PokemonBattleIdRoute: typeof PokemonBattleIdRoute
+}
+
+const PokemonRouteChildren: PokemonRouteChildren = {
+  PokemonBoardRoute: PokemonBoardRoute,
+  PokemonDexRoute: PokemonDexRoute,
+  PokemonTeamRoute: PokemonTeamRoute,
+  PokemonIndexRoute: PokemonIndexRoute,
+  PokemonBattleIdRoute: PokemonBattleIdRoute,
+}
+
+const PokemonRouteWithChildren =
+  PokemonRoute._addFileChildren(PokemonRouteChildren)
+
 interface StudioBookSlugRouteChildren {
   StudioBookSlugSlugRoute: typeof StudioBookSlugSlugRoute
   StudioBookSlugIndexRoute: typeof StudioBookSlugIndexRoute
@@ -615,13 +747,14 @@ const rootRouteChildren: RootRouteChildren = {
   MangaRoute: MangaRouteWithChildren,
   MediaRoute: MediaRoute,
   MembersRoute: MembersRoute,
+  PokemonRoute: PokemonRouteWithChildren,
   ProfileRoute: ProfileRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRouteWithChildren,
+  ApiBackupRoute: ApiBackupRoute,
   BookBookSlugRoute: BookBookSlugRoute,
   UUsernameRoute: UUsernameRoute,
   ApiChatImageIdRoute: ApiChatImageIdRoute,
-  ApiBackupRoute: ApiBackupRoute,
   ApiMediaIdRoute: ApiMediaIdRoute,
   ReadBookSlugSlugRoute: ReadBookSlugSlugRoute,
 }

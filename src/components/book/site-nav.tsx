@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { BookImage, BookOpen, Images, Lock, MessageCircle, PenLine, Users } from "lucide-react";
+import { BookImage, BookOpen, Images, Lock, MessageCircle, PenLine, Swords, Users } from "lucide-react";
 import { LangSwitch } from "@/components/i18n/lang-switch";
 import { AccountChip } from "@/components/members/account-chip";
 import { useGuestGate, type GuestFeature } from "@/components/members/join-prompt";
@@ -12,6 +12,7 @@ const ITEMS = [
   { to: "/manga", label: "মাঙ্গা", icon: BookImage, id: "manga" },
   { to: "/studio", label: "স্টুডিও", icon: PenLine, id: "studio" },
   { to: "/chat", label: "চ্যাট", icon: MessageCircle, id: "chat" },
+  { to: "/pokemon", label: "পোকেমন", icon: Swords, id: "pokemon" },
   { to: "/members", label: "সদস্য", icon: Users, id: "members" },
 ] as const;
 
@@ -20,6 +21,7 @@ const GUEST_LOCKED: Partial<Record<(typeof ITEMS)[number]["id"], GuestFeature>> 
   gallery: "gallery",
   studio: "create",
   chat: "chat",
+  pokemon: "pokemon",
 };
 
 export function SiteNav({ active }: { active: (typeof ITEMS)[number]["id"] | "profile" }) {
