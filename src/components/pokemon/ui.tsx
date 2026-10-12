@@ -17,6 +17,7 @@ export function useT() {
 
 const TABS = [
   { to: "/pokemon", bn: "লবি", en: "Lobby", exact: true },
+  { to: "/pokemon/petown", bn: "পেটাউন", en: "Petown" },
   { to: "/pokemon/team", bn: "টিম বানান", en: "Team builder" },
   { to: "/pokemon/dex", bn: "পোকেডেক্স", en: "Pokédex" },
   { to: "/pokemon/board", bn: "বোর্ড", en: "Board" },

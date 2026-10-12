@@ -1,0 +1,6 @@
+/* Petown arena only. Kept in its own file so updates to pokemon.css never overwrite it. */
+.pk-pt-gauge { margin-top: 5px; height: 5px; border-radius: 99px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.pk-pt-gauge > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6ecbff, #9b7bff); transition: width 0.09s linear; }
+.pk-pt-gauge > i[data-ready="1"] { background: linear-gradient(90deg, #ffcb05, #ff7a00); box-shadow: 0 0 8px #ffcb05; animation: pk-pt-ready 1s ease-in-out infinite; }
+@keyframes pk-pt-ready { 50% { filter: brightness(1.35); } }
+@media (prefers-reduced-motion: reduce) { .pk-pt-gauge > i { animation: none !important; transition: none; } }

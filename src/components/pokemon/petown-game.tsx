@@ -1,0 +1,617 @@
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { Bot, Flag, Pause, Play, Search, Shuffle, Swords, X } from "lucide-react";
+import { Sprite, StatBars, TypeBadge, useT } from "@/components/pokemon/ui";
+import "@/components/pokemon/petown.css";
+import { TYPES, TYPE_COLOR, type SpriteInfo } from "@/lib/pokemon/shared";
+import {
+  DIFFICULTY,
+  FORM_LABEL,
+  SIMULATED_ABILITIES,
+  TEAM_SIZE,
+  activeOf,
+  alive,
+  bst,
+  cpuTeam,
+  damageRange,
+  itemsFor,
+  makeMon,
+  newBattle,
+  playerMove,
+  playerSwitch,
+  rating,
+  startBattle,
+  tick,
+  type Battle,
+  type Difficulty,
+  type Ev,
+  type ItemRow,
+  type Mon,
+  type PetownData,
+  type SpeciesRow,
+} from "@/lib/petown/engine";
+
+type Pick = { id: number; item: string };
+
+const FORM_FILTERS = [
+  { v: -1, bn: "সব", en: "All" },
+  { v: 0, bn: "সাধারণ", en: "Base" },
+  { v: 1, bn: "মেগা", en: "Mega" },
+  { v: 2, bn: "R2", en: "R2" },
+  { v: 3, bn: "আল্টিমেট", en: "Ultimate" },
+] as const;
+
+const spriteOf = (s: { sprite: string; num: number; types: string[] }): SpriteInfo | null => (s.sprite ? { id: s.sprite, num: s.num, types: s.types } : null);
+const rowSprite = (s: SpeciesRow): SpriteInfo | null => (s[7] ? { id: s[7], num: s[8], types: s[2] } : null);
+
+function loadRecord(): { w: number; l: number } {
+  try {
+    const r = JSON.parse(localStorage.getItem("petown:record") ?? "null");
+    if (r && typeof r.w === "number" && typeof r.l === "number") return r;
+  } catch {
+    /* no storage */
+  }
+  return { w: 0, l: 0 };
+}
+function saveRecord(r: { w: number; l: number }) {
+  try {
+    localStorage.setItem("petown:record", JSON.stringify(r));
+  } catch {
+    /* no storage */
+  }
+}
+
+/* ======================================================================== top level */
+
+export function PetownGame() {
+  const { t } = useT();
+  const [data, setData] = useState<PetownData | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [picks, setPicks] = useState<Pick[]>([]);
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [run, setRun] = useState<{ player: Mon[]; foe: Mon[]; key: number } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    import("@/data/petown.json")
+      .then((m) => live && setData((m.default ?? m) as unknown as PetownData))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const byId = useMemo(() => new Map((data?.species ?? []).map((s) => [s[0], s])), [data]);
+
+  const buildPlayer = useCallback(
+    (d: PetownData) =>
+      picks.flatMap((p) => {
+        const sp = byId.get(p.id);
+        if (!sp) return [];
+        const item = d.items.find((i) => i[0] === p.item) ?? null;
+        return [makeMon(d, sp, item)];
+      }),
+    [picks, byId],
+  );
+
+  const start = useCallback(() => {
+    if (!data || !picks.length) return;
+    const player = buildPlayer(data);
+    const avg = player.reduce((a, m) => a + m.base.reduce((x, y) => x + y, 0), 0) / player.length;
+    const foe = cpuTeam(data, avg, difficulty, player.length, picks.map((p) => p.id));
+    setRun({ player, foe, key: Date.now() });
+  }, [data, picks, difficulty, buildPlayer]);
+
+  if (failed) return <p className="pk-card mx-auto max-w-5xl p-4 font-sans text-sm text-nsfw">{t("পেটাউন ডেটা লোড হয়নি — পেজ রিফ্রেশ করুন।", "Couldn't load the Petown data — refresh the page.")}</p>;
+  if (!data) return <p className="mx-auto max-w-5xl px-5 py-10 font-sans text-sm text-muted sm:px-8">{t("পেটাউন ডেটা লোড হচ্ছে…", "Loading Petown data…")}</p>;
+
+  if (run) {
+    return <BattleScreen key={run.key} data={data} player={run.player} foe={run.foe} difficulty={difficulty} onRematch={start} onExit={() => setRun(null)} />;
+  }
+  return <Picker data={data} byId={byId} picks={picks} setPicks={setPicks} difficulty={difficulty} setDifficulty={setDifficulty} onStart={start} />;
+}
+
+/* ======================================================================== team picker */
+
+function Picker({
+  data,
+  byId,
+  picks,
+  setPicks,
+  difficulty,
+  setDifficulty,
+  onStart,
+}: {
+  data: PetownData;
+  byId: Map<number, SpeciesRow>;
+  picks: Pick[];
+  setPicks: (f: (p: Pick[]) => Pick[]) => void;
+  difficulty: Difficulty;
+  setDifficulty: (d: Difficulty) => void;
+  onStart: () => void;
+}) {
+  const { t, lang } = useT();
+  const [q, setQ] = useState("");
+  const [form, setForm] = useState<number>(-1);
+  const [type, setType] = useState("");
+  const [sort, setSort] = useState<"bst" | "spe" | "name">("bst");
+  const [limit, setLimit] = useState(60);
+  const [record, setRecord] = useState({ w: 0, l: 0 });
+  useEffect(() => setRecord(loadRecord()), []);
+
+  const list = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const out = data.species.filter((s) => (form < 0 || s[6] === form) && (!type || s[2].includes(type)) && (!needle || s[1].toLowerCase().includes(needle)));
+    out.sort((a, b) => (sort === "name" ? a[1].localeCompare(b[1]) : sort === "spe" ? b[3][5] - a[3][5] : bst(b) - bst(a)));
+    return out;
+  }, [data, q, form, type, sort]);
+  useEffect(() => setLimit(60), [q, form, type, sort]);
+
+  const taken = new Set(picks.map((p) => p.id));
+  const add = (s: SpeciesRow) => {
+    if (taken.has(s[0])) return setPicks((p) => p.filter((x) => x.id !== s[0]));
+    setPicks((p) => (p.length >= TEAM_SIZE ? p : [...p, { id: s[0], item: "" }]));
+  };
+  const random = () => {
+    const pool = data.species;
+    const chosen = new Set<number>();
+    while (chosen.size < TEAM_SIZE) chosen.add(pool[Math.floor(Math.random() * pool.length)][0]);
+    setPicks(() => [...chosen].map((id) => ({ id, item: "" })));
+  };
+
+  const avgBst = picks.length ? Math.round(picks.reduce((a, p) => a + bst(byId.get(p.id)!), 0) / picks.length) : 0;
+
+  return (
+    <section className="mx-auto max-w-5xl space-y-6 px-5 pb-24 pt-6 sm:px-8">
+      <div className="pk-card p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-xl">⚔️ {t("আপনার টিম", "Your team")}</h2>
+          <p className="font-sans text-xs text-muted">
+            {t("রেকর্ড", "Record")}: <b className="text-fg">{record.w}</b> {t("জয়", "W")} · <b className="text-fg">{record.l}</b> {t("হার", "L")}
+          </p>
+        </div>
+        <p className="mt-1 max-w-2xl font-sans text-sm leading-relaxed text-muted">
+          {t(
+            "পেটাউনের আসল স্ট্যাট, চাল, অ্যাবিলিটি ও হোল্ড আইটেম নিয়ে রিয়েল-টাইম লড়াই। প্রতিটি পোকেমনের স্পিড অনুযায়ী গেজ ভরে — ভরলেই চাল দিন। ৩ জন বেছে নিন।",
+            "A real-time brawl using Petown's own stats, moves, abilities and hold items. Each Pokémon's speed fills its gauge — use a move the moment it's ready. Pick up to 3.",
+          )}
+        </p>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {Array.from({ length: TEAM_SIZE }, (_, i) => {
+            const p = picks[i];
+            const sp = p ? byId.get(p.id) : undefined;
+            return sp && p ? (
+              <SlotCard key={p.id} data={data} sp={sp} item={p.item} onItem={(item) => setPicks((all) => all.map((x) => (x.id === p.id ? { ...x, item } : x)))} onRemove={() => setPicks((all) => all.filter((x) => x.id !== p.id))} />
+            ) : (
+              <div key={i} className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-border p-4 text-center font-sans text-sm text-muted">
+                {t(`নিচ থেকে পোকেমন ${i + 1} বেছে নিন`, `Pick Pokémon ${i + 1} below`)}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2 font-sans text-xs text-muted">
+          <Bot className="size-4" aria-hidden="true" />
+          {t("CPU কঠিনতা:", "CPU difficulty:")}
+          {(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => (
+            <button key={d} type="button" onClick={() => setDifficulty(d)} className={`pressable rounded-full border px-3 py-1 text-sm ${difficulty === d ? "border-lamp bg-surface-2 text-fg" : "border-border bg-bg text-muted"}`}>
+              {t(DIFFICULTY[d].bn, DIFFICULTY[d].en)}
+            </button>
+          ))}
+          <span className="ml-auto flex flex-wrap items-center gap-2">
+            {avgBst ? <span>{t("গড় শক্তি", "Avg strength")} <b className="text-fg">{avgBst}</b></span> : null}
+            <button type="button" onClick={random} className="pressable inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-4 py-2 text-sm text-fg">
+              <Shuffle className="size-4" aria-hidden="true" /> {t("র‍্যান্ডম টিম", "Random team")}
+            </button>
+            <button type="button" disabled={!picks.length} onClick={onStart} className="pressable inline-flex items-center gap-1.5 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-accent-fg disabled:opacity-40">
+              <Swords className="size-4" aria-hidden="true" /> {t("লড়াই শুরু", "Start battle")}
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <div className="pk-card p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative min-w-48 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("নাম খুঁজুন…", "Search by name…")} aria-label={t("নাম খুঁজুন", "Search by name")} className="h-10 w-full rounded-lg border border-border bg-bg pl-9 pr-3 font-sans text-sm text-fg" />
+          </label>
+          <select value={type} onChange={(e) => setType(e.target.value)} aria-label={t("টাইপ", "Type")} className="h-10 rounded-lg border border-border bg-bg px-3 font-sans text-sm text-fg">
+            <option value="">{t("সব টাইপ", "All types")}</option>
+            {TYPES.map((x) => (
+              <option key={x} value={x}>{x}</option>
+            ))}
+          </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label={t("সাজান", "Sort")} className="h-10 rounded-lg border border-border bg-bg px-3 font-sans text-sm text-fg">
+            <option value="bst">{t("শক্তি (বেশি আগে)", "Strongest first")}</option>
+            <option value="spe">{t("গতি (বেশি আগে)", "Fastest first")}</option>
+            <option value="name">{t("নাম (A–Z)", "Name (A–Z)")}</option>
+          </select>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {FORM_FILTERS.map((f) => (
+            <button key={f.v} type="button" onClick={() => setForm(f.v)} className={`pressable rounded-full border px-3 py-1 font-sans text-sm ${form === f.v ? "border-lamp bg-surface-2 text-fg" : "border-border bg-bg text-muted"}`}>
+              {t(f.bn, f.en)}
+            </button>
+          ))}
+          <span className="ml-auto self-center font-sans text-xs text-muted">{list.length} {t("টি পোকেমন", "Pokémon")}</span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+          {list.slice(0, limit).map((s) => (
+            <button key={s[0]} type="button" onClick={() => add(s)} data-taken={taken.has(s[0]) ? "1" : "0"} className="pk-dexcard font-sans" title={`${s[1]} — ${s[3].join("/")}`}>
+              <Sprite info={rowSprite(s)} still className="size-16 object-contain" alt="" />
+              <span className="line-clamp-2 min-h-8 text-[12px] font-semibold leading-tight text-fg">{s[1]}</span>
+              <span className="flex flex-wrap justify-center gap-0.5">{s[2].map((x) => <TypeBadge key={x} type={x} small />)}</span>
+              <span className="text-[11px] text-muted">{FORM_LABEL[s[6]][lang === "en" ? "en" : "bn"]} · {bst(s)}</span>
+            </button>
+          ))}
+        </div>
+        {list.length === 0 ? <p className="mt-6 text-center font-sans text-sm text-muted">{t("কিছু পাওয়া যায়নি — অন্য ফিল্টার চেষ্টা করুন।", "Nothing matches — try another filter.")}</p> : null}
+        {limit < list.length ? (
+          <div className="mt-4 text-center">
+            <button type="button" onClick={() => setLimit((n) => n + 60)} className="pressable rounded-full border border-border bg-surface px-5 py-2 font-sans text-sm text-fg">
+              {t("আরও দেখান", "Show more")} ({list.length - limit})
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function SlotCard({ data, sp, item, onItem, onRemove }: { data: PetownData; sp: SpeciesRow; item: string; onItem: (v: string) => void; onRemove: () => void }) {
+  const { t, lang } = useT();
+  const sim = SIMULATED_ABILITIES[sp[4]];
+  const opts = useMemo(() => itemsFor(data, sp).sort((a, b) => a[0].localeCompare(b[0])), [data, sp]);
+  const chosen = opts.find((o) => o[0] === item);
+  return (
+    <div className="pk-card relative flex flex-col gap-2 p-3 pk-pop">
+      <button type="button" onClick={onRemove} aria-label={t("সরান", "Remove")} className="pressable absolute right-2 top-2 grid size-7 place-items-center rounded-full border border-border bg-bg text-muted hover:text-fg">
+        <X className="size-4" aria-hidden="true" />
+      </button>
+      <div className="flex items-center gap-3">
+        <Sprite info={rowSprite(sp)} still className="size-20 object-contain" alt="" />
+        <div className="min-w-0 pr-6">
+          <b className="block truncate font-display text-lg">{sp[1]}</b>
+          <span className="flex flex-wrap gap-1">{sp[2].map((x) => <TypeBadge key={x} type={x} small />)}</span>
+          <span className="font-sans text-[11px] text-muted">{FORM_LABEL[sp[6]][lang === "en" ? "en" : "bn"]} · {bst(sp)}</span>
+        </div>
+      </div>
+      <StatBars bs={sp[3]} />
+      <p className="font-sans text-xs text-muted" title={data.abilities[sp[4]] ?? ""}>
+        <b className="text-fg">{sp[4] || "—"}</b>{" "}
+        {sim ? <span className="text-lamp">✓ {t(sim.bn, sim.en)}</span> : <span>({t("শুধু দেখানোর জন্য", "display only")})</span>}
+      </p>
+      <ul className="grid grid-cols-2 gap-1 font-sans text-[11px]">
+        {sp[5].map((i) => {
+          const m = data.moves[i];
+          return (
+            <li key={i} className="flex items-center gap-1 rounded-md border border-border bg-bg px-1.5 py-1">
+              <i className="size-2 shrink-0 rounded-full" style={{ background: TYPE_COLOR[m[1]] ?? "#999" }} />
+              <span className="truncate text-fg">{m[0]}</span>
+              <span className="ml-auto text-muted">{m[3]}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <label className="font-sans text-xs text-muted">
+        {t("হোল্ড আইটেম", "Hold item")}
+        <select value={item} onChange={(e) => onItem(e.target.value)} className="mt-1 h-9 w-full rounded-lg border border-border bg-bg px-2 text-sm text-fg">
+          <option value="">{t("কিছু নয়", "None")}</option>
+          {opts.map((o: ItemRow) => (
+            <option key={o[0]} value={o[0]}>{o[0]}</option>
+          ))}
+        </select>
+      </label>
+      {chosen ? <p className="font-sans text-[11px] leading-snug text-muted">{chosen[5]}</p> : null}
+    </div>
+  );
+}
+
+/* ======================================================================== battle screen */
+
+type Fx = { id: number; side: 0 | 1; text: string; cls: string };
+type Banner = { id: number; text: string; cls: string };
+
+function BattleScreen({ data, player, foe, difficulty, onRematch, onExit }: { data: PetownData; player: Mon[]; foe: Mon[]; difficulty: Difficulty; onRematch: () => void; onExit: () => void }) {
+  const { t } = useT();
+  const bref = useRef<Battle | null>(null);
+  if (!bref.current) bref.current = newBattle(player, foe, difficulty);
+  const b = bref.current;
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [log, setLog] = useState<{ id: number; text: string; cls?: string }[]>([]);
+  const [fx, setFx] = useState<Fx[]>([]);
+  const [banner, setBanner] = useState<Banner | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [auto, setAuto] = useState(false);
+  const [speed, setSpeed] = useState<1 | 2>(1);
+  const [intro, setIntro] = useState(true);
+  const [done, setDone] = useState(false);
+  const pausedRef = useRef(false);
+  const autoRef = useRef(false);
+  const speedRef = useRef(1);
+  const meRef = useRef<HTMLDivElement | null>(null);
+  const foeRef = useRef<HTMLDivElement | null>(null);
+  const recorded = useRef(false);
+  const theme = useMemo(() => Math.floor(Math.random() * 4), []);
+
+  useEffect(() => { pausedRef.current = paused || intro; }, [paused, intro]);
+  useEffect(() => { autoRef.current = auto; }, [auto]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+
+  const say = useCallback(
+    (text: string, cls?: string, id?: number) => setLog((l) => [...l.slice(-60), { id: id ?? Math.random(), text, cls }]),
+    [],
+  );
+
+  const handle = useCallback(
+    (evs: Ev[]) => {
+      for (const e of evs) {
+        const el = (s: 0 | 1) => (s === 0 ? meRef.current : foeRef.current);
+        if (e.k === "send") say(`${e.side === 0 ? t("আপনি পাঠালেন", "You sent out") : t("CPU পাঠাল", "CPU sent out")} ${e.mon}!`, undefined, e.id);
+        else if (e.k === "use") {
+          say(`${e.mon} → ${e.move}`, undefined, e.id);
+          el(e.side)?.animate(
+            [{ transform: "translate(0,0)" }, { transform: e.side === 0 ? "translate(22%,-14%) scale(1.06)" : "translate(-22%,12%) scale(1.06)", offset: 0.35 }, { transform: "translate(0,0)" }],
+            { duration: 380, easing: "ease-out" },
+          );
+        } else if (e.k === "dmg") {
+          const cls = e.crit ? "crit" : e.mult > 1 ? "se" : e.mult < 1 ? "nve" : "";
+          el(e.side)?.animate([{ transform: "translateX(0)", filter: "brightness(1)" }, { transform: "translateX(-5%)", filter: "brightness(2.2)", offset: 0.25 }, { transform: "translateX(4%)", offset: 0.5 }, { transform: "translateX(0)", filter: "brightness(1)" }], { duration: 340 });
+          setFx((f) => [...f, { id: e.id, side: e.side, text: `-${e.amount}`, cls: "" }]);
+          window.setTimeout(() => setFx((f) => f.filter((x) => x.id !== e.id)), 1200);
+          if (cls) {
+            const text = e.crit ? t("ক্রিটিক্যাল!", "CRITICAL!") : e.mult > 1 ? t("খুব কার্যকর!", "SUPER EFFECTIVE!") : t("কম কার্যকর", "Not very effective");
+            setBanner({ id: e.id, text, cls });
+            window.setTimeout(() => setBanner((x) => (x && x.id === e.id ? null : x)), 1000);
+            say(text, undefined, e.id + 0.1);
+          }
+        } else if (e.k === "miss") say(`${e.move} ${t("লক্ষ্যভ্রষ্ট হল!", "missed!")}`, undefined, e.id);
+        else if (e.k === "immune") say(`${e.mon} ${t("অক্ষত!", "is unaffected!")}`, undefined, e.id);
+        else if (e.k === "heal") {
+          setFx((f) => [...f, { id: e.id, side: e.side, text: `+${e.amount}`, cls: "heal" }]);
+          window.setTimeout(() => setFx((f) => f.filter((x) => x.id !== e.id)), 1200);
+        } else if (e.k === "ability") {
+          const msg: Record<string, [string, string]> = {
+            intimidate: ["ভয় দেখিয়ে প্রতিপক্ষের অ্যাটাক কমাল!", "lowered the foe's Attack!"],
+            sturdy: ["টিকে গেল!", "hung on!"],
+            moxie: ["অ্যাটাক বাড়ল!", "Attack rose!"],
+            absorb: ["শুষে নিয়ে HP ফিরে পেল!", "absorbed it and healed!"],
+            boost: ["শক্তি বাড়ল!", "powered up!"],
+          };
+          const m = msg[e.what];
+          say(`${e.mon}'s ${e.ability}: ${t(m[0], m[1])}`, undefined, e.id);
+        } else if (e.k === "faint") say(`${e.mon} ${t("জ্ঞান হারাল!", "fainted!")}`, "faint", e.id);
+        else if (e.k === "end") {
+          say(e.winner === 0 ? t("🏆 আপনি জিতেছেন!", "🏆 You win!") : t("💀 CPU জিতেছে।", "💀 The CPU wins."), "win", e.id);
+          window.setTimeout(() => setDone(true), 1300);
+        }
+      }
+    },
+    [say, t],
+  );
+
+  // first send-out
+  useEffect(() => {
+    handle(startBattle(b));
+    bump();
+    const id = window.setTimeout(() => setIntro(false), 1800);
+    return () => window.clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // the loop
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (pausedRef.current || b.winner !== -1) return;
+      const evs = tick(b, 0.08 * speedRef.current, autoRef.current);
+      if (evs.length) handle(evs);
+      bump();
+    }, 80);
+    return () => window.clearInterval(id);
+  }, [b, handle]);
+
+  // record the result once
+  useEffect(() => {
+    if (!done || recorded.current) return;
+    recorded.current = true;
+    const r = loadRecord();
+    if (b.winner === 0) r.w += 1;
+    else r.l += 1;
+    saveRecord(r);
+  }, [done, b]);
+
+  const doMove = useCallback((i: number) => {
+    if (pausedRef.current) return;
+    const evs = playerMove(b, i);
+    if (evs.length) { handle(evs); bump(); }
+  }, [b, handle]);
+  const swap = useCallback((i: number) => {
+    if (pausedRef.current) return;
+    const evs = playerSwitch(b, i);
+    if (evs.length) { handle(evs); bump(); }
+  }, [b, handle]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      if (e.key >= "1" && e.key <= "4") doMove(Number(e.key) - 1);
+      else if (e.key === " ") { e.preventDefault(); setPaused((p) => !p); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [doMove]);
+
+  const me = activeOf(b, 0);
+  const op = activeOf(b, 1);
+  const mySide = b.sides[0];
+  const ready = mySide.gauge >= 100 && mySide.lock <= 0 && !me.fainted && b.winner === -1;
+  const forced = me.fainted && alive(mySide) > 0 && b.winner === -1;
+  const logRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log.length]);
+  const rate = b.winner === 0 ? rating(b) : null;
+
+  return (
+    <section className="mx-auto max-w-5xl space-y-4 px-5 pb-24 pt-6 sm:px-8">
+      <div className="pk-scene" data-weather="" data-theme={theme} data-night={theme === 2 ? "1" : "0"}>
+        <div className="pk-camera">
+          <div className="pk-sky"><div className="pk-rays" /></div>
+          <div className="pk-hills" />
+          <div className="pk-floor" />
+          <div className="pk-platform foe" />
+          <div className="pk-platform me" />
+          <MonView mon={op} side="foe" anim={foeRef} />
+          <MonView mon={me} side="me" anim={meRef} back />
+          {fx.map((f) => (
+            <div key={f.id} className={`pk-float-num ${f.cls}`} style={{ left: f.side === 0 ? "27%" : "72%", top: f.side === 0 ? "56%" : "28%" }}>{f.text}</div>
+          ))}
+          {banner ? <div key={banner.id} className={`pk-banner ${banner.cls}`}>{banner.text}</div> : null}
+        </div>
+        <HpBox mon={op} gauge={b.sides[1].gauge} side="foe" />
+        <HpBox mon={me} gauge={mySide.gauge} side="me" />
+        <div className="pk-field">
+          <span>{t("সময়", "Time")} {Math.floor(b.time)}s</span>
+          <span>{t("CPU", "CPU")}: {t(DIFFICULTY[difficulty].bn, DIFFICULTY[difficulty].en)}</span>
+          {paused ? <span>⏸ {t("বিরতি", "Paused")}</span> : null}
+        </div>
+
+        {intro ? (
+          <div className="pk-vs" onClick={() => setIntro(false)} role="presentation">
+            <div className="pk-vs-row">
+              <div className="pk-vs-card">
+                <Sprite info={spriteOf(me)} back className="size-24 object-contain sm:size-36" alt="" />
+                <span>{t("আপনি", "You")}</span>
+              </div>
+              <div className="pk-vs-mid">VS</div>
+              <div className="pk-vs-card r">
+                <Sprite info={spriteOf(op)} className="size-24 object-contain sm:size-36" alt="" />
+                <span>CPU</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {done ? (
+          <div className={`pk-result ${b.winner === 0 ? "win" : "lose"}`}>
+            <div className="pk-result-inner">
+              <div className={b.winner === 0 ? "pk-trophy" : "pk-skull"} aria-hidden="true">{b.winner === 0 ? "🏆" : "💀"}</div>
+              <h2 className={`pk-big ${b.winner === 0 ? "win" : "lose"}`}>{b.winner === 0 ? t("জয়!", "VICTORY!") : t("হার!", "DEFEAT")}</h2>
+              <p className="mt-3 font-sans text-sm text-white/85">
+                {t("সময়", "Time")} {Math.floor(b.time)}s · {t("হিট", "Hits")} {b.stats.hits} · {t("ক্রিট", "Crits")} {b.stats.crits} · {t("সর্বোচ্চ আঘাত", "Biggest hit")} {b.stats.maxHit}
+              </p>
+              {rate?.flawless ? <p className="mt-2 font-display text-xl text-[#ffcb05]">👑 {t("ফ্ললেস ভিক্টরি — একজনও হারেনি!", "Flawless — nobody fainted!")}</p> : rate ? <p className="mt-2 font-sans text-sm text-white/85">{rate.survivors} {t("জন টিকে আছে", "survived")}</p> : null}
+              <div className="mt-5 flex flex-wrap justify-center gap-2 font-sans text-sm">
+                <button type="button" onClick={onRematch} className="pressable rounded-full bg-accent px-4 py-2 text-accent-fg">⚔️ {t("আবার লড়ুন", "Rematch")}</button>
+                <button type="button" onClick={onExit} className="pressable rounded-full border border-white/40 px-4 py-2 text-white">{t("টিম বদলান", "Change team")}</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="pk-dock">
+        <div className="flex flex-wrap items-center gap-2 font-sans text-xs">
+          <span className={`pk-ribbon ${ready ? "" : "opacity-60"}`} style={ready ? undefined : { animation: "none" }}>
+            {forced ? t(`পরের পোকেমন বাছুন (${Math.max(0, Math.ceil(mySide.pendingSwitch))}s)`, `Choose your next Pokémon (${Math.max(0, Math.ceil(mySide.pendingSwitch))}s)`) : ready ? t("চাল দিন!", "Strike now!") : t("চার্জ হচ্ছে…", "Charging…")}
+          </span>
+          <span className="ml-auto flex flex-wrap gap-1.5">
+            <button type="button" className="pk-gbtn" data-on={auto ? "1" : "0"} onClick={() => setAuto((a) => !a)}>
+              <Bot className="mr-1 inline size-3.5" aria-hidden="true" />{t("অটো", "Auto")}
+            </button>
+            <button type="button" className="pk-gbtn" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
+              {paused ? <Play className="mr-1 inline size-3.5" aria-hidden="true" /> : <Pause className="mr-1 inline size-3.5" aria-hidden="true" />}
+              {paused ? t("চালু", "Resume") : t("বিরতি", "Pause")}
+            </button>
+            <button type="button" className="pk-gbtn" onClick={() => setSpeed((s) => (s === 1 ? 2 : 1))}>{speed}×</button>
+            <button type="button" className="pk-gbtn" onClick={onExit}><Flag className="mr-1 inline size-3.5" aria-hidden="true" />{t("হার মানুন", "Forfeit")}</button>
+          </span>
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {me.moves.map((m, i) => {
+            const r = damageRange(me, op, m);
+            const dead = me.fainted || m.pp <= 0;
+            const pctLo = Math.min(100, Math.round((r.min / op.maxHp) * 100));
+            const pctHi = Math.min(100, Math.round((r.max / op.maxHp) * 100));
+            return (
+              <button key={m.name} type="button" disabled={!ready || dead} onClick={() => doMove(i)} className="pk-move w-full" style={{ ["--c" as string]: TYPE_COLOR[m.type] ?? "#68a090" }}>
+                <b className="flex items-center justify-between gap-2"><span className="truncate">{m.name}</span><span className="pk-kbd">{i + 1}</span></b>
+                <small>
+                  <TypeBadge type={m.type} small />
+                  <span>{m.cat === 0 ? "⚔️" : "✴️"} {m.power}</span>
+                  <span>PP {m.pp}/{m.max}</span>
+                  {r.immune ? <span className="tag imm">×0</span> : r.mult > 1 ? <span className="tag se">×{r.mult}</span> : r.mult < 1 ? <span className="tag nve">×{r.mult}</span> : null}
+                </small>
+                <small>{r.immune ? (r.absorbs ? t("শুষে নেবে", "absorbed") : t("কাজ করবে না", "no effect")) : `≈ ${pctLo}–${pctHi}% ${t("HP", "HP")}`}</small>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {mySide.mons.map((m, i) => {
+            const pct = Math.round((m.hp / m.maxHp) * 100);
+            const active = i === mySide.active && !m.fainted;
+            return (
+              <button key={m.uid} type="button" disabled={m.fainted || active || b.winner !== -1} onClick={() => swap(i)} className={`pressable flex items-center gap-2 rounded-xl border px-2 py-1.5 text-left font-sans text-xs ${active ? "border-lamp bg-surface-2" : "border-border bg-bg"} disabled:opacity-60`}>
+                <Sprite info={spriteOf(m)} still className="size-9 shrink-0 object-contain" alt="" />
+                <span className="min-w-0 flex-1">
+                  <b className="block truncate text-fg">{m.name}</b>
+                  <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-surface-2">
+                    <i className="block h-full rounded-full" style={{ width: `${pct}%`, background: pct > 50 ? "#4cd964" : pct > 20 ? "#ffcc00" : "#ff3b30" }} />
+                  </span>
+                </span>
+                <span className="text-[11px] text-muted">{m.fainted ? "✕" : active ? t("মাঠে", "In") : t("বদলান", "Swap")}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-sans text-[11px] text-muted">
+          <span>⌨ 1–4 {t("চাল", "moves")} · {t("স্পেস = বিরতি", "Space = pause")}</span>
+          {me.item ? <span>🎒 {me.item[0]}</span> : null}
+          {me.ability ? <span title={data.abilities[me.ability] ?? ""}>✦ {me.ability}{SIMULATED_ABILITIES[me.ability] ? " ✓" : ""}</span> : null}
+        </div>
+      </div>
+
+      <div ref={logRef} className="pk-log" aria-live="polite">
+        {log.map((l) => (
+          <p key={l.id} className={l.cls}>{l.text}</p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MonView({ mon, side, anim, back }: { mon: Mon; side: "me" | "foe"; anim: React.RefObject<HTMLDivElement | null>; back?: boolean }) {
+  return (
+    <div className={`pk-mon ${side}`} data-fainted={mon.fainted ? "1" : "0"} data-mega={mon.form === 1 || mon.form === 3 ? "1" : "0"}>
+      <i className="pk-shadow" />
+      <div ref={anim} className="pk-anim">
+        <div className="pk-mon-inner"><Sprite key={mon.uid} info={spriteOf(mon)} back={back} alt={mon.name} /></div>
+      </div>
+    </div>
+  );
+}
+
+function HpBox({ mon, gauge, side }: { mon: Mon; gauge: number; side: "me" | "foe" }) {
+  const { lang } = useT();
+  const pct = Math.max(0, Math.round((mon.hp / mon.maxHp) * 100));
+  const lvl = pct <= 20 ? "low" : pct <= 50 ? "mid" : "hi";
+  return (
+    <div className={`pk-hp ${side}`}>
+      <div className="pk-hp-row">
+        <span className="pk-hp-name">{mon.name}</span>
+        <span style={{ opacity: 0.7 }}>Lv50</span>
+        {mon.form > 0 ? <span className="pk-stat par" style={{ background: "#8338ec" }}>{FORM_LABEL[mon.form][lang === "en" ? "en" : "bn"]}</span> : null}
+        {mon.atkStage !== 0 ? <span className={`pk-chip ${mon.atkStage > 0 ? "up" : "down"}`}>Atk {mon.atkStage > 0 ? "+" : ""}{mon.atkStage}</span> : null}
+      </div>
+      <div className="pk-bar"><i data-lvl={lvl} style={{ ["--w" as string]: `${pct}%` }} /></div>
+      <div className="pk-hp-row" style={{ justifyContent: "space-between", marginTop: 2, fontSize: 11, opacity: 0.9 }}>
+        <span>{mon.hp}/{mon.maxHp}</span>
+      </div>
+      <div className="pk-pt-gauge" aria-hidden="true"><i data-ready={gauge >= 100 ? "1" : "0"} style={{ width: `${Math.min(100, gauge)}%` }} /></div>
+    </div>
+  );
+}

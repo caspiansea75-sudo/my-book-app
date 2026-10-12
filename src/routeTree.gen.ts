@@ -27,6 +27,7 @@ import { Route as MangaSeriesSlugRouteImport } from './routes/manga.$seriesSlug'
 import { Route as PokemonIndexRouteImport } from './routes/pokemon.index'
 import { Route as PokemonBoardRouteImport } from './routes/pokemon.board'
 import { Route as PokemonDexRouteImport } from './routes/pokemon.dex'
+import { Route as PokemonPetownRouteImport } from './routes/pokemon.petown'
 import { Route as PokemonTeamRouteImport } from './routes/pokemon.team'
 import { Route as StudioIndexRouteImport } from './routes/studio.index'
 import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
@@ -132,6 +133,11 @@ const PokemonDexRoute = PokemonDexRouteImport.update({
   path: '/dex',
   getParentRoute: () => PokemonRoute,
 } as any)
+const PokemonPetownRoute = PokemonPetownRouteImport.update({
+  id: '/petown',
+  path: '/petown',
+  getParentRoute: () => PokemonRoute,
+} as any)
 const PokemonTeamRoute = PokemonTeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
   '/pokemon/board': typeof PokemonBoardRoute
   '/pokemon/dex': typeof PokemonDexRoute
+  '/pokemon/petown': typeof PokemonPetownRoute
   '/pokemon/team': typeof PokemonTeamRoute
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
   '/u/$username': typeof UUsernameRoute
@@ -253,6 +260,7 @@ export interface FileRoutesByTo {
   '/book/$bookSlug': typeof BookBookSlugRoute
   '/pokemon/board': typeof PokemonBoardRoute
   '/pokemon/dex': typeof PokemonDexRoute
+  '/pokemon/petown': typeof PokemonPetownRoute
   '/pokemon/team': typeof PokemonTeamRoute
   '/u/$username': typeof UUsernameRoute
   '/manga': typeof MangaIndexRoute
@@ -286,6 +294,7 @@ export interface FileRoutesById {
   '/manga/$seriesSlug': typeof MangaSeriesSlugRouteWithChildren
   '/pokemon/board': typeof PokemonBoardRoute
   '/pokemon/dex': typeof PokemonDexRoute
+  '/pokemon/petown': typeof PokemonPetownRoute
   '/pokemon/team': typeof PokemonTeamRoute
   '/studio/$bookSlug': typeof StudioBookSlugRouteWithChildren
   '/u/$username': typeof UUsernameRoute
@@ -322,6 +331,7 @@ export interface FileRouteTypes {
     | '/manga/$seriesSlug'
     | '/pokemon/board'
     | '/pokemon/dex'
+    | '/pokemon/petown'
     | '/pokemon/team'
     | '/studio/$bookSlug'
     | '/u/$username'
@@ -352,6 +362,7 @@ export interface FileRouteTypes {
     | '/book/$bookSlug'
     | '/pokemon/board'
     | '/pokemon/dex'
+    | '/pokemon/petown'
     | '/pokemon/team'
     | '/u/$username'
     | '/manga'
@@ -384,6 +395,7 @@ export interface FileRouteTypes {
     | '/manga/$seriesSlug'
     | '/pokemon/board'
     | '/pokemon/dex'
+    | '/pokemon/petown'
     | '/pokemon/team'
     | '/studio/$bookSlug'
     | '/u/$username'
@@ -550,6 +562,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PokemonDexRouteImport
       parentRoute: typeof PokemonRoute
     }
+    '/pokemon/petown': {
+      id: '/pokemon/petown'
+      path: '/petown'
+      fullPath: '/pokemon/petown'
+      preLoaderRoute: typeof PokemonPetownRouteImport
+      parentRoute: typeof PokemonRoute
+    }
     '/pokemon/team': {
       id: '/pokemon/team'
       path: '/team'
@@ -696,6 +715,7 @@ const MangaRouteWithChildren = MangaRoute._addFileChildren(MangaRouteChildren)
 interface PokemonRouteChildren {
   PokemonBoardRoute: typeof PokemonBoardRoute
   PokemonDexRoute: typeof PokemonDexRoute
+  PokemonPetownRoute: typeof PokemonPetownRoute
   PokemonTeamRoute: typeof PokemonTeamRoute
   PokemonIndexRoute: typeof PokemonIndexRoute
   PokemonBattleIdRoute: typeof PokemonBattleIdRoute
@@ -704,6 +724,7 @@ interface PokemonRouteChildren {
 const PokemonRouteChildren: PokemonRouteChildren = {
   PokemonBoardRoute: PokemonBoardRoute,
   PokemonDexRoute: PokemonDexRoute,
+  PokemonPetownRoute: PokemonPetownRoute,
   PokemonTeamRoute: PokemonTeamRoute,
   PokemonIndexRoute: PokemonIndexRoute,
   PokemonBattleIdRoute: PokemonBattleIdRoute,
