@@ -49,22 +49,32 @@ for (const it of itemsRaw) {
 const items = [...best.values()].map((e) => [e.name, e.kind === "power" ? 0 : 1, e.type, e.stat ?? "", +e.v.toFixed(2), e.desc]);
 
 /* ---- species ---- */
-const spriteCache = new Map();
-function resolveSprite(name) {
+const ALIAS = { sword: "Zacian", shield: "Zamazenta", combatpikachu: "Pikachu", "zygarde": "Zygarde" };
+const hashStr = (str) => { let h = 7; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+const dexGet = (n) => { const s = Dex.species.get(n); return s.exists ? s : null; };
+/** Real species whose sprite best matches a Petown form. hue > 0 means "a lookalike, tint it so it reads as its own form". */
+function resolveSprite(name, model) {
   const base = name.replace(/\s+R2$/, "").replace(/^Ultimate\s+/, "");
   const tries = [base];
   const words = base.split(" ");
-  if (words[0] === "Mega") {
-    for (let i = 1; i < words.length; i++) tries.push(`Mega ${words.slice(i).join(" ")}`);
-  }
+  if (words[0] === "Mega") for (let i = 1; i < words.length; i++) tries.push(`Mega ${words.slice(i).join(" ")}`);
   for (let i = 1; i < words.length; i++) tries.push(words.slice(i).join(" "));
-  for (const t of tries) {
-    const s = Dex.species.get(t);
-    if (s.exists) return { id: s.spriteid, num: s.num, exact: t === base };
+  for (const t of tries) { const s = dexGet(t); if (s) return { id: s.spriteid, num: s.num, hue: 0 }; }
+  // fall back to the model name: PM_Monster_<Base>_<Mega1|Mega2|Mega3>_<Line_N|Theme>
+  const parts = String(model || "").replace(/^PM_Monster_/, "").split("_");
+  const rawBase = parts[0] ?? "";
+  const baseName = ALIAS[rawBase.toLowerCase()] ?? rawBase;
+  const cand = [];
+  if (parts.some((p) => /^Mega[12]$/.test(p))) cand.push(`${baseName}-Mega`, `${baseName}-Mega-X`);
+  cand.push(baseName, baseName.replace(/-.*$/, ""));
+  for (const c of cand) {
+    const s = dexGet(c);
+    if (s) return { id: s.spriteid, num: s.num, hue: 30 + (hashStr(parts.slice(1).join("_") || name) % 300) };
   }
   return null;
 }
 const abilityDesc = new Map(abilitiesRaw.map((a) => [a.name, a.description]));
+const spriteCache = new Map();
 const outSpecies = [];
 let noSprite = 0;
 for (const s of species) {
@@ -82,11 +92,12 @@ for (const s of species) {
   for (const i of pool) { if (set.length >= 4) break; if (!set.includes(i)) set.push(i); }
   if (!set.some((i) => types.includes(moves[i][1])) && pool.length) set[set.length - 1] = pool[0];
   if (set.length < 2) continue;
-  if (!spriteCache.has(s.name)) spriteCache.set(s.name, resolveSprite(s.name));
-  const sp = spriteCache.get(s.name);
+  const key = s.name + "|" + s.model;
+  if (!spriteCache.has(key)) spriteCache.set(key, resolveSprite(s.name, s.model));
+  const sp = spriteCache.get(key);
   if (!sp) noSprite++;
   const form = s.is_ultimate ? 3 : s.is_r2 ? 2 : s.is_mega ? 1 : 0;
-  outSpecies.push([s.id, s.name, types, v, s.ability?.name ?? "", set, form, sp ? sp.id : "", sp ? sp.num : 0]);
+  outSpecies.push([s.id, s.name, types, v, s.ability?.name ?? "", set, form, sp ? sp.id : "", sp ? sp.num : 0, sp ? sp.hue : 0]);
 }
 const usedAb = new Set(outSpecies.map((x) => x[4]).filter(Boolean));
 const abilities = {};

@@ -4,6 +4,7 @@ import { ArrowLeft, FastForward } from "lucide-react";
 import { ActionPanel, BattleLog, BattleScene, ResultOverlay, Roster, VsIntro, type LogLine } from "@/components/pokemon/arena";
 import { Sprite, useInterval, useT } from "@/components/pokemon/ui";
 import { Avatar } from "@/components/members/avatar";
+import { MusicPanel } from "@/components/pokemon/music-panel";
 import {
   claimTimeout,
   createBattle,
@@ -14,7 +15,9 @@ import {
   type BattleReply,
   type BattleView,
 } from "@/lib/pokemon-api";
-import { applyLine, initialState, replayAll, unknownMoves, type BState, type Cue } from "@/lib/pokemon/protocol";
+import { battleAudio } from "@/lib/pokemon/audio";
+import { applyLine, hpPercent, initialState, replayAll, unknownMoves, type BState, type Cue } from "@/lib/pokemon/protocol";
+import { pickAutoTrack } from "@/lib/pokemon/tracks";
 import { ARENAS, arenaForBattle, formatByGen, guessSpriteId, type MoveInfo } from "@/lib/pokemon/shared";
 
 export const Route = createFileRoute("/pokemon/battle/$id")({
@@ -105,7 +108,20 @@ function Arena({ initial }: { initial: BattleView }) {
         setBstate(step.state);
         pushLog(step.say);
         const fast = !item.animate || speedRef.current === 0;
-        if (!fast && step.cue) setCue(step.cue);
+        if (!fast && step.cue) {
+          setCue(step.cue);
+          battleAudio.cue(step.cue, step.state, metaRef.current.you);
+        }
+        if (item.animate) {
+          const sd = metaRef.current.you ?? "p1";
+          const mon = step.state.sides[sd].active;
+          battleAudio.lowHp(!!mon && !mon.fainted && !step.state.ended && hpPercent(mon) <= 20);
+          if (step.cue?.kind === "win") {
+            const you = metaRef.current.you;
+            const winnerSide = step.state.sides.p1.name === step.cue.text ? "p1" : step.state.sides.p2.name === step.cue.text ? "p2" : null;
+            battleAudio.finish(!winnerSide ? "draw" : !you || winnerSide === you ? "win" : "lose");
+          }
+        }
         if (!fast && step.wait) await sleep(step.wait / speedRef.current);
       }
     } finally {
@@ -142,6 +158,21 @@ function Arena({ initial }: { initial: BattleView }) {
 
   // First load: a finished battle (or a brand-new one) is played from the start, after a short VS splash;
   // one already in progress jumps straight to now.
+  // Music: pick the theme, start on the first tap or key press, and let go of the sound device when leaving.
+  useEffect(() => {
+    if (initial.status === "invited") return;
+    battleAudio.setAuto(pickAutoTrack({ id: initial.id, cpu: initial.cpu, cpuLevel: initial.cpuLevel }));
+    const go = () => void battleAudio.unlock();
+    go();
+    window.addEventListener("pointerdown", go, { once: true });
+    window.addEventListener("keydown", go, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", go);
+      window.removeEventListener("keydown", go);
+      battleAudio.stopAll();
+    };
+  }, [initial.id, initial.status, initial.cpu, initial.cpuLevel]);
+
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
@@ -191,6 +222,7 @@ function Arena({ initial }: { initial: BattleView }) {
   const onReplay = async () => {
     if (running.current) return;
     setShowResult(false);
+    battleAudio.restart();
     stateRef.current = initialState();
     setBstate(stateRef.current);
     setLog([]);
@@ -248,6 +280,7 @@ function Arena({ initial }: { initial: BattleView }) {
         <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs text-muted">{t(fmt.bn, fmt.en)} · {t("টার্ন", "Turn")} {Math.max(bstate.turn, 0)}</span>
         {meta.status === "done" ? <span className="rounded-full bg-lamp/20 px-2.5 py-0.5 text-xs text-lamp">{t("শেষ", "Finished")}</span> : null}
         <span className="ml-auto flex flex-wrap items-center gap-1.5 text-xs text-muted">
+          <MusicPanel />
           <label className="flex items-center gap-1">
             🎨
             <select value={arena} onChange={(e) => pickArena(e.target.value)} className="rounded-full border border-border bg-bg px-2 py-0.5 text-fg" aria-label={t("আরেনা", "Arena")}>

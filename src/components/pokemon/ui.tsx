@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Swords } from "lucide-react";
 import { FxAurora } from "@/components/media/fx";
@@ -72,6 +72,7 @@ export function Sprite({
   still,
   className,
   alt = "",
+  style,
 }: {
   info: SpriteInfo | null | undefined;
   back?: boolean;
@@ -79,6 +80,7 @@ export function Sprite({
   still?: boolean;
   className?: string;
   alt?: string;
+  style?: CSSProperties;
 }) {
   const chain = useMemo(() => spriteChain(info, { back, shiny, still }), [info, back, shiny, still]);
   const key = chain.join("|");
@@ -86,12 +88,12 @@ export function Sprite({
   useEffect(() => setI(0), [key]);
   if (!chain.length || i >= chain.length) {
     return (
-      <span className={className} aria-hidden="true">
+      <span className={className} style={style} aria-hidden="true">
         <span className="pk-ball" style={{ width: "2em", height: "2em" }} />
       </span>
     );
   }
-  return <img src={chain[i]} alt={alt} loading="lazy" draggable={false} onError={() => setI((n) => n + 1)} className={className} />;
+  return <img src={chain[i]} alt={alt} loading="lazy" draggable={false} onError={() => setI((n) => n + 1)} className={className} style={style} />;
 }
 
 export function TypeBadge({ type, small }: { type: string; small?: boolean }) {
