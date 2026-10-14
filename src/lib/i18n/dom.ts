@@ -34,23 +34,21 @@ function runOf(node: Text): Text[] {
   return run;
 }
 
-function doSingle(node: Text) {
-  const rec = texts.get(node);
-  let orig = node.nodeValue ?? "";
-  if (rec && orig === rec.out) orig = rec.orig;
-  const out = translateText(orig);
-  if (out != null && out !== orig) {
-    texts.set(node, { orig, out });
-    if (node.nodeValue !== out) node.nodeValue = out;
-  } else texts.delete(node);
-}
-
-export function doText(node: Text) {
+/**
+ * Translates one text node together with the text nodes right next to it, and returns that group.
+ *
+ * Rule that keeps this from ever looping: work out what every node SHOULD say first, then write only the
+ * nodes whose text is actually different. A second pass over the same group therefore changes nothing, so
+ * the MutationObserver in lang-runtime never sees a change it has to answer.
+ */
+export function doText(node: Text): Text[] {
   const parent = node.parentElement;
-  if (!parent || parent.closest(SKIP)) return;
+  if (!parent || parent.closest(SKIP)) return [node];
   const run = runOf(node);
+  const origs = run.map(origOf);
+
+  // 1) The whole group is one phrase ("সব ছবি (" + "74" + ")"): English goes in the first node, the rest are emptied.
   if (run.length > 1) {
-    const origs = run.map(origOf);
     const joined = origs.join("");
     const out = translateText(joined);
     if (out != null && out !== joined) {
@@ -59,18 +57,20 @@ export function doText(node: Text) {
         texts.set(n, { orig: origs[i], out: val });
         if (n.nodeValue !== val) n.nodeValue = val;
       });
-      return;
+      return run;
     }
-    // no phrase for the whole group: undo an earlier merge, then go piece by piece
-    run.forEach((n, i) => {
-      const rec = texts.get(n);
-      if (rec && n.nodeValue === rec.out && rec.out !== origs[i]) n.nodeValue = origs[i];
-      texts.delete(n);
-    });
-    for (const n of run) doSingle(n);
-    return;
   }
-  doSingle(node);
+
+  // 2) No phrase for the group: every node on its own (this also undoes an earlier merge).
+  run.forEach((n, i) => {
+    const orig = origs[i];
+    const t = translateText(orig);
+    const target = t != null && t !== orig ? t : orig;
+    if (target !== orig) texts.set(n, { orig, out: target });
+    else texts.delete(n);
+    if (n.nodeValue !== target) n.nodeValue = target;
+  });
+  return run;
 }
 
 export function doAttr(el: Element, name: string) {
@@ -88,10 +88,17 @@ export function doAttr(el: Element, name: string) {
 }
 
 export function scan(root: Node) {
-  if (root.nodeType === Node.TEXT_NODE) return doText(root as Text);
+  if (root.nodeType === Node.TEXT_NODE) {
+    doText(root as Text);
+    return;
+  }
   if (root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.DOCUMENT_NODE) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) doText(n as Text);
+  const done = new Set<Text>();
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (done.has(n as Text)) continue;
+    for (const m of doText(n as Text)) done.add(m);
+  }
   const scope = root.nodeType === Node.DOCUMENT_NODE ? (root as Document).documentElement : (root as Element);
   const sel = ATTRS.map((a) => `[${a}]`).join(",");
   if (scope.matches?.(sel)) ATTRS.forEach((a) => scope.hasAttribute(a) && doAttr(scope, a));
