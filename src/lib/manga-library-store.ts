@@ -11,6 +11,10 @@ export type MangaLibData = {
   sort: LibSort;
   author: string | null;
   status: StatusFilter;
+  /** Leave out manga marked 18+. */
+  hideSensitive: boolean;
+  /** Blur the covers of manga marked 18+ until hovered. */
+  blurCovers: boolean;
   favs: string[];
   shelves: Record<string, Shelf>;
   lastReadAt: Record<string, number>;
@@ -26,6 +30,8 @@ export const MANGA_LIB_DEFAULTS: MangaLibData = {
   sort: "default",
   author: null,
   status: "all",
+  hideSensitive: false,
+  blurCovers: true,
   favs: [],
   shelves: {},
   lastReadAt: {},
@@ -74,6 +80,8 @@ export const useMangaLibraryStore = create<MangaLibState>()(
         sort: s.sort,
         author: s.author,
         status: s.status,
+        hideSensitive: s.hideSensitive,
+        blurCovers: s.blurCovers,
         favs: s.favs,
         shelves: s.shelves,
         lastReadAt: s.lastReadAt,

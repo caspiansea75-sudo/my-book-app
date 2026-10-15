@@ -22,6 +22,11 @@ export const FIXES_EXACT: Record<string, string> = {
   "ডাউনলোড": "Download",
   "সং": "Sens.",
 
+  // manga tab: sensitive-content controls
+  "সংবেদনশীল মাঙ্গা দেখান": "Show sensitive manga",
+  "সংবেদনশীল মাঙ্গা লুকান": "Hide sensitive manga",
+  "মাঙ্গা লুকান": "Hide manga",
+
   // storage page (admin)
   "ডেটাবেস ও ব্লব জায়গা": "Database & blob storage",
   "হিসাব হচ্ছে…": "Calculating…",

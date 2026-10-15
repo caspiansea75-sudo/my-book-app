@@ -39,6 +39,7 @@ export function MangaCard({
   onShelf,
   onMove,
   stats,
+  blur = false,
 }: {
   index?: number;
   stats?: ContentStats;
@@ -54,17 +55,22 @@ export function MangaCard({
   onFav: () => void;
   onShelf: (s: Shelf | null) => void;
   onMove: (dir: -1 | 1) => void;
+  /** Blur the cover of a manga marked 18+ (the library setting). */
+  blur?: boolean;
 }) {
   const me = useMe();
+  const blurred = blur && meta.sensitive;
   const vertical = view === "list";
   const resuming = meta.opened > 0 && resumeChapter != null;
   const cover = (aspect: string) => (
-    <CoverArt
-      title={series.title}
-      coverUrl={series.coverMediaId ? mediaSrc(series.coverMediaId) : null}
-      slug={series.slug}
-      className={aspect}
-    />
+    <div className={cn(blurred && "cover-blur")}>
+      <CoverArt
+        title={series.title}
+        coverUrl={series.coverMediaId ? mediaSrc(series.coverMediaId) : null}
+        slug={series.slug}
+        className={aspect}
+      />
+    </div>
   );
   const readLink = (cls: string, withIcon = true) =>
     resumeChapter ? (

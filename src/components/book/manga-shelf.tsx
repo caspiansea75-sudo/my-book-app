@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Grid3x3, LayoutGrid, List, Plus, Shuffle, SlidersHorizontal, Square } from "lucide-react";
+import { Grid3x3, LayoutGrid, List, Plus, Shuffle, Eye, EyeOff, SlidersHorizontal, Square } from "lucide-react";
 import { CoverArt } from "@/components/book/cover-art";
 import type { CardMeta } from "@/components/book/library-card";
 import { MangaCard } from "@/components/book/manga-card";
@@ -81,11 +81,14 @@ export function useMangaLibrary(manga: MangaSeriesCard[], terms: string[], mount
     [manga],
   );
 
+  const anySensitive = useMemo(() => manga.some((m) => m.adult ?? false), [manga]);
+
   const filtered = useMemo(() => {
     const list = manga
       .map((series, idx) => ({ series, idx }))
       .filter(({ series }) => {
         const m = metas.get(series.slug)!;
+        if (prefs.hideSensitive && m.sensitive) return false;
         if (prefs.author && series.author !== prefs.author) return false;
         if (prefs.status === "fav" && !m.fav) return false;
         if (prefs.status === "unread" && m.status) return false;
@@ -134,16 +137,16 @@ export function useMangaLibrary(manga: MangaSeriesCard[], terms: string[], mount
     return list.map((x) => x.series);
   }, [manga, metas, prefs, terms]);
 
-  const activeCount = (prefs.author ? 1 : 0) + (prefs.status !== "all" ? 1 : 0);
+  const activeCount = (prefs.author ? 1 : 0) + (prefs.status !== "all" ? 1 : 0) + (prefs.hideSensitive ? 1 : 0);
 
   const continueList = useMemo(() => {
     if (!mounted) return [];
     return manga
-      .filter((m) => prefs.lastChapter[m.slug])
+      .filter((m) => prefs.lastChapter[m.slug] && !(prefs.hideSensitive && metas.get(m.slug)?.sensitive))
       .map((m) => ({ series: m, at: prefs.lastReadAt[m.slug] ?? 0, chapter: prefs.lastChapter[m.slug]! }))
       .sort((a, b) => b.at - a.at)
       .slice(0, 8);
-  }, [manga, prefs.lastChapter, prefs.lastReadAt, mounted]);
+  }, [manga, prefs.lastChapter, prefs.lastReadAt, prefs.hideSensitive, metas, mounted]);
 
   const orderedSlugs = () => {
     const known = new Map(prefs.order.map((s, i) => [s, i]));
@@ -180,6 +183,7 @@ export function useMangaLibrary(manga: MangaSeriesCard[], terms: string[], mount
     authors,
     filtered,
     activeCount,
+    anySensitive,
     continueList,
     filtersOpen,
     setFiltersOpen,
@@ -188,7 +192,7 @@ export function useMangaLibrary(manga: MangaSeriesCard[], terms: string[], mount
     setOverSlug,
     moveTo,
     surprise,
-    reset: () => setPrefs({ author: null, status: "all" }),
+    reset: () => setPrefs({ author: null, status: "all", hideSensitive: false }),
   };
 }
 export type MangaLib = ReturnType<typeof useMangaLibrary>;
@@ -243,6 +247,21 @@ export function MangaToolbar({ ml }: { ml: MangaLib }) {
         <SlidersHorizontal className="size-4" />
         ফিল্টার{activeCount ? ` (${formatCount(activeCount)})` : ""}
       </button>
+
+      {ml.anySensitive ? (
+        <button
+          type="button"
+          title={prefs.hideSensitive ? "সংবেদনশীল মাঙ্গা দেখান" : "সংবেদনশীল মাঙ্গা লুকান"}
+          aria-label={prefs.hideSensitive ? "সংবেদনশীল মাঙ্গা দেখান" : "সংবেদনশীল মাঙ্গা লুকান"}
+          onClick={() => setPrefs({ hideSensitive: !prefs.hideSensitive })}
+          className={cn(
+            "pressable grid size-11 place-items-center rounded-full border",
+            prefs.hideSensitive ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+          )}
+        >
+          {prefs.hideSensitive ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      ) : null}
 
       <button
         type="button"
@@ -309,6 +328,16 @@ export function MangaFilterPanel({ ml }: { ml: MangaLib }) {
           </select>
         </FilterRow>
       ) : null}
+      {ml.anySensitive ? (
+        <FilterRow label="সংবেদনশীল">
+          <Chip active={prefs.hideSensitive} onClick={() => setPrefs({ hideSensitive: !prefs.hideSensitive })}>
+            মাঙ্গা লুকান
+          </Chip>
+          <Chip active={prefs.blurCovers} onClick={() => setPrefs({ blurCovers: !prefs.blurCovers })}>
+            প্রচ্ছদ ঝাপসা
+          </Chip>
+        </FilterRow>
+      ) : null}
     </div>
   );
 }
@@ -360,7 +389,7 @@ export function MangaBody({
                   params={{ seriesSlug: series.slug, chapterSlug: chapter }}
                   className="pressable group flex w-64 shrink-0 items-center gap-3 rounded-xl border border-border bg-surface p-2 hover:bg-surface-2"
                 >
-                  <span className="w-12 shrink-0 overflow-hidden rounded-lg">
+                  <span className={cn("w-12 shrink-0 overflow-hidden rounded-lg", prefs.blurCovers && m.sensitive && "cover-blur")}>
                     <CoverArt
                       title={series.title}
                       coverUrl={series.coverMediaId ? mediaSrc(series.coverMediaId) : null}
@@ -427,6 +456,7 @@ export function MangaBody({
             view={prefs.view}
             meta={metas.get(series.slug)!}
             stats={stats?.[series.slug]}
+            blur={prefs.blurCovers}
             resumeChapter={prefs.lastChapter[series.slug] ?? series.firstChapterSlug ?? null}
             terms={terms}
             manual={manual}
