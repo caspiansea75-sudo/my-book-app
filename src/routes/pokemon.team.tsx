@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeft, ArrowRight, Dices, Plus, Save, Search, Sparkles, Trash2, X } from "lucide-react";
-import { GimmickPills, NATURES, PokeHeader, Sprite, StatBars, TypeBadge, useT } from "@/components/pokemon/ui";
+import { GimmickPills, NATURES, PokeHeader, Sprite, StatBars, useT } from "@/components/pokemon/ui";
+import { TypeIcon, TypeIcons } from "@/components/pokemon/type-icons";
 import {
   deleteTeam,
   listTeams,
@@ -348,9 +349,9 @@ function PokemonPicker({ gen, dex, taken, current, onPick, onRandom, onCancel }:
       </label>
       <div className="flex flex-wrap gap-1">
         {TYPES.map((tp) => (
-          <button key={tp} type="button" onClick={() => setType(type === tp ? "" : tp)} className="rounded-md px-2 py-0.5 text-[11px] font-bold uppercase text-white transition" style={{ background: TYPE_COLOR[tp], opacity: !type || type === tp ? 1 : 0.35 }}>
-            {tp}
-          </button>
+          <button key={tp} type="button" onClick={() => setType(type === tp ? "" : tp)} aria-pressed={type === tp} aria-label={tp} className="rounded-lg p-0.5 transition hover:scale-110" style={{ opacity: !type || type === tp ? 1 : 0.35, outline: type === tp ? "2px solid var(--color-lamp)" : "none" }}>
+              <TypeIcon type={tp} size={28} />
+            </button>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-4 font-sans text-xs text-muted">
@@ -376,7 +377,7 @@ function PokemonPicker({ gen, dex, taken, current, onPick, onRandom, onCancel }:
               <span className="self-start pl-1 font-sans text-[10px] text-subtle">#{e.n}</span>
               <Sprite info={{ id: e.sp, num: e.n, types: e.t }} still className="h-16 w-16 object-contain" />
               <span className="w-full truncate px-1 font-sans text-[12px] text-fg">{e.name}</span>
-              <span className="flex gap-0.5">{e.t.map((x) => <TypeBadge key={x} type={x} small />)}</span>
+              <span className="flex gap-0.5">{e.t.map((x) => <TypeIcon key={x} type={x} size={16} />)}</span>
               <span className="font-sans text-[10px] text-subtle">{e.bs.reduce((a, b) => a + b, 0)}</span>
               <GimmickPills tags={e.g} only={gimTags} />
             </button>
@@ -439,7 +440,7 @@ function SlotEditor({ gen, set, dex, items, taken, onChange, onRandomOne }: { ge
         <Sprite info={entry ? { id: entry.sp, num: entry.n, types: entry.t } : null} className="h-20 w-20 object-contain" />
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-xl">{set.species}</h3>
-          <div className="mt-1 flex gap-1.5">{entry?.t.map((x) => <TypeBadge key={x} type={x} />)}</div>
+          <TypeIcons types={entry?.t ?? []} size={26} name className="mt-1.5 gap-3" />
         </div>
         <div className="flex flex-col gap-1.5 sm:flex-row">
           <button type="button" onClick={() => setPicking(true)} className="pressable rounded-lg border border-border bg-surface-2 px-3 py-1.5 font-sans text-xs">🔄 {t("পোকেমন বদলান", "Change")}</button>
@@ -452,9 +453,9 @@ function SlotEditor({ gen, set, dex, items, taken, onChange, onRandomOne }: { ge
           <StatBars bs={entry.bs} />
           {matchup ? (
             <div className="space-y-1.5 font-sans text-[11px] text-muted">
-              <p><b className="text-fg">{t("দুর্বল:", "Weak to:")}</b> {matchup.weak.length ? matchup.weak.map(([tp, m]) => <span key={tp} className="mr-1.5 inline-flex items-center gap-0.5"><TypeBadge type={tp} small /><b className="text-nsfw">×{m}</b></span>) : "—"}</p>
-              <p><b className="text-fg">{t("প্রতিরোধ:", "Resists:")}</b> {matchup.resist.length ? matchup.resist.map(([tp]) => <span key={tp} className="mr-1 inline-block"><TypeBadge type={tp} small /></span>) : "—"}</p>
-              {matchup.immune.length ? <p><b className="text-fg">{t("ইমিউন:", "Immune:")}</b> {matchup.immune.map((tp) => <span key={tp} className="mr-1 inline-block"><TypeBadge type={tp} small /></span>)}</p> : null}
+              <p><b className="text-fg">{t("দুর্বল:", "Weak to:")}</b> {matchup.weak.length ? matchup.weak.map(([tp, m]) => <span key={tp} className="mr-1.5 inline-flex items-center gap-0.5"><TypeIcon type={tp} size={20} /><b className="text-nsfw">×{m}</b></span>) : "—"}</p>
+              <p><b className="text-fg">{t("প্রতিরোধ:", "Resists:")}</b> {matchup.resist.length ? matchup.resist.map(([tp]) => <span key={tp} className="mr-1 inline-block"><TypeIcon type={tp} size={20} /></span>) : "—"}</p>
+              {matchup.immune.length ? <p><b className="text-fg">{t("ইমিউন:", "Immune:")}</b> {matchup.immune.map((tp) => <span key={tp} className="mr-1 inline-block"><TypeIcon type={tp} size={20} /></span>)}</p> : null}
             </div>
           ) : null}
         </div>

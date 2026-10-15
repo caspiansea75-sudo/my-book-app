@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Search, X } from "lucide-react";
-import { GimmickPills, GIMMICK, PokeHeader, Sprite, StatBars, TypeBadge, useT } from "@/components/pokemon/ui";
+import { GimmickPills, GIMMICK, PokeHeader, Sprite, StatBars, useT } from "@/components/pokemon/ui";
+import { TypeIcon, TypeIcons } from "@/components/pokemon/type-icons";
 import { pokeDex, pokeSpecies, type DexEntry, type SpeciesDetail } from "@/lib/pokemon-api";
-import { TYPES, TYPE_COLOR } from "@/lib/pokemon/shared";
+import { TYPES } from "@/lib/pokemon/shared";
 
 export const Route = createFileRoute("/pokemon/dex")({
   loader: async () => {
@@ -155,15 +156,9 @@ function DexPage() {
           </div>
           <div className="flex flex-wrap gap-1">
             {TYPES.map((tp) => (
-              <button
-                key={tp}
-                type="button"
-                onClick={() => setType(type === tp ? "" : tp)}
-                className="rounded-md px-2 py-0.5 text-[11px] font-bold uppercase text-white transition"
-                style={{ background: TYPE_COLOR[tp], opacity: !type || type === tp ? 1 : 0.35 }}
-              >
-                {tp}
-              </button>
+              <button key={tp} type="button" onClick={() => setType(type === tp ? "" : tp)} aria-pressed={type === tp} aria-label={tp} className="rounded-lg p-0.5 transition hover:scale-110" style={{ opacity: !type || type === tp ? 1 : 0.35, outline: type === tp ? "2px solid var(--color-lamp)" : "none" }}>
+              <TypeIcon type={tp} size={28} />
+            </button>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-4 font-sans text-sm text-muted">
@@ -191,13 +186,22 @@ function DexPage() {
               <button
                 type="button"
                 onClick={() => setOpen(e.name)}
-                className="pressable group flex h-full w-full flex-col items-center gap-1 rounded-xl border border-border bg-surface p-3 text-center hover:bg-surface-2"
+                className="pressable group flex h-full w-full flex-col items-stretch overflow-hidden rounded-xl border border-border bg-surface text-center hover:bg-surface-2"
               >
-                <span className="self-start font-sans text-[11px] text-subtle">#{String(e.n).padStart(4, "0")}</span>
-                <Sprite info={{ id: e.sp, num: e.n, types: e.t }} still className="h-20 w-20 object-contain transition group-hover:scale-110" />
-                <span className="font-sans text-sm text-fg">{e.name}</span>
-                <span className="flex gap-1">{e.t.map((x) => <TypeBadge key={x} type={x} small />)}</span>
-                <GimmickPills tags={e.g} only={e.kind === "base" ? ["mega", "megaza", "primal", "ultra", "gmax", "zsig"] : e.g.includes("megaza") ? ["megaza"] : [e.kind]} />
+                <span className="relative flex items-center justify-between px-3 py-2">
+                  <svg aria-hidden="true" viewBox="0 0 100 40" preserveAspectRatio="none" className="absolute inset-0 h-full w-full text-fg opacity-[0.09]">
+                    <path d="M0 0H62C52 8 44 40 0 40Z" fill="currentColor" />
+                  </svg>
+                  <span className="relative font-sans text-[11px] font-semibold tracking-wide text-muted">No.{String(e.n).padStart(4, "0")}</span>
+                  <span className="relative flex gap-1">
+                    {e.t.map((x) => <TypeIcon key={x} type={x} size={22} />)}
+                  </span>
+                </span>
+                <span className="flex flex-col items-center gap-1 px-3 pb-3 pt-1">
+                  <Sprite info={{ id: e.sp, num: e.n, types: e.t }} still className="h-20 w-20 object-contain transition group-hover:scale-110" />
+                  <span className="font-sans text-sm text-fg">{e.name}</span>
+                  <GimmickPills tags={e.g} only={e.kind === "base" ? ["mega", "megaza", "primal", "ultra", "gmax", "zsig"] : e.g.includes("megaza") ? ["megaza"] : [e.kind]} />
+                </span>
               </button>
             </li>
           ))}
@@ -283,7 +287,7 @@ function DetailModal({ name, onClose, onPick }: { name: string; onClose: () => v
               <div className="min-w-0">
                 <p className="font-sans text-xs text-subtle">#{String(e.n).padStart(4, "0")} · Gen {e.gen}</p>
                 <h2 className="font-display text-2xl">{e.name}</h2>
-                <div className="mt-1 flex gap-1.5">{e.t.map((x) => <TypeBadge key={x} type={x} />)}</div>
+                <TypeIcons types={e.t} size={30} name className="mt-1.5 gap-3" />
                 <p className="mt-2 font-sans text-xs text-muted">
                   {d.heightm} m · {d.weightkg} kg{d.eggGroups.length ? ` · ${d.eggGroups.join(", ")}` : ""}
                 </p>
@@ -369,7 +373,7 @@ function DetailModal({ name, onClose, onPick }: { name: string; onClose: () => v
                   <ul className="max-h-64 divide-y divide-border overflow-y-auto rounded-lg border border-border font-sans text-xs">
                     {moves.map((m) => (
                       <li key={m.id} className="flex items-center gap-2 px-3 py-1.5">
-                        <TypeBadge type={m.type} small />
+                        <TypeIcon type={m.type} size={20} />
                         <span className="flex-1 text-fg">{m.name}</span>
                         <span className="text-muted">{m.cat === "Status" ? "—" : m.cat === "Physical" ? "⚔️" : "✴️"}</span>
                         <span className="w-9 text-right tabular-nums text-muted">{m.bp || "—"}</span>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link } from "@tanstack/react-router";
 import { Avatar } from "@/components/members/avatar";
-import { Sprite, TypeBadge, useT } from "@/components/pokemon/ui";
+import { Sprite, useT } from "@/components/pokemon/ui";
+import { TypeIcon, TypeIcons } from "@/components/pokemon/type-icons";
 import type { BattleView, PersonLite } from "@/lib/pokemon-api";
 import { hpPercent, type BState, type Cue, type Mon, type SideId } from "@/lib/pokemon/protocol";
 import {
@@ -336,6 +337,8 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
 
   const meMon = state.sides[mine].active;
   const foeMon = state.sides[foe].active;
+  /** A Pokémon's types for the little icons (a Terastallized one shows its Tera type). */
+  const typesOf = (m: Mon | null): string[] => (m ? (m.tera ? [m.tera] : sprites[m.species]?.types ?? []) : []);
   return (
     <div ref={sceneRef} className="pk-scene" data-weather={state.weather} data-terrain={state.terrain} data-theme={theme}>
       <div ref={camRef} className="pk-camera">
@@ -382,8 +385,8 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
       </div>
 
       <FieldChips state={state} mine={mine} />
-      <HpBox key={`f-${foeMon?.species ?? ""}`} mon={foeMon} side="foe" exact={false} />
-      <HpBox key={`m-${meMon?.species ?? ""}`} mon={meMon} side="me" exact />
+      <HpBox key={`f-${foeMon?.species ?? ""}`} mon={foeMon} side="foe" exact={false} types={typesOf(foeMon)} />
+      <HpBox key={`m-${meMon?.species ?? ""}`} mon={meMon} side="me" exact types={typesOf(meMon)} />
       {fx.filter((f) => SCREEN_FX.has(f.kind)).map((f) => (
         <FxView key={f.id} fx={f} mine={mine} />
       ))}
@@ -435,7 +438,7 @@ function Tick({ to }: { to: number }) {
   return <>{v}</>;
 }
 
-function HpBox({ mon, side, exact }: { mon: Mon | null; side: "me" | "foe"; exact: boolean }) {
+function HpBox({ mon, side, exact, types }: { mon: Mon | null; side: "me" | "foe"; exact: boolean; types: string[] }) {
   if (!mon) return null;
   const pct = hpPercent(mon);
   const lvl = pct <= 20 ? "low" : pct <= 50 ? "mid" : "hi";
@@ -455,8 +458,8 @@ function HpBox({ mon, side, exact }: { mon: Mon | null; side: "me" | "foe"; exac
       <div className="pk-bar">
         <i data-lvl={lvl} style={{ ["--w" as string]: `${pct}%` }} />
       </div>
-      <div className="pk-hp-row" style={{ justifyContent: "space-between", marginTop: 2, fontSize: 11, opacity: 0.9 }}>
-        <span>
+      <div className="pk-hp-row" style={{ justifyContent: "space-between", marginTop: 2, fontSize: 11 }}>
+        <span style={{ opacity: 0.9 }}>
           {exact && mon.maxHp !== 100 ? (
             <>
               <Tick to={mon.hp} />/{mon.maxHp}
@@ -467,6 +470,7 @@ function HpBox({ mon, side, exact }: { mon: Mon | null; side: "me" | "foe"; exac
             </>
           )}
         </span>
+        <TypeIcons types={types} size={16} />
       </div>
       {boosts.length ? (
         <div>
@@ -808,7 +812,7 @@ export function ActionPanel({
             <button type="button" disabled={disabled} onClick={() => onChoose(`switch ${slot}`)} className="pressable flex w-full items-center gap-3 rounded-xl border border-border bg-surface-2 p-2 text-left hover:bg-surface disabled:opacity-50">
               <Sprite info={spriteOf(sprites, species)} still className="size-11 object-contain" />
               <span className="min-w-0 flex-1 font-sans text-sm">
-                <b className="block truncate">{species}</b>
+                <b className="flex items-center gap-1.5 truncate">{species} <TypeIcons types={spriteOf(sprites, species).types} size={14} /></b>
                 <span className="block h-1.5 overflow-hidden rounded-full bg-bg"><i className="block h-full rounded-full" style={{ width: `${pct}%`, background: pct > 50 ? "#4cd964" : pct > 20 ? "#ffcc00" : "#ff3b30" }} /></span>
                 <span className="text-[11px] text-muted">{pct}% {st ? `· ${st.toUpperCase()}` : ""}</span>
               </span>
@@ -879,7 +883,7 @@ export function ActionPanel({
                   <span className="pk-kbd">{i + 1}</span>
                 </b>
                 <small>
-                  {base ? <TypeBadge type={base.type} small /> : null}
+                  {base ? <TypeIcon type={base.type} size={18} /> : null}
                   {base ? <span>{base.cat === "Status" ? "—" : base.cat === "Physical" ? "⚔️" : "✴️"} {base.bp || "—"}</span> : null}
                   {m.pp !== undefined ? <span>PP {m.pp}/{m.maxpp}</span> : null}
                   {mult >= 2 ? <span className="tag se">×{mult}</span> : mult === 0 ? <span className="tag imm">×0</span> : mult < 1 ? <span className="tag nve">×{mult}</span> : null}

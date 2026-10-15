@@ -5,6 +5,7 @@ import { ActionPanel, BattleLog, BattleScene, ResultOverlay, Roster, VsIntro, ty
 import { Sprite, useInterval, useT } from "@/components/pokemon/ui";
 import { Avatar } from "@/components/members/avatar";
 import { MusicPanel } from "@/components/pokemon/music-panel";
+import { TypeIcons } from "@/components/pokemon/type-icons";
 import {
   claimTimeout,
   createBattle,
@@ -332,7 +333,7 @@ function Arena({ initial }: { initial: BattleView }) {
                           {(sets ?? []).map((s, i) => (
                             <li key={i} className="flex items-center gap-2 rounded-lg bg-surface-2 px-2 py-1">
                               <Sprite info={meta.sprites[s.species] ?? { id: guessSpriteId(s.species), num: 0, types: [] }} still className="size-8 object-contain" />
-                              <span><b>{s.species}</b>{s.item ? ` @ ${s.item}` : ""}<br /><span className="text-muted">{s.moves.join(" · ")}</span></span>
+                              <span><b>{s.species}</b> <TypeIcons types={meta.sprites[s.species]?.types ?? []} size={14} className="align-middle" />{s.item ? ` @ ${s.item}` : ""}<br /><span className="text-muted">{s.moves.join(" · ")}</span></span>
                             </li>
                           ))}
                         </ul>
