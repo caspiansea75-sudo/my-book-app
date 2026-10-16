@@ -1,4 +1,5 @@
 import { Fragment, useEffect } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { RainLayer } from "@/components/book/rain-layer";
 import { ThemeFx } from "@/components/book/theme-fx";
 import { useReaderStore, type ThemeId } from "@/lib/reader-store";
@@ -28,6 +29,8 @@ const EMBERS = Array.from({ length: 16 }, (_, i) => ({
  */
 export function ThemeParticles({ theme }: { theme: ThemeId }) {
   const fx = useReaderStore((s) => s.fx);
+  // The full atmosphere (thunder flashes, wind, light) would sit on top of the Pokémon pages and battles, so it is left out there.
+  const onPokemon = useRouterState({ select: (s) => s.location.pathname.startsWith("/pokemon") });
 
   // Nothing needs to move while the tab is in the background.
   useEffect(() => {
@@ -42,7 +45,7 @@ export function ThemeParticles({ theme }: { theme: ThemeId }) {
   return (
     <Fragment>
       <BaseLayer theme={theme} />
-      {fx === "full" ? <ThemeFx key={theme} theme={theme} /> : null}
+      {fx === "full" && !onPokemon ? <ThemeFx key={theme} theme={theme} /> : null}
     </Fragment>
   );
 }
