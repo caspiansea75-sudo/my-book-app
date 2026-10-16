@@ -1,0 +1,24 @@
+{
+  "id": 2,
+  "slug": "02",
+  "title": "প্রথম অধ্যায়ঃ প্রথম প্রেম",
+  "titleEn": "Chapter 1: First Love",
+  "excerpt": "প্রথম অধ্যায়ঃ প্রথম প্রেম",
+  "paraCount": 1,
+  "nsfwCount": 0,
+  "chars": 25,
+  "sections": [
+    {
+      "id": "main",
+      "title": "",
+      "paragraphs": [
+        {
+          "text": "প্রথম অধ্যায়ঃ প্রথম প্রেম",
+          "kind": "p",
+          "id": "p-2-1",
+          "nsfw": false
+        }
+      ]
+    }
+  ]
+}
