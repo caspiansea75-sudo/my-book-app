@@ -2,7 +2,7 @@
  * Every Petown ability as a list of small, composable effects that the battle engine interprets.
  *
  * Petown's own descriptions are written for a turn-based game (levels, "restraint", "direct damage skill"…).
- * Here they are mapped onto this real-time engine: a "turn" is 3 seconds, "level" is a stat stage, "same-type bonus"
+ * Here they are mapped onto this turn-based engine: a "turn" is one round, "level" is a stat stage, "same-type bonus"
  * is STAB, "restraint" is type effectiveness. Where a description was cut off in the data, only the visible part is used.
  */
 
@@ -399,7 +399,7 @@ function phrase(f: Fx, lang: "bn" | "en"): string | null {
       const parts: string[] = [];
       if (f.self?.length) parts.push((f.p ? `${chance(f.p)} ` : "") + f.self.map((b) => stats(b, lang)).join(", "));
       if (f.foe?.length) parts.push((en ? "foe " : "প্রতিপক্ষের ") + f.foe.map((b) => stats(b, lang)).join(", "));
-      if (f.gauge) parts.push(en ? "strikes first" : "প্রথমে আঘাত করে");
+      if (f.gauge) parts.push(en ? "acts first on its first turn" : "প্রথম টার্নে আগে চলে");
       if (f.reveal) parts.push(f.reveal === "item" ? (en ? "reveals the foe's item" : "প্রতিপক্ষের আইটেম দেখায়") : f.reveal === "move" ? (en ? "reveals the foe's best move" : "প্রতিপক্ষের সেরা চাল দেখায়") : en ? "senses dangerous moves" : "বিপজ্জনক চাল টের পায়");
       return `${en ? "on entry:" : "নামলে:"} ${parts.join("; ")}`;
     }
@@ -437,8 +437,8 @@ function phrase(f: Fx, lang: "bn" | "en"): string | null {
       if (f.self?.length) parts.push(f.self.map((b) => stats(b, lang)).join(", "));
       if (f.foe) parts.push((en ? "foe " : "প্রতিপক্ষের ") + stats(f.foe, lang));
       if (f.download) parts.push(en ? "re-downloads the foe's weakness" : "আবার দুর্বলতা ধরে");
-      const every = (f.every ?? 1) * 3;
-      return `${en ? `every ${every}s` : `প্রতি ${every}সে.`}${f.p ? ` (${chance(f.p)})` : ""}: ${parts.join(", ")}${f.ifType ? ` (${f.ifType}${en ? " type only" : " টাইপে"})` : ""}${c(f.cond)}`;
+      const every = f.every ?? 1;
+      return `${en ? (every === 1 ? "every turn" : `every ${every} turns`) : every === 1 ? "প্রতি টার্নে" : `প্রতি ${every} টার্নে`}${f.p ? ` (${chance(f.p)})` : ""}: ${parts.join(", ")}${f.ifType ? ` (${f.ifType}${en ? " type only" : " টাইপে"})` : ""}${c(f.cond)}`;
     }
     case "ko": return `${en ? "after a KO:" : "কাউকে হারালে:"} ${f.boost === "best" ? (en ? "boosts its best stat" : "সেরা স্ট্যাট বাড়ে") : stats(f.boost, lang)}`;
     case "crit": return en ? `crit rate +${f.n} stage` : `ক্রিটিক্যাল +${f.n}`;
@@ -457,7 +457,7 @@ function phrase(f: Fx, lang: "bn" | "en"): string | null {
     case "scrappy": return en ? "Normal/Fighting hit Ghosts" : "নরমাল/ফাইটিং ঘোস্টকে মারে";
     case "pierce": return en ? `${list(f.type)} moves ignore the foe's defence boosts` : `${list(f.type)} চাল প্রতিপক্ষের ডিফেন্স বুস্ট উপেক্ষা করে`;
     case "bestAtk": return en ? `${list(f.type)} moves use the higher of Atk/SpA` : `${list(f.type)} চাল অ্যাটাক/স্পে. অ্যাটাকের বড়টা ব্যবহার করে`;
-    case "speed": return f.m > 1 ? (en ? `charges ${Math.round((f.m - 1) * 100)}% faster` : `${Math.round((f.m - 1) * 100)}% দ্রুত চার্জ`) : en ? `charges ${Math.round((1 - f.m) * 100)}% slower` : `${Math.round((1 - f.m) * 100)}% ধীরে চার্জ`;
+    case "speed": return f.m > 1 ? (en ? `Speed ${times(f.m)} for turn order (acts earlier)` : `টার্নের ক্রমে স্পিড ${times(f.m)} (আগে চলে)`) : en ? `Speed ${times(f.m)} for turn order (acts later)` : `টার্নের ক্রমে স্পিড ${times(f.m)} (পরে চলে)`;
     case "trap": return en ? "the foe can't switch out" : "প্রতিপক্ষ বদলাতে পারে না";
     case "noChip": return en ? "no damage from status or weather" : "স্ট্যাটাস/আবহাওয়ায় ক্ষতি হয় না";
     case "noRecoil": return en ? "no recoil damage" : "রিকয়েল ক্ষতি হয় না";

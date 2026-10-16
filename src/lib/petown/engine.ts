@@ -1,10 +1,11 @@
 /**
- * Petown Arena battle engine: real-time 3v3, pure logic (no React, no DOM).
+ * Petown Arena battle engine: turn-based 3v3, pure logic (no React, no DOM).
  *
- * Data tables come from the Petown game files (src/data/petown.json). The battle loop is our own: each side's active
- * Pokémon charges a gauge at a speed-driven rate; when it is full it can use a move. Damage is the standard formula at
- * level 50 (31 IVs, ~84 EVs). Every Petown ability is interpreted from the effect lists in ./abilities.ts.
- * A "turn" (for regen, status damage, periodic ability effects) is TURN seconds.
+ * Data tables come from the Petown game files (src/data/petown.json). Each round both sides choose a move (or a switch),
+ * the faster Pokémon acts first, then end-of-round effects run (status damage, weather, regen, periodic abilities).
+ * Damage is the standard formula at level 50 (31 IVs, ~84 EVs). Petown forms are very strong, so HP is scaled up
+ * (HP_SCALE) to keep fights readable. Every Petown ability is interpreted from the effect lists in ./abilities.ts.
+ * `playRound` is a generator: it yields after every action, so the UI can play a round back step by step.
  */
 import { TYPES, typeMult } from "@/lib/pokemon/shared";
 import { RECOIL_MOVES, RE_SOUND, fxOf, type Boost, type Cond, type Fx, type Stat, type Status, type Weather } from "@/lib/petown/abilities";
@@ -23,9 +24,10 @@ export type PetownData = { moves: MoveRow[]; items: ItemRow[]; abilities: Record
 
 export const LEVEL = 50;
 export const TEAM_SIZE = 3;
-export const TURN = 3;
-/** After this many seconds both Pokémon lose HP every turn. */
-export const SUDDEN_DEATH = 240;
+/** Petown forms have huge stats; more HP means a fight lasts several rounds instead of one or two hits. */
+export const HP_SCALE = 2.6;
+/** From this round on, both active Pokémon lose more and more HP every round, so no fight can stall forever. */
+export const SUDDEN_ROUND = 30;
 export const FORM_LABEL: Record<number, { bn: string; en: string }> = {
   0: { bn: "সাধারণ", en: "Base" },
   1: { bn: "মেগা", en: "Mega" },
@@ -67,17 +69,17 @@ export type Mon = {
   turn: number;
   allyDown: number;
   immuneSet: string[];
+  /** lost its action this round (flinch) */
+  flinched: boolean;
+  /** acts before everyone else this round (Prismatic Core on entry) */
+  prio: number;
 };
 
 export type Side = {
   mons: Mon[];
   active: number;
-  gauge: number;
-  /** seconds the active Pokémon is still sliding into place after a switch */
-  lock: number;
-  /** the active Pokémon fainted; a replacement is chosen when this timer runs out (or sooner by tapping) */
-  pendingSwitch: number;
-  turnT: number;
+  /** the active Pokémon fainted and the player must pick a replacement */
+  needSwitch: boolean;
   human: boolean;
 };
 
@@ -98,7 +100,7 @@ export type Ev =
   | { id: number; k: "stage"; side: 0 | 1; mon: string; stat: Stat; n: number }
   | { id: number; k: "weather"; w: Weather | null }
   | { id: number; k: "chip"; side: 0 | 1; amount: number; why: ChipWhy }
-  | { id: number; k: "skip"; side: 0 | 1; mon: string; why: "inf" | "cnf" }
+  | { id: number; k: "skip"; side: 0 | 1; mon: string; why: "inf" | "cnf" | "par" | "slp" }
   | { id: number; k: "flinch"; side: 0 | 1; mon: string }
   | { id: number; k: "reveal"; side: 0 | 1; mon: string; what: "item" | "move" | "danger"; value: string }
   | { id: number; k: "trapped"; side: 0 | 1; by: string }
@@ -107,8 +109,10 @@ export type Ev =
 
 export type Battle = {
   sides: [Side, Side];
+  /** weather and how many rounds it has left */
   weather: { w: Weather | null; t: number };
-  time: number;
+  round: number;
+  moved: [boolean, boolean];
   seq: number;
   winner: -1 | 0 | 1;
   difficulty: Difficulty;
@@ -135,7 +139,7 @@ const isSun = (w: Weather | null) => w === "sun" || w === "harshsun";
 const isRain = (w: Weather | null) => w === "rain" || w === "heavyrain";
 const primal = (w: Weather | null) => w === "harshsun" || w === "heavyrain" || w === "wind";
 const calcStat = (base: number) => Math.floor(((2 * base + 31 + 21) * LEVEL) / 100) + 5;
-const calcHp = (base: number) => Math.floor(((2 * base + 31 + 21) * LEVEL) / 100) + LEVEL + 10;
+const calcHp = (base: number) => Math.round((Math.floor(((2 * base + 31 + 21) * LEVEL) / 100) + LEVEL + 10) * HP_SCALE);
 const ofType = <K extends Fx["t"]>(m: Mon, t: K) => m.fxs.filter((f) => f.t === t) as Extract<Fx, { t: K }>[];
 const hasFx = (m: Mon, t: Fx["t"]) => m.fxs.some((f) => f.t === t);
 /** The foe's ability effects, unless the attacker ignores abilities. */
@@ -212,6 +216,8 @@ export function makeMon(data: PetownData, sp: SpeciesRow, item: ItemRow | null):
     turn: 0,
     allyDown: 0,
     immuneSet: [],
+    flinched: false,
+    prio: 0,
   };
 }
 
@@ -357,25 +363,17 @@ const STRUGGLE: BMove = { name: "Struggle", type: "Normal", cat: 0, power: 50, a
 /* ------------------------------------------------------------------ battle flow */
 
 export function newBattle(player: Mon[], foe: Mon[], difficulty: Difficulty): Battle {
-  const mk = (mons: Mon[], human: boolean): Side => ({ mons, active: 0, gauge: 35, lock: 0, pendingSwitch: 0, turnT: 0, human });
+  const mk = (mons: Mon[], human: boolean): Side => ({ mons, active: 0, needSwitch: false, human });
   return {
     sides: [mk(player, true), mk(foe, false)],
     weather: { w: null, t: 0 },
-    time: 0,
+    round: 0,
+    moved: [false, false],
     seq: 1,
     winner: -1,
     difficulty,
     stats: { hits: 0, crits: 0, maxHit: 0, kos: 0, lost: 0 },
   };
-}
-
-/** Seconds the active Pokémon needs to fill its gauge. */
-export function chargeTime(b: Battle, s: 0 | 1): number {
-  const m = activeOf(b, s);
-  const foe = activeOf(b, other(s));
-  const rate = s === 1 ? DIFFICULTY[b.difficulty].rate : 1;
-  const spd = ofType(m, "speed").reduce((a, f) => a * f.m, 1);
-  return 900 / ((effStat(m, "spe", { w: activeWeather(b), foe }) + 60) * rate * spd);
 }
 
 function heal(b: Battle, s: 0 | 1, amount: number, why: string, out: Ev[]) {
@@ -416,7 +414,7 @@ function applyBoost(b: Battle, ts: 0 | 1, bo: Boost, out: Ev[], src: 0 | 1 | nul
 function setWeather(b: Battle, w: Weather, out: Ev[]) {
   if (primal(b.weather.w) && !primal(w)) return;
   if (b.weather.w === w) return;
-  b.weather = { w, t: primal(w) ? Infinity : 25 };
+  b.weather = { w, t: primal(w) ? Infinity : 5 };
   out.push({ id: b.seq++, k: "weather", w });
 }
 
@@ -435,7 +433,7 @@ function inflict(b: Battle, ts: 0 | 1, st: Status, out: Ev[], src: 0 | 1 | null,
   }
   if (st === "cnf" || st === "inf") {
     if (m.vol[st] > 0) return false;
-    m.vol[st] = 6;
+    m.vol[st] = 3;
     out.push({ id: b.seq++, k: "status", side: ts, mon: m.name, status: st });
     return true;
   }
@@ -444,7 +442,8 @@ function inflict(b: Battle, ts: 0 | 1, st: Status, out: Ev[], src: 0 | 1 | null,
   if (st === "psn" && (m.types.includes("Poison") || m.types.includes("Steel"))) return false;
   if (st === "par" && m.types.includes("Electric")) return false;
   m.status = st;
-  m.statusT = st === "slp" ? (hasFx(m, "sleepFast") ? 2.5 : 5) : 0;
+  // sleep: the number of its own turns it needs to wake (it wakes and acts when this runs out)
+  m.statusT = st === "slp" ? (hasFx(m, "sleepFast") ? 2 : 3) : 0;
   out.push({ id: b.seq++, k: "status", side: ts, mon: m.name, status: st });
   if (srcMon && !srcMon.fainted && hasFx(m, "sync") && (st === "brn" || st === "psn" || st === "par")) inflict(b, src!, st, out, null, false);
   return true;
@@ -492,21 +491,18 @@ function faintMon(b: Battle, ts: 0 | 1, att: { side: 0 | 1; contact: boolean } |
       }
     }
   }
-  if (alive(dside) === 0) {
-    if (b.winner === -1) {
-      b.winner = other(ts);
-      out.push({ id: b.seq++, k: "end", winner: other(ts) });
-    }
-  } else dside.pendingSwitch = dside.human ? 6 : 1.4;
+  if (alive(dside) === 0 && b.winner === -1) {
+    b.winner = other(ts);
+    out.push({ id: b.seq++, k: "end", winner: other(ts) });
+  }
 }
 
 /** Events that happen on entry (Trace, weather, boosts, Intimidate, reveals). */
 export function enter(b: Battle, s: 0 | 1, out: Ev[]) {
-  const side = b.sides[s];
   const me = activeOf(b, s);
   const foe = activeOf(b, other(s));
   me.turn = 0;
-  side.turnT = 0;
+  me.flinched = false;
   out.push({ id: b.seq++, k: "send", side: s, mon: me.name });
 
   if (hasFx(me, "trace") && !foe.fainted && foe.curAbility && !hasFx(foe, "trace") && fxOf(foe.curAbility).length) {
@@ -523,7 +519,7 @@ export function enter(b: Battle, s: 0 | 1, out: Ev[]) {
       note(b, s, me, me.curAbility, "trigger", out);
       for (const bo of f.self ?? []) applyBoost(b, s, bo, out, null);
       if (!foe.fainted) for (const bo of f.foe ?? []) applyBoost(b, other(s), bo, out, s);
-      if (f.gauge) side.gauge = Math.max(side.gauge, f.gauge);
+      if (f.gauge) me.prio = 1;
       if (f.reveal && !foe.fainted) {
         let value = "";
         if (f.reveal === "item") value = foe.item?.[0] ?? "";
@@ -546,7 +542,7 @@ export function startBattle(b: Battle): Ev[] {
 }
 
 /** Strongest-looking replacement versus the foe's current Pokémon. */
-function bestReplacement(b: Battle, s: 0 | 1): number {
+export function bestReplacement(b: Battle, s: 0 | 1): number {
   const side = b.sides[s];
   const foe = activeOf(b, other(s));
   const w = activeWeather(b);
@@ -560,19 +556,27 @@ function bestReplacement(b: Battle, s: 0 | 1): number {
   return best;
 }
 
-/** Manual (or automatic) switch. Returns false if it is not allowed. */
-export function switchTo(b: Battle, s: 0 | 1, idx: number, out: Ev[]): boolean {
+/** Can the player switch to `idx` right now (without spending anything)? */
+export function canSwitch(b: Battle, s: 0 | 1, idx: number): "ok" | "trapped" | "invalid" {
   const side = b.sides[s];
   const m = side.mons[idx];
-  if (!m || m.fainted || (idx === side.active && !side.pendingSwitch)) return false;
   const cur = activeOf(b, s);
-  const forced = side.pendingSwitch > 0 || cur.fainted;
-  if (!forced && side.lock > 0) return false;
+  if (!m || m.fainted || (idx === side.active && !cur.fainted)) return "invalid";
   const foe = activeOf(b, other(s));
-  if (!forced && !foe.fainted && hasFx(foe, "trap") && !hasFx(cur, "ignoreAbility")) {
-    out.push({ id: b.seq++, k: "trapped", side: s, by: foe.name });
+  if (!cur.fainted && !foe.fainted && hasFx(foe, "trap") && !hasFx(cur, "ignoreAbility")) return "trapped";
+  return "ok";
+}
+
+/** Switch the active Pokémon. */
+export function switchTo(b: Battle, s: 0 | 1, idx: number, out: Ev[]): boolean {
+  const verdict = canSwitch(b, s, idx);
+  if (verdict === "trapped") {
+    out.push({ id: b.seq++, k: "trapped", side: s, by: activeOf(b, other(s)).name });
     return false;
   }
+  if (verdict !== "ok") return false;
+  const side = b.sides[s];
+  const cur = activeOf(b, s);
   if (!cur.fainted) {
     for (const f of ofType(cur, "switchOut")) {
       if (f.cure && cur.status) { cur.status = null; cur.statusT = 0; }
@@ -580,18 +584,37 @@ export function switchTo(b: Battle, s: 0 | 1, idx: number, out: Ev[]): boolean {
     }
     cur.stages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
     cur.vol = { cnf: 0, inf: 0 };
+    cur.prio = 0;
   }
   side.active = idx;
-  side.pendingSwitch = 0;
-  side.gauge = forced ? 40 : 15;
-  side.lock = 0.9;
+  side.needSwitch = false;
   enter(b, s, out);
   return true;
 }
 
-/** One strike of damage onto the foe, with all the triggers around it. */
+/** Checks that can make a Pokémon lose its action (flinch, sleep, paralysis). Returns true if it may act. */
+function canAct(b: Battle, s: 0 | 1, out: Ev[]): boolean {
+  const m = activeOf(b, s);
+  if (m.flinched) {
+    m.flinched = false;
+    out.push({ id: b.seq++, k: "flinch", side: s, mon: m.name });
+    for (const g of ofType(m, "onFlinch")) applyBoost(b, s, g.boost, out, null);
+    return false;
+  }
+  if (m.status === "slp") {
+    m.statusT -= 1;
+    if (m.statusT > 0) { out.push({ id: b.seq++, k: "skip", side: s, mon: m.name, why: "slp" }); return false; }
+    cureStatus(b, s, "wake", out);
+  }
+  if (m.status === "par" && Math.random() < 0.25) {
+    out.push({ id: b.seq++, k: "skip", side: s, mon: m.name, why: "par" });
+    return false;
+  }
+  return true;
+}
+
+/** One Pokémon uses move `i` on the other. */
 function performMove(b: Battle, s: 0 | 1, i: number, out: Ev[]): void {
-  const side = b.sides[s];
   const att = activeOf(b, s);
   const ts = other(s);
   const def = activeOf(b, ts);
@@ -605,7 +628,6 @@ function performMove(b: Battle, s: 0 | 1, i: number, out: Ev[]): void {
     const extra = dfx.reduce((a, f) => a + (f.t === "pressure" ? f.n : 0), 0);
     mv.pp = Math.max(0, mv.pp - 1 - extra);
   }
-  side.gauge = 0;
   out.push({ id: b.seq++, k: "use", side: s, mon: att.name, move: mv.name, type: moveType(att, mv).type, cat: mv.cat === 0 ? "physical" : "special" });
 
   if (att.vol.inf > 0 && Math.random() < 0.5) { out.push({ id: b.seq++, k: "skip", side: s, mon: att.name, why: "inf" }); return; }
@@ -682,7 +704,7 @@ function performMove(b: Battle, s: 0 | 1, i: number, out: Ev[]): void {
   const fainted = def.hp <= 0;
   if (fainted) faintMon(b, ts, { side: s, contact }, out);
 
-  /* defender's reactions (it may be gone, but reflect/heal still apply) */
+  /* defender's reactions (it may be gone, but reflect still applies) */
   if (!fainted) {
     for (const f of dfx) {
       if (f.t !== "onHurt") continue;
@@ -720,12 +742,7 @@ function performMove(b: Battle, s: 0 | 1, i: number, out: Ev[]): void {
       if (f.status) inflict(b, ts, Array.isArray(f.status) ? rand(f.status) : f.status, out, s, true);
       if (f.foe && !dfx.some((x) => x.t === "shieldDust")) applyBoost(b, ts, f.foe, out, s);
       if (f.clearFoeBoosts) for (const k of Object.keys(def.stages) as Stat[]) if (def.stages[k] > 0) def.stages[k] = 0;
-      if (f.flinch && !dfx.some((x) => x.t === "shieldDust") && !dfx.some((x) => x.t === "statusImmune" && x.list.includes("fln"))) {
-        const dside = b.sides[ts];
-        dside.gauge = Math.max(0, dside.gauge - 45);
-        out.push({ id: b.seq++, k: "flinch", side: ts, mon: def.name });
-        for (const g of ofType(def, "onFlinch")) applyBoost(b, ts, g.boost, out, null);
-      }
+      if (f.flinch && !b.moved[ts] && !dfx.some((x) => x.t === "shieldDust") && !dfx.some((x) => x.t === "statusImmune" && x.list.includes("fln"))) def.flinched = true;
       if (f.extra && !def.fainted) {
         const extra = Math.min(def.hp, Math.max(1, Math.floor(dmg * 0.5)));
         def.hp -= extra;
@@ -755,17 +772,42 @@ export function chooseMove(b: Battle, s: 0 | 1, smart: number): number {
   return usable[Math.floor(Math.random() * usable.length)].i;
 }
 
-/** Everything that happens once per TURN seconds for the side's active Pokémon. */
-function doTurn(b: Battle, s: 0 | 1, out: Ev[]) {
+/** What the CPU does this round. */
+function cpuChoice(b: Battle): Choice {
+  const smart = DIFFICULTY[b.difficulty].smart;
+  const me = activeOf(b, 1);
+  const foe = activeOf(b, 0);
+  // a clever opponent steps out when nothing it knows can hurt the foe
+  if (smart >= 0.9 && alive(b.sides[1]) > 1 && Math.random() < 0.5) {
+    const w = activeWeather(b);
+    const best = Math.max(...me.moves.map((mv) => damageRange(me, foe, mv, w).max));
+    if (best === 0) {
+      const r = bestReplacement(b, 1);
+      if (r >= 0 && canSwitch(b, 1, r) === "ok") return { kind: "switch", idx: r };
+    }
+  }
+  return { kind: "move", i: chooseMove(b, 1, smart) };
+}
+
+/** The player's auto-pilot choice. */
+export function autoChoice(b: Battle): Choice {
+  return { kind: "move", i: chooseMove(b, 0, 0.9) };
+}
+
+/** Everything that happens at the end of a round for the side's active Pokémon. */
+function endTurn(b: Battle, s: 0 | 1, out: Ev[]) {
   const me = activeOf(b, s);
   const foe = activeOf(b, other(s));
   if (me.fainted) return;
   const w = activeWeather(b);
   me.turn += 1;
+  if (me.vol.cnf > 0) me.vol.cnf -= 1;
+  if (me.vol.inf > 0) me.vol.inf -= 1;
 
   // sudden death: nobody gets to stall forever
-  if (b.time >= SUDDEN_DEATH) {
-    chip(b, s, me.maxHp * 0.06, "sudden", out);
+  if (b.round >= SUDDEN_ROUND) {
+    // 6% at first, then 2% more every round, so even the strongest healing ability is outpaced
+    chip(b, s, me.maxHp * (0.06 + 0.02 * (b.round - SUDDEN_ROUND)), "sudden", out);
     if (me.fainted || b.winner !== -1) return;
   }
   if (!hasFx(me, "noChip")) {
@@ -776,9 +818,7 @@ function doTurn(b: Battle, s: 0 | 1, out: Ev[]) {
     else if (w === "hail" && !me.types.includes("Ice")) chip(b, s, me.maxHp / 16, "hail", out);
     if (me.fainted || b.winner !== -1) return;
   }
-  for (const f of ofType(me, "randImmune")) {
-    me.immuneSet = [...TYPES].sort(() => Math.random() - 0.5).slice(0, f.n);
-  }
+  for (const f of ofType(me, "randImmune")) me.immuneSet = [...TYPES].sort(() => Math.random() - 0.5).slice(0, f.n);
   for (const f of me.fxs) {
     if (me.fainted || b.winner !== -1) return;
     if (f.t === "cure") {
@@ -800,73 +840,85 @@ function doTurn(b: Battle, s: 0 | 1, out: Ev[]) {
   }
 }
 
-/** Advance the battle by `dt` seconds. Returns the events that happened. */
-export function tick(b: Battle, dt: number, autoPilot: boolean): Ev[] {
-  const out: Ev[] = [];
-  if (b.winner !== -1) return out;
-  b.time += dt;
-  if (b.weather.w && Number.isFinite(b.weather.t)) {
-    b.weather.t -= dt;
-    if (b.weather.t <= 0) { b.weather = { w: null, t: 0 }; out.push({ id: b.seq++, k: "weather", w: null }); }
-  }
-  for (const s of [0, 1] as const) {
-    const side = b.sides[s];
-    const me = activeOf(b, s);
+/* ------------------------------------------------------------------ rounds */
 
-    if (me.fainted) {
-      side.pendingSwitch -= dt;
-      if (side.pendingSwitch <= 0 && alive(side) > 0) {
-        const pick = bestReplacement(b, s);
-        if (pick >= 0) switchTo(b, s, pick, out);
-      }
-      continue;
-    }
-    if (me.vol.cnf > 0) me.vol.cnf = Math.max(0, me.vol.cnf - dt);
-    if (me.vol.inf > 0) me.vol.inf = Math.max(0, me.vol.inf - dt);
-    if (me.status === "slp") {
-      me.statusT -= dt;
-      if (me.statusT <= 0) cureStatus(b, s, "wake", out);
-    }
-    side.turnT += dt;
-    while (side.turnT >= TURN && b.winner === -1) {
-      side.turnT -= TURN;
-      doTurn(b, s, out);
-    }
-    if (b.winner !== -1) return out;
-    const now = activeOf(b, s);
-    if (now.fainted) continue;
-    if (side.lock > 0) side.lock = Math.max(0, side.lock - dt);
-    else if (now.status !== "slp" && side.gauge < 100) side.gauge = Math.min(100, side.gauge + (dt * 100) / chargeTime(b, s));
-  }
-  // actions (fastest first so the speedier Pokémon wins a tie)
+export type Choice = { kind: "move"; i: number } | { kind: "switch"; idx: number };
+
+/** Who acts first: priority, then Speed (stages, status, abilities), then a coin flip. */
+function turnOrder(b: Battle, choices: [Choice, Choice]): (0 | 1)[] {
   const w = activeWeather(b);
-  const spe = (s: 0 | 1) => effStat(activeOf(b, s), "spe", { w, foe: activeOf(b, other(s)) });
-  const order: (0 | 1)[] = spe(0) >= spe(1) ? [0, 1] : [1, 0];
-  for (const s of order) {
-    const side = b.sides[s];
-    const me = activeOf(b, s);
-    if (b.winner !== -1 || me.fainted || side.lock > 0 || side.gauge < 100 || me.status === "slp") continue;
-    if (s === 1) performMove(b, 1, chooseMove(b, 1, DIFFICULTY[b.difficulty].smart), out);
-    else if (autoPilot) performMove(b, 0, chooseMove(b, 0, 0.9), out);
+  const key = (s: 0 | 1) => {
+    const m = activeOf(b, s);
+    const sp = ofType(m, "speed").reduce((a, f) => a * f.m, 1);
+    return { prio: m.prio, spe: effStat(m, "spe", { w, foe: activeOf(b, other(s)) }) * sp };
+  };
+  const k0 = key(0);
+  const k1 = key(1);
+  void choices;
+  if (k0.prio !== k1.prio) return k0.prio > k1.prio ? [0, 1] : [1, 0];
+  if (k0.spe !== k1.spe) return k0.spe > k1.spe ? [0, 1] : [1, 0];
+  return Math.random() < 0.5 ? [0, 1] : [1, 0];
+}
+
+/**
+ * Plays one round. It is a generator: every `yield` is one step (a switch, an attack, the end-of-round effects) and
+ * the Battle is already updated to that point, so the UI can show each step with its own pause.
+ */
+export function* playRound(b: Battle, player: Choice): Generator<Ev[], void, void> {
+  const out: Ev[] = [];
+  const flush = () => out.splice(0, out.length);
+  b.round += 1;
+  b.moved = [false, false];
+  const choices: [Choice, Choice] = [player, cpuChoice(b)];
+
+  // switches happen first
+  for (const s of [0, 1] as const) {
+    const c = choices[s];
+    if (c.kind === "switch") {
+      switchTo(b, s, c.idx, out);
+      b.moved[s] = true;
+      if (out.length) yield flush();
+    }
   }
-  return out;
+  // then the attacks, fastest first
+  for (const s of turnOrder(b, choices)) {
+    const c = choices[s];
+    if (b.winner !== -1) break;
+    if (c.kind !== "move" || activeOf(b, s).fainted) continue;
+    if (canAct(b, s, out)) performMove(b, s, c.i, out);
+    b.moved[s] = true;
+    if (out.length) yield flush();
+  }
+  for (const s of [0, 1] as const) activeOf(b, s).prio = 0;
+
+  // end of round
+  if (b.winner === -1) {
+    for (const s of turnOrder(b, choices)) {
+      endTurn(b, s, out);
+      if (out.length) yield flush();
+      if (b.winner !== -1) break;
+    }
+  }
+  if (b.winner === -1 && b.weather.w && Number.isFinite(b.weather.t)) {
+    b.weather.t -= 1;
+    if (b.weather.t <= 0) {
+      b.weather = { w: null, t: 0 };
+      out.push({ id: b.seq++, k: "weather", w: null });
+      yield flush();
+    }
+  }
+  // the CPU sends in a replacement; the player is asked to choose theirs
+  if (b.winner === -1 && activeOf(b, 1).fainted && alive(b.sides[1]) > 0) {
+    switchTo(b, 1, bestReplacement(b, 1), out);
+    if (out.length) yield flush();
+  }
+  b.sides[0].needSwitch = b.winner === -1 && activeOf(b, 0).fainted && alive(b.sides[0]) > 0;
 }
 
-/** Player taps a move. */
-export function playerMove(b: Battle, i: number): Ev[] {
+/** The player picks a replacement after their Pokémon fainted. */
+export function* playerReplace(b: Battle, idx: number): Generator<Ev[], void, void> {
   const out: Ev[] = [];
-  const side = b.sides[0];
-  const me = activeOf(b, 0);
-  if (b.winner !== -1 || side.gauge < 100 || side.lock > 0 || me.fainted || me.status === "slp") return out;
-  performMove(b, 0, i, out);
-  return out;
-}
-
-/** Player taps a team member. */
-export function playerSwitch(b: Battle, idx: number): Ev[] {
-  const out: Ev[] = [];
-  if (b.winner === -1) switchTo(b, 0, idx, out);
-  return out;
+  if (b.winner === -1 && switchTo(b, 0, idx, out)) yield out;
 }
 
 /** Rough score: how well the player did, for the result screen. */

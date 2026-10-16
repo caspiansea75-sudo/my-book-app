@@ -4,3 +4,6 @@
 .pk-pt-gauge > i[data-ready="1"] { background: linear-gradient(90deg, #ffcb05, #ff7a00); box-shadow: 0 0 8px #ffcb05; animation: pk-pt-ready 1s ease-in-out infinite; }
 @keyframes pk-pt-ready { 50% { filter: brightness(1.35); } }
 @media (prefers-reduced-motion: reduce) { .pk-pt-gauge > i { animation: none !important; transition: none; } }
+
+/* turn-based battle: round dividers in the log */
+.pk-log p.round { text-align: center; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6; margin-top: 6px; }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Bot, Flag, Pause, Play, Search, Shuffle, Swords, X } from "lucide-react";
+import { Bot, Flag, Search, Shuffle, Swords, X } from "lucide-react";
 import { MusicPanel } from "@/components/pokemon/music-panel";
 import { Sprite, StatBars, TypeBadge, useT } from "@/components/pokemon/ui";
 import { battleAudio } from "@/lib/pokemon/audio";
@@ -13,19 +13,21 @@ import {
   TEAM_SIZE,
   activeOf,
   activeWeather,
-  alive,
   bst,
   cpuTeam,
   damageRange,
   itemsFor,
   makeMon,
+  autoChoice,
+  bestReplacement,
+  canSwitch,
   newBattle,
-  playerMove,
-  playerSwitch,
+  playRound,
+  playerReplace,
   rating,
   startBattle,
-  tick,
   type Battle,
+  type Choice,
   type Difficulty,
   type Ev,
   type ItemRow,
@@ -197,8 +199,8 @@ function Picker({
         </div>
         <p className="mt-1 max-w-2xl font-sans text-sm leading-relaxed text-muted">
           {t(
-            "পেটাউনের আসল স্ট্যাট, চাল, অ্যাবিলিটি ও হোল্ড আইটেম নিয়ে রিয়েল-টাইম লড়াই। প্রতিটি পোকেমনের স্পিড অনুযায়ী গেজ ভরে — ভরলেই চাল দিন। ৩ জন বেছে নিন।",
-            "A real-time brawl using Petown's own stats, moves, abilities and hold items. Each Pokémon's speed fills its gauge — use a move the moment it's ready. Pick up to 3.",
+            "পেটাউনের আসল স্ট্যাট, চাল, অ্যাবিলিটি ও হোল্ড আইটেম নিয়ে টার্ন-ভিত্তিক লড়াই। প্রতি রাউন্ডে একটি চাল বা পোকেমন বদল বাছুন — স্পিডে এগিয়ে থাকা পোকেমন আগে চলে। ৩ জন বেছে নিন।",
+            "A turn-based battle using Petown's own stats, moves, abilities and hold items. Each round you pick a move or a switch — the faster Pokémon acts first. Pick up to 3.",
           )}
         </p>
 
@@ -351,14 +353,16 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
   const [log, setLog] = useState<{ id: number; text: string; cls?: string }[]>([]);
   const [fx, setFx] = useState<Fx[]>([]);
   const [banner, setBanner] = useState<Banner | null>(null);
-  const [paused, setPaused] = useState(false);
   const [auto, setAuto] = useState(false);
-  const [speed, setSpeed] = useState<1 | 2>(1);
+  const [fast, setFast] = useState(false);
   const [intro, setIntro] = useState(true);
   const [done, setDone] = useState(false);
-  const pausedRef = useRef(false);
-  const autoRef = useRef(false);
-  const speedRef = useRef(1);
+  /** choose: your turn · play: a round is being shown · forced: pick the next Pokémon */
+  const [phase, setPhase] = useState<"choose" | "play" | "forced">("choose");
+  const phaseRef = useRef<"choose" | "play" | "forced">("choose");
+  const genRef = useRef<Generator<Ev[], void, void> | null>(null);
+  const timerRef = useRef<number | undefined>(undefined);
+  const fastRef = useRef(false);
   const meRef = useRef<HTMLDivElement | null>(null);
   const foeRef = useRef<HTMLDivElement | null>(null);
   const recorded = useRef(false);
@@ -382,9 +386,8 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
     };
   }, [seed, difficulty]);
 
-  useEffect(() => { pausedRef.current = paused || intro; }, [paused, intro]);
-  useEffect(() => { autoRef.current = auto; }, [auto]);
-  useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+  useEffect(() => { fastRef.current = fast; }, [fast]);
 
   const say = useCallback(
     (text: string, cls?: string, id?: number) => setLog((l) => [...l.slice(-60), { id: id ?? Math.random(), text, cls }]),
@@ -481,7 +484,16 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
             float(e.id, e.side, `-${e.amount}`, "nve");
             break;
           }
-          case "skip": say(`${e.mon} ${e.why === "inf" ? t("মোহে চাল দিতে পারল না!", "is too in love to move!") : t("বিভ্রান্তিতে চাল ব্যর্থ!", "is confused — the move failed!")}`, undefined, e.id); break;
+          case "skip": {
+            const why: Record<string, [string, string]> = {
+              inf: ["মোহে চাল দিতে পারল না!", "is too in love to move!"],
+              cnf: ["বিভ্রান্তিতে চাল ব্যর্থ!", "is confused — the move failed!"],
+              par: ["প্যারালাইসিসে নড়তে পারল না!", "is paralysed — it can't move!"],
+              slp: ["গভীর ঘুমে আছে…", "is fast asleep…"],
+            };
+            say(`${e.mon} ${t(why[e.why][0], why[e.why][1])}`, undefined, e.id);
+            break;
+          }
           case "flinch": say(`${e.mon} ${t("থমকে গেল!", "flinched!")}`, undefined, e.id); break;
           case "reveal": {
             const msg = e.what === "item"
@@ -516,16 +528,34 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // the loop
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (pausedRef.current || b.winner !== -1) return;
-      const evs = tick(b, 0.08 * speedRef.current, autoRef.current);
-      if (evs.length) handle(evs);
-      bump();
-    }, 80);
-    return () => window.clearInterval(id);
-  }, [b, handle]);
+  // Show a round (or a replacement) one step at a time, with a pause after each so it can be followed.
+  const run = useCallback(
+    (gen: Generator<Ev[], void, void>) => {
+      window.clearTimeout(timerRef.current);
+      genRef.current = gen;
+      setPhase("play");
+      const step = () => {
+        const g = genRef.current;
+        if (!g) return;
+        const r = g.next();
+        if (r.done) {
+          genRef.current = null;
+          bump();
+          if (b.winner === -1) setPhase(b.sides[0].needSwitch ? "forced" : "choose");
+          return;
+        }
+        handle(r.value);
+        bump();
+        const hits = r.value.filter((e) => e.k === "dmg" || e.k === "status" || e.k === "stage" || e.k === "heal" || e.k === "chip").length;
+        const faint = r.value.some((e) => e.k === "faint");
+        const ms = (700 + hits * 250 + (faint ? 600 : 0)) * (fastRef.current ? 0.45 : 1);
+        timerRef.current = window.setTimeout(step, ms);
+      };
+      step();
+    },
+    [b, handle],
+  );
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
   // record the result once
   useEffect(() => {
@@ -537,23 +567,62 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
     saveRecord(r);
   }, [done, b]);
 
-  const doMove = useCallback((i: number) => {
-    if (pausedRef.current) return;
-    const evs = playerMove(b, i);
-    if (evs.length) { handle(evs); bump(); }
-  }, [b, handle]);
-  const swap = useCallback((i: number) => {
-    if (pausedRef.current) return;
-    const evs = playerSwitch(b, i);
-    if (evs.length) { handle(evs); bump(); }
-  }, [b, handle]);
+  const choose = useCallback(
+    (c: Choice) => {
+      if (phaseRef.current !== "choose" || b.winner !== -1) return;
+      say(`— ${t("রাউন্ড", "Round")} ${b.round + 1} —`, "round", Math.random());
+      run(playRound(b, c));
+    },
+    [b, run, say, t],
+  );
+  const doMove = useCallback(
+    (i: number) => {
+      const m = activeOf(b, 0);
+      if (m.fainted || (m.moves[i] && m.moves[i].pp <= 0 && m.moves.some((x) => x.pp > 0))) return;
+      choose({ kind: "move", i });
+    },
+    [b, choose],
+  );
+  const swap = useCallback(
+    (i: number) => {
+      if (b.winner !== -1) return;
+      if (phaseRef.current === "forced") {
+        if (canSwitch(b, 0, i) === "ok") run(playerReplace(b, i));
+        return;
+      }
+      if (phaseRef.current !== "choose") return;
+      const verdict = canSwitch(b, 0, i);
+      if (verdict === "trapped") {
+        const by = activeOf(b, 1).name;
+        say(`${by} ${t("পথ আটকে রেখেছে — বদলানো যাবে না!", "blocks the way — you can't switch!")}`, "faint", Math.random());
+        setBanner({ id: Math.random(), text: t("আটকা পড়েছেন!", "TRAPPED!"), cls: "nve" });
+        window.setTimeout(() => setBanner(null), 1000);
+      } else if (verdict === "ok") choose({ kind: "switch", idx: i });
+    },
+    [b, choose, run, say, t],
+  );
+
+  // auto-pilot: picks moves and replacements for you
+  useEffect(() => {
+    if (!auto || intro || done || b.winner !== -1) return;
+    if (phase === "choose") {
+      const id = window.setTimeout(() => choose(autoChoice(b)), fast ? 350 : 900);
+      return () => window.clearTimeout(id);
+    }
+    if (phase === "forced") {
+      const id = window.setTimeout(() => {
+        const r = bestReplacement(b, 0);
+        if (r >= 0) swap(r);
+      }, fast ? 300 : 700);
+      return () => window.clearTimeout(id);
+    }
+  }, [auto, intro, done, phase, fast, b, choose, swap]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
       if (e.key >= "1" && e.key <= "4") doMove(Number(e.key) - 1);
-      else if (e.key === " ") { e.preventDefault(); setPaused((p) => !p); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -563,8 +632,8 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
   const op = activeOf(b, 1);
   const weather = activeWeather(b);
   const mySide = b.sides[0];
-  const ready = mySide.gauge >= 100 && mySide.lock <= 0 && !me.fainted && b.winner === -1;
-  const forced = me.fainted && alive(mySide) > 0 && b.winner === -1;
+  const myTurn = phase === "choose" && !intro && !me.fainted && b.winner === -1;
+  const forced = phase === "forced" && b.winner === -1;
   const logRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log.length]);
   const rate = b.winner === 0 ? rating(b) : null;
@@ -592,13 +661,12 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
           ))}
           {banner ? <div key={banner.id} className={`pk-banner ${banner.cls}`}>{banner.text}</div> : null}
         </div>
-        <HpBox mon={op} gauge={b.sides[1].gauge} side="foe" />
-        <HpBox mon={me} gauge={mySide.gauge} side="me" />
+        <HpBox mon={op} side="foe" />
+        <HpBox mon={me} side="me" />
         <div className="pk-field">
-          <span>{t("সময়", "Time")} {Math.floor(b.time)}s</span>
+          <span>{t("রাউন্ড", "Round")} {phase === "play" ? Math.max(1, b.round) : b.round + 1}</span>
           <span>{t("CPU", "CPU")}: {t(DIFFICULTY[difficulty].bn, DIFFICULTY[difficulty].en)}</span>
-          {b.weather.w ? <span>{t(WEATHER_LABEL[b.weather.w].bn, WEATHER_LABEL[b.weather.w].en)}{Number.isFinite(b.weather.t) ? ` ${Math.ceil(b.weather.t)}s` : ""}{weather ? "" : ` (${t("বাতিল", "negated")})`}</span> : null}
-          {paused ? <span>⏸ {t("বিরতি", "Paused")}</span> : null}
+          {b.weather.w ? <span>{t(WEATHER_LABEL[b.weather.w].bn, WEATHER_LABEL[b.weather.w].en)}{Number.isFinite(b.weather.t) ? ` · ${b.weather.t} ${t("রাউন্ড", "rounds")}` : ""}{weather ? "" : ` (${t("বাতিল", "negated")})`}</span> : null}
         </div>
 
         {intro ? (
@@ -623,7 +691,7 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
               <div className={b.winner === 0 ? "pk-trophy" : "pk-skull"} aria-hidden="true">{b.winner === 0 ? "🏆" : "💀"}</div>
               <h2 className={`pk-big ${b.winner === 0 ? "win" : "lose"}`}>{b.winner === 0 ? t("জয়!", "VICTORY!") : t("হার!", "DEFEAT")}</h2>
               <p className="mt-3 font-sans text-sm text-white/85">
-                {t("সময়", "Time")} {Math.floor(b.time)}s · {t("হিট", "Hits")} {b.stats.hits} · {t("ক্রিট", "Crits")} {b.stats.crits} · {t("সর্বোচ্চ আঘাত", "Biggest hit")} {b.stats.maxHit}
+                {t("রাউন্ড", "Rounds")} {b.round} · {t("হিট", "Hits")} {b.stats.hits} · {t("ক্রিট", "Crits")} {b.stats.crits} · {t("সর্বোচ্চ আঘাত", "Biggest hit")} {b.stats.maxHit}
               </p>
               {rate?.flawless ? <p className="mt-2 font-display text-xl text-[#ffcb05]">👑 {t("ফ্ললেস ভিক্টরি — একজনও হারেনি!", "Flawless — nobody fainted!")}</p> : rate ? <p className="mt-2 font-sans text-sm text-white/85">{rate.survivors} {t("জন টিকে আছে", "survived")}</p> : null}
               <div className="mt-5 flex flex-wrap justify-center gap-2 font-sans text-sm">
@@ -637,19 +705,15 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
 
       <div className="pk-dock">
         <div className="flex flex-wrap items-center gap-2 font-sans text-xs">
-          <span className={`pk-ribbon ${ready ? "" : "opacity-60"}`} style={ready ? undefined : { animation: "none" }}>
-            {forced ? t(`পরের পোকেমন বাছুন (${Math.max(0, Math.ceil(mySide.pendingSwitch))}s)`, `Choose your next Pokémon (${Math.max(0, Math.ceil(mySide.pendingSwitch))}s)`) : ready ? t("চাল দিন!", "Strike now!") : t("চার্জ হচ্ছে…", "Charging…")}
+          <span className={`pk-ribbon ${myTurn || forced ? "" : "opacity-60"}`} style={myTurn || forced ? undefined : { animation: "none" }}>
+            {forced ? t("পরের পোকেমন বাছুন", "Choose your next Pokémon") : myTurn ? t(`${me.name} কী করবে?`, `What will ${me.name} do?`) : b.winner !== -1 ? t("লড়াই শেষ", "Battle over") : t("লড়াই চলছে…", "Battle in progress…")}
           </span>
           <span className="ml-auto flex flex-wrap items-center gap-1.5">
             <MusicPanel />
             <button type="button" className="pk-gbtn" data-on={auto ? "1" : "0"} onClick={() => setAuto((a) => !a)}>
               <Bot className="mr-1 inline size-3.5" aria-hidden="true" />{t("অটো", "Auto")}
             </button>
-            <button type="button" className="pk-gbtn" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>
-              {paused ? <Play className="mr-1 inline size-3.5" aria-hidden="true" /> : <Pause className="mr-1 inline size-3.5" aria-hidden="true" />}
-              {paused ? t("চালু", "Resume") : t("বিরতি", "Pause")}
-            </button>
-            <button type="button" className="pk-gbtn" onClick={() => setSpeed((s) => (s === 1 ? 2 : 1))}>{speed}×</button>
+            <button type="button" className="pk-gbtn" data-on={fast ? "1" : "0"} onClick={() => setFast((f) => !f)} title={t("দ্রুত চালান", "Play faster")}>⏩ {t("দ্রুত", "Fast")}</button>
             <button type="button" className="pk-gbtn" onClick={onExit}><Flag className="mr-1 inline size-3.5" aria-hidden="true" />{t("হার মানুন", "Forfeit")}</button>
           </span>
         </div>
@@ -661,7 +725,7 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
             const pctLo = Math.min(100, Math.round((r.min / op.maxHp) * 100));
             const pctHi = Math.min(100, Math.round((r.max / op.maxHp) * 100));
             return (
-              <button key={m.name} type="button" disabled={!ready || dead} onClick={() => doMove(i)} className="pk-move w-full" style={{ ["--c" as string]: TYPE_COLOR[m.type] ?? "#68a090" }}>
+              <button key={m.name} type="button" disabled={!myTurn || dead} onClick={() => doMove(i)} className="pk-move w-full" style={{ ["--c" as string]: TYPE_COLOR[m.type] ?? "#68a090" }}>
                 <b className="flex items-center justify-between gap-2"><span className="truncate">{m.name}</span><span className="pk-kbd">{i + 1}</span></b>
                 <small>
                   <TypeBadge type={m.type} small />
@@ -680,7 +744,7 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
             const pct = Math.round((m.hp / m.maxHp) * 100);
             const active = i === mySide.active && !m.fainted;
             return (
-              <button key={m.uid} type="button" disabled={m.fainted || active || b.winner !== -1} onClick={() => swap(i)} className={`pressable flex items-center gap-2 rounded-xl border px-2 py-1.5 text-left font-sans text-xs ${active ? "border-lamp bg-surface-2" : "border-border bg-bg"} disabled:opacity-60`}>
+              <button key={m.uid} type="button" disabled={m.fainted || active || b.winner !== -1 || (phase === "play") || (phase === "choose" && !myTurn)} onClick={() => swap(i)} className={`pressable flex items-center gap-2 rounded-xl border px-2 py-1.5 text-left font-sans text-xs ${active ? "border-lamp bg-surface-2" : "border-border bg-bg"} disabled:opacity-60`}>
                 <Pic look={monLook(m)} still className="size-9 shrink-0 object-contain" />
                 <span className="min-w-0 flex-1">
                   <b className="block truncate text-fg">{m.name}</b>
@@ -688,13 +752,13 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
                     <i className="block h-full rounded-full" style={{ width: `${pct}%`, background: pct > 50 ? "#4cd964" : pct > 20 ? "#ffcc00" : "#ff3b30" }} />
                   </span>
                 </span>
-                <span className="text-[11px] text-muted">{m.fainted ? "✕" : active ? t("মাঠে", "In") : t("বদলান", "Swap")}</span>
+                <span className="text-[11px] text-muted">{m.fainted ? "✕" : active ? t("মাঠে", "In") : forced ? t("পাঠান", "Send") : t("বদলান", "Swap")}</span>
               </button>
             );
           })}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-sans text-[11px] text-muted">
-          <span>⌨ 1–4 {t("চাল", "moves")} · {t("স্পেস = বিরতি", "Space = pause")}</span>
+          <span>⌨ 1–4 {t("চাল", "moves")} · {t("পোকেমন বদলালে সেই রাউন্ডের চাল যায়", "Switching uses your turn")}</span>
           {me.item ? <span>🎒 {me.item[0]}</span> : null}
           {me.curAbility ? <span title={abilitySummary(me.curAbility, lg)}>✦ {me.curAbility}</span> : null}
           {op.curAbility ? <span title={abilitySummary(op.curAbility, lg)}>🤖 {op.name}: ✦ {op.curAbility}</span> : null}
@@ -721,7 +785,7 @@ function MonView({ mon, side, anim, back }: { mon: Mon; side: "me" | "foe"; anim
   );
 }
 
-function HpBox({ mon, gauge, side }: { mon: Mon; gauge: number; side: "me" | "foe" }) {
+function HpBox({ mon, side }: { mon: Mon; side: "me" | "foe" }) {
   const { lang } = useT();
   const pct = Math.max(0, Math.round((mon.hp / mon.maxHp) * 100));
   const lvl = pct <= 20 ? "low" : pct <= 50 ? "mid" : "hi";
@@ -744,7 +808,6 @@ function HpBox({ mon, gauge, side }: { mon: Mon; gauge: number; side: "me" | "fo
       <div className="pk-hp-row" style={{ justifyContent: "space-between", marginTop: 2, fontSize: 11, opacity: 0.9 }}>
         <span>{mon.hp}/{mon.maxHp}</span>
       </div>
-      <div className="pk-pt-gauge" aria-hidden="true"><i data-ready={gauge >= 100 ? "1" : "0"} style={{ width: `${Math.min(100, gauge)}%` }} /></div>
     </div>
   );
 }
