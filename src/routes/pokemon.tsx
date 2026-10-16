@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect, useRouterState } from "@tanstack/react-router";
 import { SiteNav } from "@/components/book/site-nav";
 import { PokePage } from "@/components/pokemon/ui";
 import { redirectGuest } from "@/lib/auth/guest";
@@ -13,11 +13,15 @@ export const Route = createFileRoute("/pokemon")({
 });
 
 function PokemonLayout() {
+  // Keyed by the page, so the "page opens" effects (see .pk-enter in pokemon.css) play on every tab and every battle.
+  const path = useRouterState({ select: (st) => st.location.pathname });
   return (
     <main className="mf-page relative min-h-dvh">
       <PokePage>
         <SiteNav active="pokemon" />
-        <Outlet />
+        <div key={path} className="pk-enter">
+          <Outlet />
+        </div>
       </PokePage>
     </main>
   );
