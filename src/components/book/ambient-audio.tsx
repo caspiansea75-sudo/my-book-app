@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useReaderStore, type ThemeId } from "@/lib/reader-store";
+import { onThunder } from "@/lib/thunder-bus";
 
 /**
  * Ambient sound bed, generated entirely in the Web Audio graph — no audio
@@ -70,6 +71,24 @@ export function AmbientAudio() {
     // volume is intentionally excluded — handled by the effect above so
     // dragging the slider never rebuilds the noise graph.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [on, theme]);
+
+  // Thunder: the lightning on screen tells us, and the rumble follows a moment later (monsoon only).
+  useEffect(() => {
+    if (!on || theme !== "monsoon") return;
+    const timers = new Set<number>();
+    const off = onThunder(({ delayMs, power }) => {
+      const id = window.setTimeout(() => {
+        timers.delete(id);
+        const g = graphRef.current;
+        if (g && g.ctx.state === "running") rumble(g.ctx, g.master, power);
+      }, delayMs);
+      timers.add(id);
+    });
+    return () => {
+      off();
+      for (const id of timers) window.clearTimeout(id);
+    };
   }, [on, theme]);
 
   // Full cleanup on unmount (e.g. navigating away from the reader).
@@ -218,4 +237,41 @@ function softTick(
   osc.connect(envelope);
   osc.start(at);
   osc.stop(at + opts.dur);
+}
+
+/** A long, low rolling rumble: filtered brown noise that swells, rolls and fades away. */
+function rumble(ctx: AudioContext, master: GainNode, power: number) {
+  const dur = 3.6 + power * 1.6;
+  const len = Math.ceil(ctx.sampleRate * dur);
+  const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+    data[i] = last * 3.4;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const low = ctx.createBiquadFilter();
+  low.type = "lowpass";
+  low.frequency.setValueAtTime(260, ctx.currentTime);
+  low.frequency.exponentialRampToValueAtTime(70, ctx.currentTime + dur);
+  const env = ctx.createGain();
+  const t = ctx.currentTime;
+  const peak = 3.2 * power;
+  env.gain.setValueAtTime(0.0001, t);
+  env.gain.linearRampToValueAtTime(peak, t + 0.18);
+  env.gain.linearRampToValueAtTime(peak * 0.45, t + 0.9);
+  env.gain.linearRampToValueAtTime(peak * 0.8, t + 1.5); // the second roll
+  env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(low);
+  low.connect(env);
+  env.connect(master);
+  src.start(t);
+  src.stop(t + dur);
+  src.onended = () => {
+    src.disconnect();
+    low.disconnect();
+    env.disconnect();
+  };
 }

@@ -11,6 +11,7 @@ import {
   Search,
   Shuffle,
   SlidersHorizontal,
+  Sparkles,
   Square,
   X,
 } from "lucide-react";
@@ -125,6 +126,8 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
   const mangaStats = useContentStats("manga");
   const theme = useReaderStore((s) => s.theme);
   const setTheme = useReaderStore((s) => s.setTheme);
+  const fx = useReaderStore((s) => s.fx);
+  const setFx = useReaderStore((s) => s.setFx);
   const progress = useReaderStore((s) => s.progress);
   const lastByBook = useReaderStore((s) => s.lastByBook);
   const navigate = useNavigate();
@@ -359,6 +362,19 @@ export function LibraryPage({ books, manga = [] }: { books: LibraryBookCard[]; m
               {t.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setFx(fx === "full" ? "lite" : "full")}
+            aria-pressed={fx === "full"}
+            title="থিমের বৃষ্টি, বজ্র, হাওয়া ও আলোর অ্যানিমেশন"
+            className={cn(
+              "pressable inline-flex h-10 items-center gap-1.5 rounded-full border px-3 font-sans text-xs",
+              fx === "full" ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+            )}
+          >
+            <Sparkles className="size-3.5" strokeWidth={1.75} />
+            {fx === "full" ? "ইফেক্ট: পূর্ণ" : "ইফেক্ট: হালকা"}
+          </button>
         </div>
 
         {tab === "books" && continueBooks.length ? (

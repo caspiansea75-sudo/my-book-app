@@ -5,6 +5,7 @@ import { GALLERY_EXACT, GALLERY_PATTERNS } from "@/lib/i18n/dict-gallery";
 import { LIBRARY_EXACT, LIBRARY_PATTERNS } from "@/lib/i18n/dict-library";
 import { STUDIO_EXACT } from "@/lib/i18n/dict-studio";
 import { FIXES_EXACT, FIXES_PATTERNS } from "@/lib/i18n/dict-fixes";
+import { FX_EXACT } from "@/lib/i18n/dict-fx";
 
 const PATTERN_LIST = [...GALLERY_PATTERNS, ...LIBRARY_PATTERNS, ...PATTERNS, ...FIXES_PATTERNS].map(([src, en]) => [new RegExp(src), en] as const);
 const BN_DIGITS = "০১২৩৪৫৬৭৮৯";
@@ -22,7 +23,7 @@ export function translateText(text: string): string | null {
   return hit == null ? null : lead + hit + trail;
 }
 
-const DICTS = [AUTH_EXACT, GALLERY_EXACT, LIBRARY_EXACT, STUDIO_EXACT, CHAT_EXACT, EXACT, FIXES_EXACT];
+const DICTS = [FX_EXACT, AUTH_EXACT, GALLERY_EXACT, LIBRARY_EXACT, STUDIO_EXACT, CHAT_EXACT, EXACT, FIXES_EXACT];
 const has = Object.prototype.hasOwnProperty;
 function exact(core: string): string | null {
   for (const d of DICTS) if (has.call(d, core)) return d[core];
