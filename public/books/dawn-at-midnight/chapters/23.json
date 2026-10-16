@@ -1,0 +1,24 @@
+{
+  "id": 23,
+  "slug": "23",
+  "title": "Part 3: Rise from ashes",
+  "titleEn": "Part 3: Rise from ashes",
+  "excerpt": "Part 3: Rise from ashes",
+  "paraCount": 1,
+  "nsfwCount": 0,
+  "chars": 23,
+  "sections": [
+    {
+      "id": "main",
+      "title": "",
+      "paragraphs": [
+        {
+          "text": "Part 3: Rise from ashes",
+          "kind": "p",
+          "id": "p-23-1",
+          "nsfw": false
+        }
+      ]
+    }
+  ]
+}
