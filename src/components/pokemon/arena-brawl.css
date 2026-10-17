@@ -1,0 +1,80 @@
+/* Arena Brawl screens. Uses the site's theme variables so it matches every theme. */
+.ab { display: grid; gap: 16px; }
+.ab-stage { position: relative; width: 100%; max-width: 960px; margin: 0 auto; aspect-ratio: 960 / 600; border-radius: 16px; overflow: hidden; border: 1px solid var(--book-border); background: #060a12; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ab-stage canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; }
+
+/* ----- HUD */
+.ab-hud { position: absolute; inset: 0; pointer-events: none; font-family: var(--font-sans); color: #f3f6ff; }
+.ab-me { position: absolute; left: 10px; top: 10px; width: min(44%, 300px); padding: 8px 10px; border-radius: 12px; background: rgba(8, 12, 22, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(4px); }
+.ab-me b { font-size: clamp(11px, 2.4vw, 14px); }
+.ab-me small { opacity: 0.7; font-size: clamp(9px, 2vw, 11px); margin-left: 6px; }
+.ab-bar { position: relative; height: clamp(8px, 1.8vw, 12px); margin-top: 5px; border-radius: 99px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.ab-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; }
+.ab-bar .ghost { background: rgba(255, 255, 255, 0.8); transition: none; }
+.ab-bar .fill { transition: width 0.12s linear; }
+.ab-top { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 5px 12px; border-radius: 99px; background: rgba(8, 12, 22, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); font-size: clamp(10px, 2.2vw, 13px); font-weight: 700; white-space: nowrap; }
+.ab-top span { opacity: 0.75; font-weight: 500; }
+.ab-combo { position: absolute; left: 12px; top: 74px; font-weight: 900; font-size: clamp(14px, 3.4vw, 24px); color: #ffd54a; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); transition: transform 0.12s; }
+.ab-combo.pulse { transform: scale(1.25); }
+.ab-tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; pointer-events: auto; }
+.ab-ic { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(8, 12, 22, 0.72); color: #fff; font-size: 15px; cursor: pointer; }
+.ab-ic:hover { background: rgba(40, 52, 80, 0.9); }
+
+/* ----- moves and dodge */
+.ab-moves { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; max-width: 960px; margin: 0 auto; width: 100%; }
+.ab-mv { position: relative; overflow: hidden; display: grid; gap: 2px; padding: 8px 6px; border-radius: 12px; border: 1px solid var(--book-border); background: var(--book-surface); color: var(--book-fg); text-align: center; font-family: var(--font-sans); cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; }
+.ab-mv:active { transform: scale(0.97); }
+.ab-mv .nm { font-size: clamp(10px, 2.3vw, 13px); font-weight: 700; line-height: 1.15; }
+.ab-mv .ky { font-size: 10px; opacity: 0.6; }
+.ab-mv .ic { display: grid; place-items: center; height: 22px; }
+.ab-mv .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); transition: height 0.08s linear; }
+.ab-mv.ready { border-color: var(--c, var(--book-lamp)); box-shadow: 0 0 0 1px var(--c, var(--book-lamp)) inset; }
+.ab-mv.dodge { --c: #7fe3ff; }
+
+/* ----- joystick (touch) */
+.ab-joy { position: absolute; left: 14px; bottom: 14px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 2px solid rgba(255, 255, 255, 0.18); pointer-events: auto; touch-action: none; display: none; }
+.ab-joy i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); border: 2px solid rgba(255, 255, 255, 0.5); }
+@media (pointer: coarse) { .ab-joy { display: block; } }
+
+/* ----- overlays */
+.ab-ov { position: absolute; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(4, 7, 14, 0.74); backdrop-filter: blur(3px); color: #f3f6ff; text-align: center; font-family: var(--font-sans); overflow: auto; }
+.ab-ov h2 { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 5vw, 38px); }
+.ab-ov p { margin: 6px 0 0; opacity: 0.8; font-size: clamp(11px, 2.3vw, 14px); }
+.ab-perks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; width: min(100%, 640px); }
+.ab-perk { padding: 14px 8px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(255, 255, 255, 0.07); color: inherit; font: inherit; cursor: pointer; }
+.ab-perk:hover { background: rgba(255, 255, 255, 0.16); border-color: var(--book-lamp); transform: translateY(-2px); }
+.ab-perk .em { font-size: 30px; }
+.ab-perk b { display: block; margin-top: 4px; font-size: clamp(12px, 2.6vw, 15px); }
+.ab-perk span { display: block; margin-top: 2px; font-size: clamp(10px, 2.2vw, 12px); opacity: 0.8; }
+.ab-btn { padding: 11px 22px; border-radius: 99px; border: 0; background: var(--book-accent); color: var(--book-accent-fg); font: 700 15px var(--font-sans); cursor: pointer; }
+.ab-btn.ghost { background: transparent; border: 1px solid rgba(255, 255, 255, 0.3); color: inherit; }
+.ab-row { display: flex; gap: 10px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+.ab-stats { display: grid; grid-template-columns: repeat(2, auto); gap: 4px 18px; margin: 12px auto 0; font-size: 14px; text-align: left; }
+.ab-stats b { text-align: right; }
+
+/* ----- the menu */
+.ab-menu { display: grid; gap: 14px; max-width: 960px; margin: 0 auto; width: 100%; }
+.ab-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ab-mode { padding: 14px; text-align: left; border-radius: 14px; border: 1px solid var(--book-border); background: var(--book-surface); color: var(--book-fg); font-family: var(--font-sans); cursor: pointer; }
+.ab-mode.on { border-color: var(--book-lamp); box-shadow: 0 0 0 1px var(--book-lamp) inset; background: color-mix(in oklab, var(--book-lamp) 10%, var(--book-surface)); }
+.ab-mode b { display: block; font-size: 16px; }
+.ab-mode span { display: block; margin-top: 3px; font-size: 12px; opacity: 0.75; line-height: 1.45; }
+.ab-roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.ab-card { position: relative; display: grid; justify-items: center; gap: 2px; padding: 8px 4px 6px; border-radius: 12px; border: 1px solid var(--book-border); background: var(--book-surface); color: var(--book-fg); font-family: var(--font-sans); cursor: pointer; }
+.ab-card img { width: 58px; height: 58px; object-fit: contain; image-rendering: pixelated; }
+.ab-card b { font-size: 12px; }
+.ab-card.on { border-color: var(--book-lamp); box-shadow: 0 0 0 2px var(--book-lamp) inset; }
+.ab-card.lock { opacity: 0.45; }
+.ab-detail { display: grid; gap: 10px; padding: 14px; border-radius: 14px; border: 1px solid var(--book-border); background: var(--book-surface); font-family: var(--font-sans); }
+.ab-detail h3 { margin: 0; font-family: var(--font-display); font-size: 22px; }
+.ab-mvlist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ab-mvlist div { padding: 7px 9px; border-radius: 10px; border: 1px solid var(--book-border); font-size: 12px; line-height: 1.35; }
+.ab-mvlist b { display: block; font-size: 13px; }
+.ab-help { font-size: 12px; opacity: 0.75; line-height: 1.7; }
+.ab-help kbd { padding: 1px 6px; border-radius: 5px; border: 1px solid var(--book-border); background: var(--book-surface-2); font-size: 11px; }
+@media (max-width: 640px) {
+  .ab-moves { grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .ab-mv { padding: 6px 3px; }
+  .ab-perks { grid-template-columns: 1fr; }
+  .ab-mvlist { grid-template-columns: 1fr; }
+}
