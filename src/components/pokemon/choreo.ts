@@ -18,7 +18,7 @@ import { attackAnim, fk, reactAnim } from "@/components/pokemon/anims";
 import * as J from "@/components/pokemon/juice";
 
 export type FxKind = "ring" | "mega" | "flash" | "zbeam" | "zaura" | "cloud" | "shards" | "sparks" | "arrow" | "label" | "num" | "banner" | "aura" | "burst" | "typefx" | "ball" | "band" | "shield";
-export type Fx = { id: number; kind: FxKind; side?: SideId; to?: SideId; color?: string; text?: string; up?: boolean; extra?: string; delay?: number; t0?: number; dur?: number };
+export type Fx = { id: number; kind: FxKind; side?: SideId; to?: SideId; color?: string; text?: string; up?: boolean; extra?: string; delay?: number; t0?: number; dur?: number; type?: string };
 export type LastMove = { from: SideId; to: SideId; type: string; cat: string; name: string; motion: Motion };
 
 export type Ctx = {
@@ -71,7 +71,7 @@ export function playMove(ctx: Ctx, cue: Cue) {
   const sg = dir.x > 0 ? 1 : -1;
   const motion = motionFor(name, type, cat);
   ctx.last.current = { from, to, type, cat, name, motion };
-  ctx.add({ kind: "band", side: from, text: name, color: c, extra: from === ctx.mine ? "me" : "foe" }, 1250);
+  ctx.add({ kind: "band", side: from, text: name, color: c, type, extra: from === ctx.mine ? "me" : "foe" }, 1400);
   const attacker = ctx.anim(from);
 
   if (cat === "Status") {
@@ -265,6 +265,7 @@ export function playFaint(ctx: Ctx, cue: Cue) {
 
   if (byMove && last.cat === "Special") {
     // burnt to ashes: scorched, it crumbles upward
+    body?.parentElement?.setAttribute("data-ko", "1");
     body?.animate(
       [
         { filter: "brightness(1) sepia(0)", opacity: 1, transform: "translate(0,0) scale(1)", offset: 0 },
@@ -273,7 +274,7 @@ export function playFaint(ctx: Ctx, cue: Cue) {
         { filter: "brightness(0.12) blur(2px)", opacity: 0.6, transform: "translate(0,-8%) scale(0.96, 1.08)", offset: 0.7 },
         { filter: "brightness(0) blur(6px)", opacity: 0, transform: "translate(0,-18%) scale(0.8, 1.2)", offset: 1 },
       ],
-      { duration: Math.max(T(860), 820), easing: "ease-in" },
+      { duration: Math.max(T(860), 820), easing: "ease-in", fill: "forwards" },
     );
     J.ashes(ctx.layer, B, 34);
     ctx.zoom(0.04, T(700));
@@ -282,6 +283,7 @@ export function playFaint(ctx: Ctx, cue: Cue) {
 
   if (byMove && last.cat === "Physical") {
     // pop like a balloon: it swells and shudders, then goes off in a shower of colour
+    body?.parentElement?.setAttribute("data-ko", "1");
     body?.animate(
       [
         { transform: "scale(1)", opacity: 1, offset: 0 },
@@ -292,7 +294,7 @@ export function playFaint(ctx: Ctx, cue: Cue) {
         { transform: "scale(0.1)", opacity: 0, offset: 0.45 },
         { transform: "scale(0.1)", opacity: 0, offset: 1 },
       ],
-      { duration: Math.max(T(860), 820), easing: "ease-in-out" },
+      { duration: Math.max(T(860), 820), easing: "ease-in-out", fill: "forwards" },
     );
     wait(T(860 * 0.43), () => {
       J.popBurst(ctx.layer, B, c);

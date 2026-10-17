@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Link } from "@tanstack/react-router";
 import { Avatar } from "@/components/members/avatar";
 import { Sprite, useT } from "@/components/pokemon/ui";
+import "@/components/pokemon/battle-juice.css";
 import { fk, pathY } from "@/components/pokemon/anims";
 import { TypeIcon, TypeIcons } from "@/components/pokemon/type-icons";
 import type { BattleView, PersonLite } from "@/lib/pokemon-api";
@@ -130,12 +131,18 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, speed = 1, ch
       case "faint":
         playFaint(ctx, cue);
         break;
-      case "switch":
+      case "switch": {
+        // a Pokémon coming in starts clean: nothing left over from the one that left (a KO pose, a knock-back…)
+        const gone = ctx.kb(cue.side!);
+        for (const an of [...(gone?.getAnimations() ?? []), ...(refOf(cue.side)?.getAnimations() ?? [])]) an.cancel();
+        gone?.classList.remove("pk-white");
+        gone?.parentElement?.removeAttribute("data-ko");
         add({ kind: "ball", side: cue.side }, 1100);
         add({ kind: "ring", side: cue.side, color: "#ff4d4d", delay: 430 }, 1600);
         add({ kind: "flash", side: cue.side, delay: 430 }, 1300);
         jolt(refOf(cue.side), [{ transform: "scale(0.1)", filter: "brightness(4)", opacity: 0 }, { transform: "scale(1.18)", filter: "brightness(1.8)", opacity: 1, offset: 0.55 }, { transform: "scale(1)", filter: "brightness(1)", opacity: 1 }], 650, 430);
         break;
+      }
       case "heal":
         playHeal(ctx, cue);
         if (cue.amount) add({ kind: "num", side: cue.side, text: `+${cue.amount}%`, extra: "heal" }, 1400);
@@ -269,6 +276,14 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, speed = 1, ch
 
 function MonView({ mon, side, sprites, anim, kb, back }: { mon: Mon | null; side: "me" | "foe"; sprites: Record<string, SpriteInfo>; anim: React.RefObject<HTMLDivElement | null>; kb: React.RefObject<HTMLDivElement | null>; back?: boolean }) {
   const info = mon ? spriteOf(sprites, mon.species) : null;
+  // A new or revived Pokémon must never inherit the faint pose of the one before it.
+  useEffect(() => {
+    if (mon?.fainted) return;
+    const el = kb.current;
+    for (const an of [...(el?.getAnimations() ?? []), ...(anim.current?.getAnimations() ?? [])]) an.cancel();
+    el?.classList.remove("pk-white");
+    el?.parentElement?.removeAttribute("data-ko");
+  }, [mon?.species, mon?.fainted, kb, anim]);
   return (
     <div
       className={`pk-mon ${side}`}
@@ -554,9 +569,11 @@ function FxView({ fx, mine }: { fx: Fx; mine: SideId }) {
     case "num": return <div className={`pk-float-num ${fx.extra ?? ""}`} style={{ left: `${at.x}%`, top: `${at.y - 6}%`, ["--dx" as string]: `${((fx.id * 37) % 7 - 3) * 9}px` }}>{fx.text}</div>;
     case "banner": return <div className={`pk-banner ${fx.extra ?? ""}`}>{fx.text}</div>;
     case "band":
+      // The move's name: a small tag beside the attacker's HP box, not a banner across the scene.
       return (
-        <div className="pk-band" style={{ ["--c" as string]: c }}>
-          <b>{fx.text}</b>
+        <div className={`pk-move-tag ${fx.extra ?? ""}`} style={{ ["--c" as string]: c }}>
+          {fx.type ? <TypeIcon type={fx.type} size={16} /> : null}
+          <span>{fx.text}</span>
         </div>
       );
     default: return null;

@@ -7,6 +7,7 @@
  */
 import type { BState, Cue, SideId } from "@/lib/pokemon/protocol";
 import { getCustomBlob } from "@/lib/pokemon/custom-music";
+import { AILMENT_RX, FIELD_RX, motionFor } from "@/lib/pokemon/motion";
 import { JINGLES, TRACKS, type BuiltTrack, type Jingle, type Note } from "@/lib/pokemon/tracks";
 
 export type AudioSettings = { master: number; music: number; sfx: number; muted: boolean; track: string };
@@ -47,6 +48,8 @@ class BattleAudio {
   private lowTimer: ReturnType<typeof setInterval> | null = null;
   private lowOn = false;
   private auto = "trainer";
+  /** The move being played out: a hit or a KO sounds different after a physical blow than after a spell. */
+  private lastMove: { type: string; cat: string; name: string } | null = null;
   private finished = false;
   private token = 0;
   private listeners = new Set<() => void>();
@@ -414,6 +417,65 @@ class BattleAudio {
     this.tone("sine", 130, t, 0.2, 0.55 * power, d, { slideTo: 42, attack: 0.001 });
     this.noiseHit(t, 0.13, 0.28 * power, d, { type: "lowpass", f0: 1000, f1: 300 });
   }
+  /** A physical blow landing: a sharp crack on top of a short, hard thump. */
+  private whack(t: number, power: number) {
+    const d = this.sfxBus!;
+    this.noiseHit(t, 0.06, 0.4 * power, d, { type: "bandpass", f0: 2600, q: 1.1 });
+    this.tone("triangle", 210, t, 0.11, 0.34 * power, d, { slideTo: 60, attack: 0.001 });
+    this.thud(t, 0.8 * power);
+  }
+  /** A spell landing: a rolling boom with a bright sparkle on top. */
+  private boom(t: number, power: number) {
+    const d = this.sfxBus!;
+    this.noiseHit(t, 0.45, 0.32 * power, d, { type: "lowpass", f0: 1700, f1: 130 });
+    this.tone("sine", 125, t, 0.5, 0.38 * power, d, { slideTo: 36, attack: 0.002 });
+    this.sparkle(t + 0.03);
+  }
+  /** Power gathering before a spell is released. */
+  private charge(t: number, dur: number) {
+    this.tone("sawtooth", 150, t, dur, 0.08, this.sfxBus!, { slideTo: 900, attack: 0.05 });
+    this.whoosh(t, dur, 300, 3800, 0.1);
+  }
+  /** A balloon pop. */
+  private pop(t: number) {
+    const d = this.sfxBus!;
+    this.noiseHit(t, 0.07, 0.42, d, { type: "bandpass", f0: 3200, q: 0.8 });
+    this.tone("square", 900, t, 0.08, 0.12, d, { slideTo: 1900, attack: 0.001 });
+  }
+  /** Burnt to ashes: a hiss, a few crackles, a sinking tone. */
+  private ash(t: number) {
+    const d = this.sfxBus!;
+    this.noiseHit(t, 0.9, 0.2, d, { type: "lowpass", f0: 2600, f1: 220 });
+    for (let i = 0; i < 6; i++) this.noiseHit(t + 0.12 + i * 0.1 + Math.random() * 0.04, 0.03, 0.14, d, { type: "highpass", f0: 4200 });
+    this.tone("sine", 320, t, 0.9, 0.14, d, { slideTo: 70 });
+  }
+  /** Sounds for moves that do no damage: each kind has its own voice. */
+  private statusMove(c: Cue, t: number, k: number) {
+    const d = this.sfxBus!;
+    const name = (c.moveName ?? "").toLowerCase();
+    const motion = motionFor(c.moveName ?? "", c.moveType ?? "Normal", "Status");
+    const aimedAtFoe = !!c.side && !!c.from && c.side !== c.from;
+    if (FIELD_RX.test(name)) {
+      this.whoosh(t, 0.9 * k, 200, 2600, 0.22);
+      this.tone("triangle", 110, t, 0.8 * k, 0.12, d, { slideTo: 160 });
+    } else if (motion === "heal") {
+      this.arpUp(t, [72, 76, 79, 84, 88], 0.08 * k, "sine", 0.16);
+    } else if (motion === "curl") {
+      this.noiseHit(t, 0.18, 0.16, d, { type: "highpass", f0: 5000 });
+      this.tone("triangle", 880, t, 0.3, 0.12, d, { slideTo: 1320 });
+      this.tone("triangle", 1320, t + 0.1, 0.4, 0.1, d);
+    } else if (motion === "roar") {
+      this.tone("sawtooth", 120, t, 0.6 * k, 0.16, d, { slideTo: 70 });
+      this.noiseHit(t, 0.6 * k, 0.16, d, { type: "lowpass", f0: 900, f1: 300 });
+    } else if (aimedAtFoe) {
+      this.tone("square", 520, t + 0.1 * k, 0.4 * k, 0.09, d, { slideTo: 190 });
+      this.whoosh(t + 0.1 * k, 0.4 * k, 1800, 500, 0.12);
+      if (AILMENT_RX.test(name)) this.tone("triangle", 220, t + 0.5 * k, 0.3, 0.1, d, { slideTo: 150 });
+    } else {
+      this.arpUp(t, [60, 64, 67, 72, 76], 0.07 * k, "square", 0.1);
+      this.whoosh(t, 0.4 * k, 400, 2600, 0.12);
+    }
+  }
   private whoosh(t: number, dur: number, f0: number, f1: number, gain = 0.2) {
     this.noiseHit(t, dur, gain, this.sfxBus!, { type: "bandpass", f0, f1, q: 2 });
   }
@@ -450,29 +512,62 @@ class BattleAudio {
   }
 
   /** Reacts to the arena animations. `mine` is the side the viewer plays (or null when watching). */
-  cue(c: Cue, _state: BState, _mine: SideId | null) {
+  cue(c: Cue, _state: BState, _mine: SideId | null, speed = 1) {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== "running" || !this.sfxBus) return;
     const t = ctx.currentTime + 0.01;
     const d = this.sfxBus;
+    const k = 1 / (speed || 1);
     switch (c.kind) {
-      case "move": this.attackSound(c.moveType ?? "Normal", c.cat, t); break;
+      case "move": {
+        const type = c.moveType ?? "Normal";
+        this.lastMove = { type, cat: c.cat ?? "Physical", name: c.moveName ?? "" };
+        if (c.cat === "Status") this.statusMove(c, t, k);
+        else if (c.cat === "Special") {
+          // the charge rises, then the spell is released
+          this.charge(t, 0.34 * k);
+          this.attackSound(type, c.cat, t + 0.37 * k);
+        } else {
+          // a short wind-up, then the swing a moment before contact
+          this.tone("triangle", 90, t, 0.3 * k, 0.05, d, { slideTo: 130, attack: 0.1 });
+          this.attackSound(type, c.cat, t + 0.48 * k);
+        }
+        break;
+      }
       case "hit": {
         const power = 0.4 + Math.min(1, (c.amount ?? 20) / 50);
-        this.thud(t, power);
+        if (c.text) this.tone("triangle", 260, t, 0.06, 0.1, d, { slideTo: 180 }); // damage over time: just a tick
+        else if (this.lastMove?.cat === "Special") this.boom(t, power);
+        else this.whack(t, power);
         if (c.effect === "se") this.arpUp(t + 0.08, [88, 95], 0.07, "square", 0.1);
         if (c.effect === "nve") this.tone("sine", 160, t + 0.05, 0.2, 0.18, d, { slideTo: 110 });
         if (c.effect === "crit") { this.noiseHit(t, 0.08, 0.3, d, { type: "highpass", f0: 3000 }); this.arpUp(t + 0.05, [96, 100], 0.05, "square", 0.12); }
         break;
       }
-      case "faint": this.tone("sine", 440, t, 0.8, 0.22, d, { slideTo: 90 }); this.noiseHit(t + 0.5, 0.3, 0.1, d, { type: "lowpass", f0: 800, f1: 200 }); break;
+      case "faint":
+        if (this.lastMove?.cat === "Special") this.ash(t);
+        else if (this.lastMove?.cat === "Physical") {
+          this.tone("triangle", 300, t, 0.34 * k, 0.1, d, { slideTo: 700 }); // swelling
+          this.pop(t + 0.37 * k);
+        } else {
+          this.tone("sine", 440, t, 0.8, 0.22, d, { slideTo: 90 });
+          this.noiseHit(t + 0.5, 0.3, 0.1, d, { type: "lowpass", f0: 800, f1: 200 });
+        }
+        break;
       case "switch": this.tone("sine", 400, t, 0.1, 0.18, d, { slideTo: 900 }); this.arpUp(t + 0.43, [79, 84, 91], 0.05, "square", 0.08); break;
       case "heal": this.arpUp(t, [72, 76, 79, 84], 0.07, "sine", 0.16); break;
       case "boost":
         if (c.up) this.tone("square", 300, t, 0.28, 0.09, d, { slideTo: 900 });
         else this.tone("square", 900, t, 0.28, 0.09, d, { slideTo: 300 });
         break;
-      case "status": for (let i = 0; i < 6; i++) this.tone("triangle", i % 2 ? 330 : 280, t + i * 0.06, 0.06, 0.12, d); break;
+      case "status":
+        if (c.text === "brn") { for (let i = 0; i < 8; i++) this.noiseHit(t + i * 0.05, 0.04, 0.12, d, { type: "highpass", f0: 3500 + i * 200 }); this.whoosh(t, 0.4, 400, 1800, 0.12); }
+        else if (c.text === "par") { for (let i = 0; i < 6; i++) this.tone("square", 600 + (i % 2) * 500, t + i * 0.04, 0.04, 0.1, d); this.noiseHit(t, 0.2, 0.1, d, { type: "highpass", f0: 5000 }); }
+        else if (c.text === "slp") this.arpUp(t, [84, 79, 76, 72], 0.14, "sine", 0.12);
+        else if (c.text === "frz") { this.arpUp(t, [96, 100, 103, 108], 0.04, "sine", 0.1); this.noiseHit(t + 0.15, 0.25, 0.1, d, { type: "highpass", f0: 6000 }); }
+        else if (c.text === "psn" || c.text === "tox") { for (let i = 0; i < 4; i++) this.tone("sine", 260 + i * 70, t + i * 0.08, 0.1, 0.12, d, { slideTo: 400 + i * 70 }); }
+        else for (let i = 0; i < 6; i++) this.tone("triangle", i % 2 ? 330 : 280, t + i * 0.06, 0.06, 0.12, d);
+        break;
       case "mega": this.arpUp(t, [60, 64, 67, 72, 76, 79, 84, 88], 0.07, "square", 0.1); this.sparkle(t + 0.4); break;
       case "tera": for (let i = 0; i < 6; i++) this.tone("sine", 1500 + i * 420, t + i * 0.08, 0.35, 0.09, d); break;
       case "zpower": this.arpUp(t, [60, 64, 67, 72, 76], 0.09, "square", 0.1); this.whoosh(t, 0.7, 300, 5000, 0.2); break;

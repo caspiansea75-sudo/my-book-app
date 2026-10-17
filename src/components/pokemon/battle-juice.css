@@ -1,0 +1,78 @@
+/* Battle "juice": the layout the new move animations need, plus the HP bar, damage numbers and the move-name tag.
+   Rules that restyle existing parts start with .pk-scene so they win whatever order the stylesheets load in. */
+
+/* ------------------------------------------------------------ Pokémon wrappers */
+/* .pk-kb sits between the spot a Pokémon stands on and its animation box: it takes knock-back and the white flash. */
+.pk-scene .pk-kb { display: grid; place-items: end center; width: 100%; height: 100%; transform-origin: 50% 100%; }
+.pk-scene .pk-kb.pk-white { filter: brightness(0) invert(1); }
+/* a Pokémon that was knocked out by a move plays its own pose, so the plain fade stands aside */
+.pk-scene .pk-mon[data-ko="1"] .pk-mon-inner { transition: none; transform: none; filter: none; opacity: 1; }
+
+/* ------------------------------------------------------------------ particles */
+.pk-scene .pk-juice { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.pk-scene .pk-p { position: absolute; display: block; width: var(--s, 6px); height: var(--s, 6px); margin: 0; padding: 0; opacity: 0; pointer-events: none; font-style: normal; line-height: 1; mix-blend-mode: screen; will-change: transform, opacity; }
+.pk-scene .pk-p-dot { border-radius: 50%; background: radial-gradient(circle, #fff 0 25%, var(--c) 58%, transparent 78%); box-shadow: 0 0 8px var(--c); }
+.pk-scene .pk-p-streak { width: calc(var(--s, 6px) * 2.6); height: calc(var(--s, 6px) * 0.34); border-radius: 99px; background: linear-gradient(90deg, transparent, var(--c) 45%, #fff); box-shadow: 0 0 6px var(--c); }
+.pk-scene .pk-p-glyph { width: auto; height: auto; font: 800 var(--s, 14px) / 1 var(--font-sans); color: var(--c); text-shadow: 0 0 8px var(--c), 0 1px 0 rgba(0, 0, 0, 0.4); mix-blend-mode: normal; white-space: nowrap; }
+.pk-scene .pk-p-ring { border-radius: 50%; border: 2px solid var(--c); box-shadow: 0 0 12px var(--c), inset 0 0 10px var(--c); }
+.pk-scene .pk-p-smoke { border-radius: 50%; background: radial-gradient(circle, var(--c), transparent 70%); mix-blend-mode: normal; filter: blur(2px); }
+.pk-scene .pk-p-shard { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); background: linear-gradient(135deg, #fff, var(--c)); }
+.pk-scene .pk-p-star { clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); background: radial-gradient(circle, #fff 30%, var(--c)); filter: drop-shadow(0 0 6px var(--c)); }
+.pk-scene .pk-p-glow { border-radius: 50%; background: radial-gradient(circle, color-mix(in oklab, var(--c) 70%, #fff) 0%, var(--c) 32%, transparent 68%); filter: blur(2px); }
+
+/* the glowing core of a spell in flight */
+.pk-scene .pk-core { position: absolute; left: 50%; top: 50%; z-index: 9; width: var(--s, 26px); height: var(--s, 26px); border-radius: 50%; opacity: 0; pointer-events: none; mix-blend-mode: screen; will-change: left, top, transform, opacity;
+  background: radial-gradient(circle, #fff 0 22%, color-mix(in oklab, var(--c) 70%, #fff) 38%, var(--c) 60%, transparent 76%);
+  box-shadow: 0 0 14px 4px var(--c), 0 0 34px 12px color-mix(in oklab, var(--c) 55%, transparent); }
+.pk-scene .pk-core-diamond { border-radius: 0; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); box-shadow: none; filter: drop-shadow(0 0 8px var(--c)); }
+.pk-scene .pk-core-ring { background: radial-gradient(circle, #fff 0 14%, transparent 16%), radial-gradient(circle, transparent 0 44%, var(--c) 52%, transparent 70%); box-shadow: 0 0 18px 4px var(--c); }
+.pk-scene .pk-core-spark { border-radius: 0; clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%); box-shadow: none; filter: drop-shadow(0 0 8px var(--c)); }
+.pk-scene .pk-core-drop { border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%; }
+
+/* weather, terrain, hazards: a band of colour across the field */
+.pk-scene .pk-sweep { position: absolute; inset: 0; z-index: 7; pointer-events: none; mix-blend-mode: screen; background: linear-gradient(100deg, transparent 8%, color-mix(in oklab, var(--c) 52%, transparent) 38%, color-mix(in oklab, var(--c) 28%, transparent) 62%, transparent 92%); }
+
+/* ------------------------------------------------------------------- HP bar */
+/* drains smoothly; a pale ghost stays behind and catches up late; green → amber at half → red in the last quarter */
+.pk-scene .pk-bar { position: relative; }
+.pk-scene .pk-bar > i { position: absolute; left: 0; top: 0; display: block; height: 100%; width: var(--w, 100%); border-radius: inherit; transition: width 0.75s cubic-bezier(0.22, 1, 0.36, 1), background 0.4s; }
+.pk-scene .pk-bar > i[data-lvl] { z-index: 1; }
+.pk-scene .pk-bar > i[data-lvl="mid"] { background: #ffb020; }
+.pk-scene .pk-bar > i.ghost { z-index: 0; background: rgba(255, 255, 255, 0.78); transition: width 1s cubic-bezier(0.22, 1, 0.36, 1) 0.4s; }
+.pk-scene .pk-bar > i.ghost[data-snap="1"] { transition: none; }
+
+/* ------------------------------------------------------------ damage numbers */
+/* pop in with a bounce, then drift up and away; bigger and warmer for bigger hits */
+.pk-scene .pk-float-num { animation: pk-num-pop 1.35s cubic-bezier(0.2, 0.85, 0.3, 1) both; }
+@keyframes pk-num-pop {
+  0% { transform: translate(-50%, -30%) scale(0.3); opacity: 0; }
+  10% { transform: translate(-50%, -70%) scale(1.55); opacity: 1; }
+  20% { transform: translate(-50%, -78%) scale(1); }
+  72% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx, 0px)), -190%) scale(0.9); opacity: 0; }
+}
+.pk-scene .pk-float-num.small { font-size: clamp(12px, 2.6vw, 17px); }
+.pk-scene .pk-float-num.big { font-size: clamp(20px, 4.4vw, 34px); color: #ffe08a; }
+.pk-scene .pk-float-num.huge { font-size: clamp(26px, 5.6vw, 44px); color: #ff9a3c; }
+.pk-scene .pk-float-num.se { color: #ff6a4d; }
+.pk-scene .pk-float-num.nve { font-size: clamp(14px, 3vw, 20px); color: #b8c4d0; }
+.pk-scene .pk-float-num.crit { font-size: clamp(26px, 5.6vw, 44px); color: #ff5a2e; }
+.pk-scene .pk-float-num.crit::before { content: "CRIT!"; display: block; text-align: center; font-size: 0.42em; letter-spacing: 0.16em; color: #ffd54a; }
+
+/* -------------------------------------------------------------- move-name tag */
+/* the move's name sits beside the HP box of whoever uses it: small, quick, out of the way of the Pokémon */
+.pk-scene .pk-move-tag { position: absolute; z-index: 11; display: inline-flex; align-items: center; gap: 6px; max-width: 48%; padding: 4px 11px 4px 6px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.14); border-left: 3px solid var(--c); background: rgba(12, 16, 22, 0.82); backdrop-filter: blur(6px); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); color: #f2ede4; font: 700 clamp(11px, 2.6vw, 14px) / 1.2 var(--font-sans); white-space: nowrap; pointer-events: none; animation: pk-tag 1.4s ease both; }
+.pk-scene .pk-move-tag > span { overflow: hidden; text-overflow: ellipsis; }
+.pk-scene .pk-move-tag.foe { left: 3%; top: calc(5% + 62px); }
+.pk-scene .pk-move-tag.me { right: 3%; bottom: calc(5% + 62px); }
+@keyframes pk-tag {
+  0% { opacity: 0; transform: translateY(6px) scale(0.96); }
+  12% { opacity: 1; transform: none; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-scene .pk-float-num, .pk-scene .pk-move-tag { animation-duration: 0.01s; animation-delay: 0s; }
+  .pk-scene .pk-bar > i, .pk-scene .pk-bar > i.ghost { transition: none; }
+}
