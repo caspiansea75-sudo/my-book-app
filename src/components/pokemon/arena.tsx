@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { Link } from "@tanstack/react-router";
 import { Avatar } from "@/components/members/avatar";
 import { Sprite, useT } from "@/components/pokemon/ui";
+import { fk, pathY } from "@/components/pokemon/anims";
 import { TypeIcon, TypeIcons } from "@/components/pokemon/type-icons";
 import type { BattleView, PersonLite } from "@/lib/pokemon-api";
 import { hpPercent, type BState, type Cue, type Mon, type SideId } from "@/lib/pokemon/protocol";
+import { CENTER, playBoost, playFaint, playHeal, playHit, playMiss, playMove, playStatus, type Ctx, type Fx, type FxKind, type LastMove } from "@/components/pokemon/choreo";
 import {
   FLAWLESS_LINES,
   CLOSE_LINES,
@@ -21,10 +23,6 @@ import {
 
 /* ============================================================ the scene */
 
-type FxKind = "ring" | "mega" | "flash" | "zbeam" | "zaura" | "cloud" | "shards" | "sparks" | "arrow" | "label" | "num" | "banner" | "aura" | "burst" | "typefx" | "ball" | "band" | "shield";
-type Fx = { id: number; kind: FxKind; side?: SideId; to?: SideId; color?: string; text?: string; up?: boolean; extra?: string; delay?: number };
-
-const CENTER = { me: { x: 27, y: 62 }, foe: { x: 72, y: 33 } };
 let fxCounter = 0;
 const weatherLabel: Record<string, string> = { RainDance: "🌧️ Rain", SunnyDay: "☀️ Sun", Sandstorm: "🌪️ Sand", Snow: "❄️ Snow", Hail: "🧊 Hail", DesolateLand: "🔥 Harsh Sun", PrimordialSea: "🌊 Heavy Rain", DeltaStream: "🌀 Delta Stream" };
 const STATUS_LABEL: Record<string, string> = { brn: "BRN", par: "PAR", slp: "SLP", frz: "FRZ", psn: "PSN", tox: "TOX" };
@@ -47,124 +45,6 @@ const SLASH_TYPES = new Set(["Normal", "Fighting", "Steel", "Bug", "Dark", "Rock
 const SCREEN_FX = new Set<FxKind>(["band", "banner", "num"]);
 
 
-/* ------------------------------------------------- how Pokémon move when they attack and get hit */
-
-type Motion = "dash" | "jump" | "spin" | "dig" | "bite" | "uppercut" | "slam" | "charge" | "dance" | "curl" | "heal" | "roar" | "quake";
-const RX = {
-  quake: /^(earthquake|magnitude|bulldoze|stomping tantrum|fissure|precipice blades)$/i,
-  dig: /^(dig|burrow|sand tomb)$/i,
-  jump: /(jump|bounce|flying press|sky|dive|pounce|leap|brave bird|^fly$|acrobatics|dragon ascent|aerial|stomp|plunge|hyperspace)/i,
-  spin: /(spin|gyro|twister|whirl|roll|tornado|drill|screw|blade|wheel|pinwheel)/i,
-  bite: /(bite|crunch|fang|chomp|gnaw|peck|horn|pierce|sting|claw|slash|scratch|cut|shear)/i,
-  slam: /(slam|hammer|smash|crush|body|double.edge|take down|giga impact|wild charge|head|explosion|self-destruct|tackle|bulk)/i,
-  curl: /(protect|detect|harden|withdraw|defense curl|iron defense|barrier|acid armor|cotton guard|shelter|endure|spiky shield|king's shield|baneful bunker|obstruct|substitute|light screen|reflect|aurora veil|mist|safeguard|wide guard|quick guard|mat block|silk trap|burning bulwark)/i,
-  heal: /(recover|roost|heal|synthesis|moonlight|morning sun|soft-?boiled|slack off|milk drink|rest|wish|shore up|life dew|jungle healing|aqua ring|ingrain|strength sap)/i,
-  dance: /(dance|swords|nasty plot|calm mind|bulk up|agility|growth|work up|coil|shell smash|tail glow|geomancy|meditate|hone claws|sharpen|howl|cosmic power|amnesia|minimize|rock polish|autotomize|belly drum|victory)/i,
-};
-function motionFor(name: string, type: string, cat?: string): Motion {
-  if (cat === "Status") {
-    if (RX.curl.test(name)) return "curl";
-    if (RX.heal.test(name)) return "heal";
-    if (RX.dance.test(name)) return "dance";
-    return "roar";
-  }
-  if (RX.quake.test(name)) return "quake";
-  if (RX.dig.test(name)) return "dig";
-  if (cat === "Special") return "charge";
-  if (RX.jump.test(name)) return "jump";
-  if (RX.spin.test(name)) return "spin";
-  if (RX.bite.test(name)) return "bite";
-  if (RX.slam.test(name)) return "slam";
-  if (type === "Fighting") return "uppercut";
-  return "dash";
-}
-
-/** One animation frame; every frame uses the same list of transform functions so the browser blends them smoothly. */
-const fk = (offset: number, x: number, y: number, rot = 0, sx = 1, sy = 1, b = 1, glow = "transparent", r = 0, opacity = 1): Keyframe => ({
-  offset,
-  transform: `translate(${x}%, ${y}%) rotate(${rot}deg) scale(${sx}, ${sy})`,
-  filter: `brightness(${b}) drop-shadow(0 0 ${r}px ${glow})`,
-  opacity,
-});
-
-function attackAnim(m: Motion, d: { x: number; y: number }, g: string): { frames: Keyframe[]; ms: number } {
-  const sg = d.x > 0 ? 1 : -1;
-  switch (m) {
-    case "jump":
-      return { ms: 800, frames: [fk(0, 0, 0), fk(0.12, 0, 5, 0, 1.06, 0.88), fk(0.42, d.x * 0.45, d.y * 0.45 - 40, -12 * sg, 1, 1.05), fk(0.62, d.x, d.y, 8 * sg, 1.12, 1.12, 1.3, g, 12), fk(0.72, d.x, d.y, 0, 1.14, 0.88), fk(1, 0, 0)] };
-    case "spin":
-      return { ms: 720, frames: [fk(0, 0, 0), fk(0.5, d.x * 0.9, d.y * 0.9, 360 * sg, 1.1, 1.1, 1.3, g, 10), fk(1, 0, 0, 720 * sg)] };
-    case "dig":
-      return { ms: 950, frames: [fk(0, 0, 0), fk(0.25, 0, 60, 0, 0.8, 0.4, 0.7, "transparent", 0, 0.3), fk(0.55, d.x, d.y + 50, 0, 0.8, 0.4, 0.7, "transparent", 0, 0.3), fk(0.7, d.x, d.y - 12, 0, 1.1, 1.25, 1.2), fk(1, 0, 0)] };
-    case "bite":
-      return { ms: 720, frames: [fk(0, 0, 0), fk(0.3, d.x, d.y, 0, 1.1, 1.1), fk(0.38, d.x + 3, d.y, -4 * sg, 1.1, 1.1), fk(0.46, d.x - 3, d.y, 4 * sg, 1.1, 1.1), fk(0.54, d.x + 3, d.y, -4 * sg, 1.1, 1.1), fk(0.62, d.x - 2, d.y, 3 * sg, 1.1, 1.1), fk(1, 0, 0)] };
-    case "uppercut":
-      return { ms: 720, frames: [fk(0, 0, 0), fk(0.18, 0, 6, 0, 1.05, 0.82), fk(0.5, d.x * 0.8, d.y * 0.8 - 30, -18 * sg, 1.05, 1.15, 1.3, g, 12), fk(0.65, d.x * 0.9, d.y * 0.9 - 12, -10 * sg, 1.08, 1.08), fk(1, 0, 0)] };
-    case "slam":
-      return { ms: 740, frames: [fk(0, 0, 0), fk(0.3, d.x * 0.3, d.y * 0.3 - 22, -6 * sg, 1.05, 1.1), fk(0.5, d.x, d.y, 10 * sg, 1.15, 0.95, 1.3, g, 12), fk(0.62, d.x, d.y, 0, 1.18, 0.85), fk(1, 0, 0)] };
-    case "charge":
-      return { ms: 820, frames: [fk(0, 0, 0), fk(0.35, -d.x * 0.1, -d.y * 0.1, -6 * sg, 0.96, 1.05, 1.4, g, 22), fk(0.55, -d.x * 0.12, -d.y * 0.12, -6 * sg, 0.96, 1.05, 1.6, g, 28), fk(0.7, d.x * 0.18, d.y * 0.18, 4 * sg, 1.1, 1, 1.8, g, 30), fk(1, 0, 0)] };
-    case "dance":
-      return { ms: 1000, frames: [fk(0, 0, 0), fk(0.15, -4, -2, -8, 1, 1, 1.2, g, 10), fk(0.3, 4, -2, 8, 1, 1, 1.2, g, 10), fk(0.45, -4, -2, -8, 1, 1, 1.2, g, 10), fk(0.6, 4, -2, 8, 1, 1, 1.2, g, 10), fk(0.8, 0, -6, 0, 1.06, 1.06, 1.4, g, 14), fk(1, 0, 0)] };
-    case "curl":
-      return { ms: 900, frames: [fk(0, 0, 0), fk(0.3, 0, 6, 0, 0.82, 0.8, 1.5, g, 16), fk(0.75, 0, 6, 0, 0.82, 0.8, 1.5, g, 16), fk(1, 0, 0)] };
-    case "heal":
-      return { ms: 900, frames: [fk(0, 0, 0), fk(0.3, 0, -6, 0, 1.05, 1.08, 1.3, "#6df08a", 12), fk(0.55, 0, 0), fk(0.75, 0, -5, 0, 1.04, 1.06, 1.3, "#6df08a", 12), fk(1, 0, 0)] };
-    case "roar":
-      return { ms: 800, frames: [fk(0, 0, 0), fk(0.12, 0, 0, 0, 1.14, 1.14, 1.2, g, 12), fk(0.2, -2, 0, -2, 1.14, 1.14), fk(0.3, 2, 0, 2, 1.14, 1.14), fk(0.4, -2, 0, -2, 1.14, 1.14), fk(0.5, 2, 0, 2, 1.14, 1.14), fk(0.6, -1, 0, -1, 1.12, 1.12), fk(0.8, 0, 0, 0, 1.1, 1.1), fk(1, 0, 0)] };
-    case "quake":
-      return { ms: 650, frames: [fk(0, 0, 0), fk(0.25, 0, -16, 0, 0.96, 1.1), fk(0.45, 0, 3, 0, 1.12, 0.86), fk(0.55, 0, 0), fk(1, 0, 0)] };
-    default:
-      return { ms: 560, frames: [fk(0, 0, 0), fk(0.42, d.x, d.y, 0, 1.08, 1.08, 1.15, g, 8), fk(1, 0, 0)] };
-  }
-}
-
-const fil = (b = 1, h = 0, sat = 1, blur = 0) => `brightness(${b}) hue-rotate(${h}deg) saturate(${sat}) blur(${blur}px)`;
-const rk = (offset: number, x = 0, rot = 0, sx = 1, sy = 1, filter = fil(), opacity = 1): Keyframe => ({
-  offset,
-  transform: `translate(${x}%, 0%) rotate(${rot}deg) scale(${sx}, ${sy})`,
-  filter,
-  opacity,
-});
-/** How a Pokémon reacts to being hit by an attack of this type. `k` is -1 / 1: which way it is knocked back. */
-function reactAnim(type: string, k: number): { frames: Keyframe[]; ms: number } {
-  switch (type) {
-    case "Electric": {
-      const f = [rk(0)];
-      for (let i = 1; i <= 9; i++) f.push(rk(i / 10, i % 2 ? 5 : -5, 0, 1, 1, i % 2 ? fil(2.4, 0, 1.6) : fil(1.1)));
-      f.push(rk(1));
-      return { ms: 520, frames: f };
-    }
-    case "Fire": return { ms: 640, frames: [rk(0), rk(0.15, 2, 0, 1, 1, fil(1.6, -25, 3)), rk(0.3, -2), rk(0.45, 2, 0, 1, 1, fil(1.6, -25, 3)), rk(0.6), rk(0.75, 0, 0, 1, 1, fil(1.5, -25, 3)), rk(1)] };
-    case "Ice": return { ms: 900, frames: [rk(0), rk(0.12, 0, 0, 0.96, 0.96, fil(1.8, 170, 2.2)), rk(0.7, 0, 0, 0.96, 0.96, fil(1.6, 170, 2)), rk(1)] };
-    case "Water": return { ms: 600, frames: [rk(0), rk(0.2, k * 8, 0, 1.14, 0.86, fil(1.2, 190, 1.4)), rk(0.5, k * 3, 0, 0.94, 1.06), rk(1)] };
-    case "Grass": return { ms: 640, frames: [rk(0), rk(0.2, -2, -9), rk(0.4, 2, 9), rk(0.6, -1, -6), rk(0.8, 0, 3), rk(1)] };
-    case "Poison": return { ms: 640, frames: [rk(0), rk(0.2, 2, -4, 1, 1, fil(1.1, 250, 2)), rk(0.4, -2, 4, 1, 1, fil(1.1, 250, 2)), rk(0.7, 1, -2, 1, 1, fil(1.1, 250, 2)), rk(1)] };
-    case "Psychic": return { ms: 700, frames: [rk(0), rk(0.2, 0, -9, 1, 1, fil(1.3, 300, 1.5)), rk(0.45, 0, 9, 1, 1, fil(1.3, 300, 1.5)), rk(0.7, 0, -5, 1, 1, fil(1.2, 300, 1.4)), rk(1)] };
-    case "Ghost": return { ms: 800, frames: [rk(0), rk(0.2, 0, 0, 1, 1, fil(1, 0, 1, 1.5), 0.2), rk(0.4), rk(0.6, 0, 0, 1, 1, fil(1, 0, 1, 1.5), 0.2), rk(0.8), rk(1)] };
-    case "Dark": return { ms: 640, frames: [rk(0), rk(0.15, 0, 0, 1, 1, fil(0.35)), rk(0.3, 3, 0, 1, 1, fil(0.35)), rk(0.45, -3, 0, 1, 1, fil(0.4)), rk(0.7, 0, 0, 1, 1, fil(0.55)), rk(1)] };
-    case "Fairy": return { ms: 640, frames: [rk(0), rk(0.2, 0, 0, 1.12, 1.12, fil(1.7, 0, 1.6)), rk(0.4, 0, 0, 0.94, 0.94), rk(0.6, 0, 0, 1.08, 1.08, fil(1.4, 0, 1.4)), rk(1)] };
-    case "Flying": return { ms: 640, frames: [rk(0), rk(0.5, k * 14, k * 180, 1, 1, fil(1.4)), rk(1, 0, k * 360)] };
-    case "Bug": return { ms: 520, frames: [rk(0), rk(0.1, 2.5, 0, 1, 1, fil(1.5)), rk(0.2, -2.5), rk(0.3, 2.5, 0, 1, 1, fil(1.5)), rk(0.4, -2.5), rk(0.5, 2, 0, 1, 1, fil(1.5)), rk(0.6, -2), rk(1)] };
-    case "Steel": return { ms: 560, frames: [rk(0), rk(0.1, 0, 0, 1, 1, fil(3, 0, 0.2)), rk(0.2, k * -3), rk(0.35, k * 3, 0, 1, 1, fil(1.6)), rk(1)] };
-    default: return { ms: 620, frames: [rk(0), rk(0.18, k * 13, k * 7, 1, 1, fil(2.4)), rk(0.4, k * 9, k * 4, 1, 1, fil(1.2)), rk(0.7, k * 3), rk(1)] };
-  }
-}
-
-/** The wiggle a flying attack takes on its way across, in percent of the scene height. */
-function pathY(type: string, t: number): number {
-  const arc = Math.sin(Math.PI * t);
-  switch (type) {
-    case "Fire": return -13 * arc;
-    case "Water": return -4 * arc;
-    case "Electric": return (Math.floor(t * 8) % 2 ? 7 : -7) * arc;
-    case "Psychic": case "Ghost": case "Fairy": return 7 * Math.sin(t * Math.PI * 4);
-    case "Grass": case "Bug": return 5 * Math.sin(t * Math.PI * 6);
-    case "Ice": case "Steel": case "Rock": return 0;
-    default: return -8 * arc;
-  }
-}
-
 const hashStr = (str: string) => Array.from(str).reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
 const SIG_KIDS: Record<string, number> = { Fire: 3, Ice: 5, Psychic: 3, Ground: 2, Poison: 3, Flying: 3, Grass: 3, Bug: 3 };
 function Sig({ type, style }: { type: string; style: CSSProperties }) {
@@ -179,13 +59,19 @@ function Sig({ type, style }: { type: string; style: CSSProperties }) {
 
 const spriteOf = (sprites: Record<string, SpriteInfo>, species: string): SpriteInfo => sprites[species] ?? { id: guessSpriteId(species), num: 0, types: [] };
 
-export function BattleScene({ state, you, sprites, cue, theme = 0, children }: { state: BState; you: SideId | null; sprites: Record<string, SpriteInfo>; cue: Cue | null; theme?: number; children?: React.ReactNode }) {
+export function BattleScene({ state, you, sprites, cue, theme = 0, speed = 1, children }: { state: BState; you: SideId | null; sprites: Record<string, SpriteInfo>; cue: Cue | null; theme?: number; speed?: number; children?: React.ReactNode }) {
   const mine: SideId = you ?? "p1";
   const foe: SideId = mine === "p1" ? "p2" : "p1";
   const meRef = useRef<HTMLDivElement>(null);
   const foeRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const camRef = useRef<HTMLDivElement>(null);
+  const meKb = useRef<HTMLDivElement>(null);
+  const foeKb = useRef<HTMLDivElement>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
+  const speedRef = useRef(speed || 1);
+  speedRef.current = speed || 1;
+  const lastMove = useRef<LastMove | null>(null);
   const [fx, setFx] = useState<Fx[]>([]);
 
   const clouds = useMemo(() => [{ y: "6%", w: "26%", d: "58s", dl: "-12s" }, { y: "16%", w: "18%", d: "80s", dl: "-50s" }, { y: "2%", w: "14%", d: "46s", dl: "-30s" }], []);
@@ -212,40 +98,28 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
       void sceneRef.current?.offsetWidth;
       sceneRef.current?.classList.add("pk-shake");
     };
+    const ctx: Ctx = {
+      mine,
+      layer: layerRef.current,
+      scene: sceneRef.current,
+      anim: (s) => refOf(s),
+      kb: (s) => (s === mine ? meKb : foeKb).current,
+      T: (ms) => ms / (speedRef.current || 1),
+      add,
+      zoom,
+      last: lastMove,
+    };
     switch (cue.kind) {
-      case "move": {
-        const from = cue.from ?? mine;
-        const to = cue.side ?? (from === mine ? foe : mine);
-        const type = cue.moveType ?? "Normal";
-        const c = color(type);
-        const dir = from === mine ? { x: 42, y: -26 } : { x: -42, y: 26 };
-        const motion = motionFor(cue.moveName ?? "", type, cue.cat);
-        const anim = attackAnim(motion, dir, c);
-        refOf(from)?.animate(anim.frames, { duration: anim.ms, easing: "ease-in-out" });
-        add({ kind: "band", side: from, text: cue.moveName, color: c, extra: from === mine ? "me" : "foe" }, 1250);
-        if (cue.cat === "Status") {
-          add({ kind: "aura", side: from, color: c }, 1000);
-          add({ kind: "typefx", side: from, to: from, text: type, extra: "self" }, 1700);
-          if (motion === "roar") [0, 160, 320].forEach((d) => add({ kind: "ring", side: from, color: c, delay: d }, 1400));
-          if (motion === "curl") add({ kind: "shield", side: from, color: c }, 1400);
-          if (motion === "heal") add({ kind: "sparks", side: from, color: "#6df08a" }, 1100);
-          if (motion === "dance") add({ kind: "sparks", side: from, color: c }, 1100);
-        } else if (cue.cat === "Special") {
-          add({ kind: "typefx", side: from, to, text: type, extra: "travel" }, 1800);
-        } else {
-          add({ kind: "typefx", side: from, to, text: type, extra: "impact" }, 1700);
-          if (motion === "quake") window.setTimeout(shakeScene, 300);
-        }
+      case "move":
+        playMove(ctx, cue);
         break;
-      }
       case "hit": {
         const side = cue.side;
-        const c = color(cue.moveType);
-        const react = reactAnim(cue.moveType ?? "Normal", side === mine ? -1 : 1);
-        refOf(side)?.animate(react.frames, { duration: react.ms, easing: "ease-out" });
-        if (cue.amount) add({ kind: "num", side, text: `−${cue.amount}%` }, 1200);
-        add({ kind: "burst", side, color: c }, 800);
-        if ((cue.amount ?? 0) >= 30 || cue.effect === "crit") zoom(0.06);
+        const amount = cue.amount ?? 0;
+        const grade = [cue.effect === "crit" ? "crit" : "", amount >= 50 ? "huge" : amount >= 30 ? "big" : "", cue.effect === "se" ? "se" : "", cue.effect === "nve" ? "nve" : ""].filter(Boolean).join(" ");
+        playHit(ctx, cue);
+        if (amount && !cue.text) add({ kind: "num", side, text: `−${amount}%`, extra: grade }, 1500);
+        else if (amount) add({ kind: "num", side, text: `−${amount}%`, extra: "small" }, 1200);
         if (cue.effect === "crit") {
           add({ kind: "banner", text: "CRITICAL HIT!", extra: "crit" }, 1300);
           shakeScene();
@@ -254,9 +128,7 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
         break;
       }
       case "faint":
-        add({ kind: "ring", side: cue.side, color: "#9aa0a6" }, 1000);
-        add({ kind: "sparks", side: cue.side, color: "#cbd5e1" }, 1000);
-        zoom(0.04, 600);
+        playFaint(ctx, cue);
         break;
       case "switch":
         add({ kind: "ball", side: cue.side }, 1100);
@@ -265,16 +137,14 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
         jolt(refOf(cue.side), [{ transform: "scale(0.1)", filter: "brightness(4)", opacity: 0 }, { transform: "scale(1.18)", filter: "brightness(1.8)", opacity: 1, offset: 0.55 }, { transform: "scale(1)", filter: "brightness(1)", opacity: 1 }], 650, 430);
         break;
       case "heal":
-        add({ kind: "sparks", side: cue.side, color: "#6df08a" }, 1000);
-        if (cue.amount) add({ kind: "num", side: cue.side, text: `+${cue.amount}%`, extra: "heal" }, 1200);
+        playHeal(ctx, cue);
+        if (cue.amount) add({ kind: "num", side: cue.side, text: `+${cue.amount}%`, extra: "heal" }, 1400);
         break;
       case "boost":
-        add({ kind: "arrow", side: cue.side, up: cue.up, text: cue.up ? "▲" : "▼" }, 1200);
-        add({ kind: "ring", side: cue.side, color: cue.up ? "#4cd964" : "#ff453a" }, 1000);
+        playBoost(ctx, cue);
         break;
       case "status":
-        add({ kind: "label", side: cue.side, text: (cue.text ?? "").toUpperCase(), color: "#a040a0" }, 1400);
-        add({ kind: "sparks", side: cue.side, color: "#c77dff" }, 1000);
+        playStatus(ctx, cue);
         break;
       case "mega":
         add({ kind: "flash", side: cue.side }, 1000);
@@ -318,7 +188,8 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
         add({ kind: "label", side: cue.side, text: cue.text, color: "#3a86ff" }, 1500);
         break;
       case "miss":
-        add({ kind: "label", side: cue.side, text: "MISS", color: "#7d8590" }, 1000);
+        playMiss(ctx);
+        add({ kind: "label", side: cue.side ?? lastMove.current?.to, text: "MISS", color: "#7d8590" }, 1000);
         break;
       case "hazard":
         add({ kind: "label", side: cue.side, text: cue.text, color: "#b6a136" }, 1200);
@@ -377,8 +248,9 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
           <i key={i} className="pk-mote" style={{ ["--x" as string]: m.x, ["--s" as string]: m.s, ["--d" as string]: m.d, ["--dl" as string]: m.dl }} />
         ))}
         <div className="pk-wx rain" /> <div className="pk-wx sun" /> <div className="pk-wx sand" /> <div className="pk-wx snow" /> <div className="pk-wx wind" />
-        <MonView mon={foeMon} side="foe" sprites={sprites} anim={foeRef} />
-        <MonView mon={meMon} side="me" sprites={sprites} anim={meRef} back />
+        <MonView mon={foeMon} side="foe" sprites={sprites} anim={foeRef} kb={foeKb} />
+        <MonView mon={meMon} side="me" sprites={sprites} anim={meRef} kb={meKb} back />
+        <div ref={layerRef} className="pk-juice" aria-hidden="true" />
         {fx.filter((f) => !SCREEN_FX.has(f.kind)).map((f) => (
           <FxView key={f.id} fx={f} mine={mine} />
         ))}
@@ -395,7 +267,7 @@ export function BattleScene({ state, you, sprites, cue, theme = 0, children }: {
   );
 }
 
-function MonView({ mon, side, sprites, anim, back }: { mon: Mon | null; side: "me" | "foe"; sprites: Record<string, SpriteInfo>; anim: React.RefObject<HTMLDivElement | null>; back?: boolean }) {
+function MonView({ mon, side, sprites, anim, kb, back }: { mon: Mon | null; side: "me" | "foe"; sprites: Record<string, SpriteInfo>; anim: React.RefObject<HTMLDivElement | null>; kb: React.RefObject<HTMLDivElement | null>; back?: boolean }) {
   const info = mon ? spriteOf(sprites, mon.species) : null;
   return (
     <div
@@ -410,8 +282,10 @@ function MonView({ mon, side, sprites, anim, back }: { mon: Mon | null; side: "m
       style={{ "--tera": TYPE_COLOR[mon?.tera ?? ""] ?? "#fff" } as CSSProperties}
     >
       <i className="pk-shadow" />
-      <div ref={anim} className="pk-anim">
-        <div className="pk-mon-inner">{info ? <Sprite info={info} back={back} alt={mon?.species} /> : null}</div>
+      <div ref={kb} className="pk-kb">
+        <div ref={anim} className="pk-anim">
+          <div className="pk-mon-inner">{info ? <Sprite info={info} back={back} alt={mon?.species} /> : null}</div>
+        </div>
       </div>
     </div>
   );
@@ -439,9 +313,32 @@ function Tick({ to }: { to: number }) {
 }
 
 function HpBox({ mon, side, exact, types }: { mon: Mon | null; side: "me" | "foe"; exact: boolean; types: string[] }) {
+  const pct = mon ? hpPercent(mon) : 100;
+  const prev = useRef(pct);
+  const [ghost, setGhost] = useState(pct);
+  const [snap, setSnap] = useState(true);
+  const barRef = useRef<HTMLDivElement>(null);
+  const fillRef = useRef<HTMLElement>(null);
+
+  // The bar tells you what happened: it drains smoothly, a pale "ghost" stays behind and catches up late,
+  // and on a hit the fill flashes white and the whole bar flinches. Healing just fills, no ghost.
+  useEffect(() => {
+    const was = prev.current;
+    prev.current = pct;
+    if (pct < was) {
+      setSnap(false);
+      setGhost(pct);
+      fillRef.current?.animate([{ filter: "brightness(1)" }, { filter: "brightness(3.4) saturate(0.2)", offset: 0.18 }, { filter: "brightness(1)" }], { duration: 190 });
+      barRef.current?.animate([{ transform: "translateX(0)" }, { transform: "translateX(-9px)", offset: 0.3 }, { transform: "translateX(3px)", offset: 0.65 }, { transform: "translateX(0)" }], { duration: 200 });
+    } else if (pct > was) {
+      setSnap(true);
+      setGhost(pct);
+    }
+  }, [pct]);
+
   if (!mon) return null;
-  const pct = hpPercent(mon);
-  const lvl = pct <= 20 ? "low" : pct <= 50 ? "mid" : "hi";
+  // green while healthy, amber at half, red in the last quarter
+  const lvl = pct <= 25 ? "low" : pct <= 50 ? "mid" : "hi";
   const boosts = Object.entries(mon.boosts).filter(([, v]) => v !== 0);
   return (
     <div className={`pk-hp ${side}`}>
@@ -455,8 +352,9 @@ function HpBox({ mon, side, exact, types }: { mon: Mon | null; side: "me" | "foe
         {mon.mega ? <span title="Mega">🧬</span> : null}
         {mon.dynamax ? <span title={mon.gmax ? "Gigantamax" : "Dynamax"}>{mon.gmax ? "🦖" : "🔴"}</span> : null}
       </div>
-      <div className="pk-bar">
-        <i data-lvl={lvl} style={{ ["--w" as string]: `${pct}%` }} />
+      <div ref={barRef} className="pk-bar">
+        <i className="ghost" data-snap={snap ? "1" : "0"} style={{ ["--w" as string]: `${ghost}%` }} />
+        <i ref={fillRef} data-lvl={lvl} style={{ ["--w" as string]: `${pct}%` }} />
       </div>
       <div className="pk-hp-row" style={{ justifyContent: "space-between", marginTop: 2, fontSize: 11 }}>
         <span style={{ opacity: 0.9 }}>
@@ -513,7 +411,10 @@ function TypeFx({ fx, mine }: { fx: Fx; mine: SideId }) {
   const a = pos(fx.side);
   const b = pos(fx.to ?? fx.side);
   const travel = fx.extra === "travel";
-  const base = travel ? 430 : fx.extra === "impact" ? 240 : 80;
+  const land = fx.extra === "land" || fx.extra === "land-phys";
+  const t0 = fx.t0 ?? 0;
+  const flight = fx.dur ?? 470;
+  const base = land ? 30 : 80;
   const at = { left: `${b.x}%`, top: `${b.y}%`, ["--dl" as string]: `${base}ms` } as CSSProperties;
 
   useEffect(() => {
@@ -534,7 +435,7 @@ function TypeFx({ fx, mine }: { fx: Fx; mine: SideId }) {
             offset: t,
           });
         }
-        el.animate(frames, { duration: 470, delay: j * 55, easing: "ease-in", fill: "both" });
+        el.animate(frames, { duration: flight, delay: t0 + j * 55, easing: "ease-in", fill: "both" });
       } else {
         const ang = (j / spec.n) * Math.PI * 2 + (j % 2) * 0.3;
         const r = 46 + (j % 3) * 18;
@@ -571,19 +472,19 @@ function TypeFx({ fx, mine }: { fx: Fx; mine: SideId }) {
             </span>
           ))
         : null}
-      {Array.from({ length: spec.n }).map((_, i) => (
+      {(travel ? [] : Array.from({ length: spec.n })).map((_, i) => (
         <span key={`i${i}`} data-t="imp" data-i={i} className="pk-em" style={{ left: `${b.x}%`, top: `${b.y}%`, ["--sz" as string]: `${spec.size}px` }}>
           {emoji(i)}
         </span>
       ))}
-      <div className="pk-shock" style={at} />
-      <Sig type={type} style={at} />
-      {type === "Electric" ? (
+      {travel ? null : <div className="pk-shock" style={at} />}
+      {travel ? null : <Sig type={type} style={at} />}
+      {!travel && type === "Electric" ? (
         <svg className="pk-bolt" viewBox="0 0 40 100" style={at}>
           <polyline points="22,0 8,46 20,46 10,100 34,38 22,38 32,0" fill="#fff6a0" stroke={color} strokeWidth="3" strokeLinejoin="round" />
         </svg>
       ) : null}
-      {fx.extra === "impact" && SLASH_TYPES.has(type) ? (
+      {fx.extra === "land-phys" && SLASH_TYPES.has(type) ? (
         <div className="pk-slash" style={at}>
           <i /> <i /> <i />
         </div>
@@ -650,7 +551,7 @@ function FxView({ fx, mine }: { fx: Fx; mine: SideId }) {
       );
     case "arrow": return <div className={`pk-fx pk-arrow ${fx.up ? "" : "down"}`} style={style}>{fx.text}{fx.text}</div>;
     case "label": return <div className="pk-fx pk-pop-label" style={{ ...style, top: `${at.y - 24}%`, background: c }}>{fx.text}</div>;
-    case "num": return <div className={`pk-float-num ${fx.extra ?? ""}`} style={{ left: `${at.x}%`, top: `${at.y - 6}%` }}>{fx.text}</div>;
+    case "num": return <div className={`pk-float-num ${fx.extra ?? ""}`} style={{ left: `${at.x}%`, top: `${at.y - 6}%`, ["--dx" as string]: `${((fx.id * 37) % 7 - 3) * 9}px` }}>{fx.text}</div>;
     case "banner": return <div className={`pk-banner ${fx.extra ?? ""}`}>{fx.text}</div>;
     case "band":
       return (
