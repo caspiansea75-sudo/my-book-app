@@ -81,6 +81,28 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "xscissor", name: "X-Scissor", type: "Bug", kind: "nova", power: 1.5, cd: 3.4, range: 120, windup: 0.2, desc: "Cross slashes all around." }),
     m({ id: "airslash", name: "Air Slash", type: "Flying", kind: "spread", power: 0.7, cd: 1.8, n: 3, speed: 560, desc: "Blades of air." }),
     m({ id: "icebeam", name: "Ice Beam", type: "Ice", kind: "beam", power: 0.45, cd: 3.0, n: 8, range: 280, status: { kind: "frz", chance: 0.12 }, desc: "A freezing stream." }),
+    m({ id: "flareblitz", name: "Flare Blitz", type: "Fire", kind: "dash", power: 1.9, cd: 4.2, range: 250, status: { kind: "brn", chance: 0.3 }, desc: "A blazing charge that burns everything it hits." }),
+    m({ id: "blazekick", name: "Blaze Kick", type: "Fire", kind: "dash", power: 1.4, cd: 3.0, range: 220, status: { kind: "brn", chance: 0.2 }, desc: "A flaming flying kick." }),
+    m({ id: "bravebird", name: "Brave Bird", type: "Flying", kind: "dash", power: 1.8, cd: 4.0, range: 270, desc: "Dive at full speed." }),
+    m({ id: "aerialace", name: "Aerial Ace", type: "Flying", kind: "dash", power: 1.0, cd: 2.2, range: 240, desc: "A swift, sure slash." }),
+    m({ id: "watershuriken", name: "Water Shuriken", type: "Water", kind: "spread", power: 0.55, cd: 1.5, n: 4, speed: 660, desc: "Throwing stars of water." }),
+    m({ id: "nightslash", name: "Night Slash", type: "Dark", kind: "dash", power: 1.3, cd: 2.4, range: 220, desc: "Slash through in the dark." }),
+    m({ id: "meteormash", name: "Meteor Mash", type: "Steel", kind: "dash", power: 1.6, cd: 3.2, range: 220, desc: "A fist like a falling star." }),
+    m({ id: "zenheadbutt", name: "Zen Headbutt", type: "Psychic", kind: "dash", power: 1.5, cd: 3.0, range: 220, desc: "A charge with a focused mind." }),
+    m({ id: "dracometeor", name: "Draco Meteor", type: "Dragon", kind: "lob", power: 2.9, cd: 7, range: 360, windup: 0.7, desc: "Meteors fall on the target spot." }),
+    m({ id: "outrage", name: "Outrage", type: "Dragon", kind: "nova", power: 2.3, cd: 5.5, range: 150, windup: 0.3, desc: "A furious burst all around." }),
+    m({ id: "wildcharge", name: "Wild Charge", type: "Electric", kind: "dash", power: 1.7, cd: 3.4, range: 240, status: { kind: "par", chance: 0.25 }, desc: "Crackle through foes." }),
+    m({ id: "extremespeed", name: "Extreme Speed", type: "Normal", kind: "dash", power: 1.1, cd: 2.0, range: 290, desc: "Faster than the eye." }),
+    m({ id: "blizzard", name: "Blizzard", type: "Ice", kind: "nova", power: 2.0, cd: 5.5, range: 190, windup: 0.35, status: { kind: "frz", chance: 0.25 }, desc: "A freezing storm all around." }),
+    m({ id: "crosschop", name: "Cross Chop", type: "Fighting", kind: "dash", power: 1.5, cd: 3.0, range: 210, desc: "Two chops in one rush." }),
+    m({ id: "dynamicpunch", name: "Dynamic Punch", type: "Fighting", kind: "nova", power: 2.3, cd: 5.0, range: 125, windup: 0.3, status: { kind: "par", chance: 0.4 }, desc: "A punch that shakes everything." }),
+    m({ id: "bodyslam", name: "Body Slam", type: "Normal", kind: "dash", power: 1.5, cd: 3.2, range: 200, status: { kind: "par", chance: 0.3 }, desc: "Crush them under your weight." }),
+    m({ id: "rest", name: "Rest", type: "Psychic", kind: "heal", power: 0.55, cd: 14, desc: "Recover a lot of HP." }),
+    m({ id: "leafblade", name: "Leaf Blade", type: "Grass", kind: "dash", power: 1.4, cd: 2.6, range: 220, desc: "Slice with a blade of leaf." }),
+    m({ id: "leafstorm", name: "Leaf Storm", type: "Grass", kind: "spread", power: 0.62, cd: 4.2, n: 7, speed: 560, desc: "A whirl of leaves in every direction ahead." }),
+    m({ id: "shadowclaw", name: "Shadow Claw", type: "Ghost", kind: "dash", power: 1.3, cd: 2.4, range: 220, desc: "Rake through with a claw of shadow." }),
+    m({ id: "phantomforce", name: "Phantom Force", type: "Ghost", kind: "dash", power: 1.9, cd: 5.0, range: 270, desc: "Vanish and strike." }),
+    m({ id: "kingsshield", name: "King's Shield", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Block almost everything for a moment." }),
     m({ id: "hyperbeam", name: "Hyper Beam", type: "Normal", kind: "bolt", power: 3.2, cd: 8, range: 560, windup: 0.7, pierce: true, desc: "An enormous beam after a long charge." }),
   ].map((d) => [d.id, d]),
 );
@@ -97,7 +119,8 @@ export type Species = {
   /** Bigger Pokémon get a bigger body. */
   size: number;
   blurb: string;
-  locked?: boolean;
+  /** Needs this wave reached in Survival before it can be played. */
+  unlock?: number;
 };
 
 export const ROSTER: Species[] = [
@@ -115,13 +138,26 @@ export const ROSTER: Species[] = [
   { id: "gyarados", num: 130, name: "Gyarados", types: ["Water", "Flying"], bs: [95, 125, 79, 60, 100, 81], moves: ["hydropump", "crunch", "dragonpulse", "surf"], role: "brawler", size: 34, blurb: "Wide and wild." },
   { id: "umbreon", num: 197, name: "Umbreon", types: ["Dark"], bs: [95, 65, 110, 60, 130, 65], moves: ["darkpulse", "quickattack", "protect", "recover"], role: "shooter", size: 24, blurb: "A tank that outlasts anyone." },
   { id: "tyranitar", num: 248, name: "Tyranitar", types: ["Rock", "Dark"], bs: [100, 134, 110, 95, 100, 61], moves: ["stoneedge", "crunch", "earthquake", "rockslide"], role: "brawler", size: 32, blurb: "Slow, strong and everywhere at once." },
-  { id: "mewtwo", num: 150, name: "Mewtwo", types: ["Psychic"], bs: [106, 110, 90, 154, 90, 130], moves: ["psystrike", "shadowball", "aurasphere", "recover"], role: "shooter", size: 30, blurb: "The arena boss. Beat wave 5 to play as it.", locked: true },
+  { id: "blaziken", num: 257, name: "Blaziken", types: ["Fire", "Fighting"], bs: [80, 120, 70, 110, 70, 80], moves: ["flamethrower", "blazekick", "closecombat", "swordsdance"], role: "brawler", size: 28, blurb: "Kicks and flames. Power up, then pile on." },
+  { id: "greninja", num: 658, name: "Greninja", types: ["Water", "Dark"], bs: [72, 95, 67, 103, 71, 122], moves: ["watershuriken", "nightslash", "icebeam", "darkpulse"], role: "shooter", size: 24, blurb: "Very fast. Throws stars, slips in with a slash." },
+  { id: "metagross", num: 376, name: "Metagross", types: ["Steel", "Psychic"], bs: [80, 135, 130, 95, 90, 70], moves: ["meteormash", "zenheadbutt", "earthquake", "flashcannon"], role: "brawler", size: 32, blurb: "A slow, heavy wall of metal." },
+  { id: "salamence", num: 373, name: "Salamence", types: ["Dragon", "Flying"], bs: [95, 135, 80, 110, 80, 100], moves: ["dragonpulse", "aerialace", "dracometeor", "outrage"], role: "brawler", size: 32, blurb: "Meteors from above and a furious burst." },
+  { id: "jolteon", num: 135, name: "Jolteon", types: ["Electric"], bs: [65, 65, 60, 110, 95, 130], moves: ["thundershock", "thunderbolt", "quickattack", "wildcharge"], role: "shooter", size: 22, blurb: "The fastest of all. Sparks everywhere." },
+  { id: "arcanine", num: 59, name: "Arcanine", types: ["Fire"], bs: [90, 110, 80, 100, 80, 95], moves: ["flamethrower", "flareblitz", "extremespeed", "fireblast"], role: "brawler", size: 28, blurb: "Charges across the whole arena." },
+  { id: "lapras", num: 131, name: "Lapras", types: ["Water", "Ice"], bs: [130, 85, 80, 85, 95, 60], moves: ["waterpulse", "icebeam", "surf", "blizzard"], role: "shooter", size: 32, blurb: "Big HP. Freezes foes solid." },
+  { id: "machamp", num: 68, name: "Machamp", types: ["Fighting"], bs: [90, 130, 80, 65, 85, 55], moves: ["crosschop", "dynamicpunch", "stoneedge", "protect"], role: "brawler", size: 30, blurb: "Four fists. Slow, but crushing." },
+  { id: "snorlax", num: 143, name: "Snorlax", types: ["Normal"], bs: [160, 110, 65, 65, 110, 30], moves: ["bodyslam", "earthquake", "hyperbeam", "rest"], role: "brawler", size: 34, blurb: "A mountain of HP. Sleeps off any damage." },
+  { id: "sceptile", num: 254, name: "Sceptile", types: ["Grass"], bs: [70, 85, 65, 105, 85, 120], moves: ["leafblade", "leafstorm", "dragonpulse", "aerialace"], role: "shooter", size: 26, blurb: "Quick blades and a storm of leaves." },
+  { id: "dragapult", num: 887, name: "Dragapult", types: ["Dragon", "Ghost"], bs: [88, 120, 75, 100, 75, 142], moves: ["dragonpulse", "shadowball", "phantomforce", "dracometeor"], role: "bomber", size: 28, blurb: "Blindingly fast, with a meteor to finish." },
+  { id: "aegislash", num: 681, name: "Aegislash", types: ["Steel", "Ghost"], bs: [60, 50, 140, 50, 140, 60], moves: ["shadowclaw", "flashcannon", "kingsshield", "swordsdance"], role: "brawler", size: 26, blurb: "Hold the shield, then strike." },
+  { id: "mewtwo", num: 150, name: "Mewtwo", types: ["Psychic"], bs: [106, 110, 90, 154, 90, 130], moves: ["psystrike", "shadowball", "aurasphere", "recover"], role: "shooter", size: 30, blurb: "The first boss. Reach wave 5 to play as it.", unlock: 5 },
+  { id: "rayquaza", num: 384, name: "Rayquaza", types: ["Dragon", "Flying"], bs: [105, 150, 90, 150, 90, 95], moves: ["dragonpulse", "dracometeor", "aerialace", "outrage"], role: "brawler", size: 34, blurb: "The sky boss. Reach wave 10 to play as it.", unlock: 10 },
 ];
 
 export const speciesOf = (id: string) => ROSTER.find((s) => s.id === id) ?? ROSTER[0]!;
 
 /** Foes for the survival waves, easiest first. */
-export const FOE_POOL = ["pikachu", "umbreon", "gengar", "gyarados", "lucario", "scizor", "venusaur", "blastoise", "charizard", "garchomp", "gardevoir", "tyranitar", "dragonite", "alakazam"];
+export const FOE_POOL = ["pikachu", "jolteon", "umbreon", "gengar", "sceptile", "arcanine", "gyarados", "lucario", "scizor", "machamp", "greninja", "venusaur", "blastoise", "charizard", "blaziken", "lapras", "garchomp", "gardevoir", "metagross", "tyranitar", "salamence", "dragonite", "dragapult", "aegislash", "snorlax", "alakazam"];
 
 export type Perk = { id: string; name: string; desc: string; icon: string };
 export const PERKS: Perk[] = [
@@ -134,3 +170,19 @@ export const PERKS: Perk[] = [
   { id: "crit", name: "Sharp Eyes", desc: "+14% chance of a critical hit", icon: "🎯" },
   { id: "guardian", name: "Tough Skin", desc: "Take 12% less damage", icon: "🛡️" },
 ];
+
+export type FieldKind = "none" | "sun" | "rain" | "sand" | "hail";
+export const FIELDS: Record<Exclude<FieldKind, "none">, { icon: string; name: string; bn: string; up: string[]; down: string[]; chip: string[] }> = {
+  sun: { icon: "☀️", name: "Harsh Sun", bn: "কড়া রোদ", up: ["Fire"], down: ["Water"], chip: [] },
+  rain: { icon: "🌧️", name: "Heavy Rain", bn: "ভারী বৃষ্টি", up: ["Water", "Electric"], down: ["Fire"], chip: [] },
+  sand: { icon: "🏜️", name: "Sandstorm", bn: "বালুঝড়", up: ["Rock", "Ground"], down: [], chip: ["Rock", "Ground", "Steel"] },
+  hail: { icon: "❄️", name: "Hailstorm", bn: "শিলাবৃষ্টি", up: ["Ice"], down: [], chip: ["Ice"] },
+};
+
+export type ItemKind = "heal" | "orb" | "boots" | "crystal";
+export const ITEMS: Record<ItemKind, { icon: string; color: string; name: string; bn: string }> = {
+  heal: { icon: "❤", color: "#ff6b81", name: "Berry", bn: "বেরি" },
+  orb: { icon: "⚡", color: "#ffe14d", name: "Energy Orb", bn: "এনার্জি অর্ব" },
+  boots: { icon: "➤", color: "#7fe3ff", name: "Speed Boots", bn: "স্পিড বুট" },
+  crystal: { icon: "◆", color: "#d28bff", name: "Power Crystal", bn: "পাওয়ার ক্রিস্টাল" },
+};

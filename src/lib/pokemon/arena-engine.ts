@@ -3,7 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { FOE_POOL, MOVES, PERKS, ROSTER, speciesOf, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { FIELDS, FOE_POOL, ITEMS, MOVES, PERKS, ROSTER, speciesOf, type FieldKind, type ItemKind, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
 export const W = 960;
@@ -66,6 +66,9 @@ export type Fighter = {
   // player only
   combo: { n: number; t: number; last: number; best: number };
   focus: number; // bonus damage after a perfect dodge
+  ult: number; // the awakening gauge, 0 to 100
+  awaken: number; // seconds of awakening left
+  haste: number; // seconds of speed-boots left
   dealt: number;
   kos: number;
 };
@@ -126,6 +129,10 @@ export type Ev =
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
+  | { t: "awaken"; x: number; y: number }
+  | { t: "item"; x: number; y: number; kind: ItemKind; byPlayer: boolean }
+  | { t: "field"; kind: FieldKind }
+  | { t: "hazard"; x: number; y: number }
   | { t: "over"; win: boolean };
 
 export type Input = {
@@ -135,8 +142,10 @@ export type Input = {
   aim: { x: number; y: number } | null;
   cast: [boolean, boolean, boolean, boolean];
   dodge: boolean;
+  /** Awaken (the special burst), once the gauge is full. */
+  ult?: boolean;
 };
-export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false });
+export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false });
 
 export type State = {
   mode: Mode;
@@ -152,6 +161,10 @@ export type State = {
   score: number;
   freeze: number; // hit-stop
   slow: number; // slow motion after a perfect dodge
+  items: { id: number; x: number; y: number; kind: ItemKind; life: number }[];
+  itemT: number;
+  hazardT: number;
+  field: FieldKind;
   perks: string[]; // the three offered
   taken: string[]; // perks picked so far
   storm: { r: number; on: boolean };
@@ -227,6 +240,9 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     ringT: rnd(3, 5),
     combo: { n: 0, t: 0, last: -1, best: 0 },
     focus: 0,
+    ult: 0,
+    awaken: 0,
+    haste: 0,
     dealt: 0,
     kos: 0,
   };
@@ -247,6 +263,10 @@ export function newGame(mode: Mode, speciesId: string, opts: { auto?: boolean } 
     score: 0,
     freeze: 0,
     slow: 0,
+    items: [],
+    itemT: 7,
+    hazardT: 6,
+    field: "none",
     perks: [],
     taken: [],
     storm: { r: 520, on: false },
@@ -259,7 +279,7 @@ export function newGame(mode: Mode, speciesId: string, opts: { auto?: boolean } 
   player.auto = !!opts.auto;
   S.fighters.push(player);
   if (mode === "royale") {
-    const pool = ROSTER.filter((s) => s.id !== speciesId && !s.locked);
+    const pool = ROSTER.filter((s) => s.id !== speciesId && !s.unlock);
     for (let i = 0; i < 4; i++) {
       const sp = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -267,6 +287,8 @@ export function newGame(mode: Mode, speciesId: string, opts: { auto?: boolean } 
     }
     S.wave = 1;
     S.storm = { r: 520, on: false };
+    const kinds: FieldKind[] = ["none", "sun", "rain", "sand", "hail"];
+    S.field = kinds[Math.floor(Math.random() * kinds.length)]!;
   }
   return S;
 }
@@ -277,6 +299,10 @@ function spawnWave(S: State) {
   S.wave++;
   const w = S.wave;
   const boss = w % 5 === 0;
+  const bossId = w % 10 === 0 ? "rayquaza" : "mewtwo";
+  const fields: FieldKind[] = ["sun", "rain", "sand", "hail"];
+  S.field = w >= 2 && w % 2 === 0 ? fields[Math.floor(Math.random() * fields.length)]! : "none";
+  S.events.push({ t: "field", kind: S.field });
   const p = playerOf(S);
   const scale = { hp: 0.8 + 0.12 * (w - 1), dmg: 0.62 + 0.07 * (w - 1) };
   const count = boss ? 1 + (w >= 10 ? 1 : 0) : Math.min(5, 1 + Math.floor(w / 2));
@@ -291,7 +317,7 @@ function spawnWave(S: State) {
     }
     spots.push([x, y]);
     if (boss && i === 0) {
-      const f = makeFighter(S, speciesOf("mewtwo"), 1, false, x, y, { hp: scale.hp, dmg: scale.dmg }, true);
+      const f = makeFighter(S, speciesOf(bossId), 1, false, x, y, { hp: scale.hp, dmg: scale.dmg }, true);
       S.fighters.push(f);
     } else {
       const pool = FOE_POOL.slice(0, Math.min(FOE_POOL.length, 4 + w));
@@ -344,7 +370,18 @@ function nearestFoe(S: State, f: Fighter, from = { x: f.x, y: f.y }): Fighter | 
 }
 
 function baseDamage(src: Fighter, mv: MoveDef, power = mv.power) {
-  return 13 * power * (src.power / 90) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1);
+  return 13 * power * (src.power / 90) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1);
+}
+
+/** Weather helps some types and hurts others. */
+function fieldMul(S: State, type: string) {
+  if (S.field === "none") return 1;
+  const f = FIELDS[S.field];
+  return f.up.includes(type) ? 1.3 : f.down.includes(type) ? 0.75 : 1;
+}
+
+function gainUlt(f: Fighter, amount: number) {
+  if (f.isPlayer && f.awaken <= 0) f.ult = Math.min(100, f.ult + amount);
 }
 
 function applyStatus(S: State, f: Fighter, kind: StatusKind) {
@@ -367,6 +404,7 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
       dst.dodge.perfected = true;
       dst.dodge.cd = 0;
       dst.focus = 3;
+      gainUlt(dst, 25);
       S.slow = 0.7;
       S.perfects++;
       S.score += 50;
@@ -379,12 +417,13 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   const crit = Math.random() < src.critChance;
   const comboMul = src.isPlayer ? 1 + Math.min(0.5, 0.1 * Math.max(0, src.combo.n - 1)) : 1;
   const focusMul = src.isPlayer && src.focus > 0 ? 1.5 : 1;
-  let dmg = dmgBase * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + dst.defence / 9));
+  let dmg = dmgBase * fieldMul(S, type) * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + dst.defence / 9));
   if (dst.shield > 0) dmg *= 0.12;
   dmg = Math.max(1, Math.round(dmg));
   dst.hp -= dmg;
   dst.flash = 0.12;
   src.dealt += dmg;
+  gainUlt(src, (dmg / Math.max(1, dst.maxHp)) * 70);
   if (src.drain > 0) src.hp = Math.min(src.maxHp, src.hp + dmg * src.drain);
   const heavy = dmg >= dst.maxHp * 0.12 || crit;
   const [nx, ny] = norm(o.kx, o.ky);
@@ -406,6 +445,7 @@ function kill(S: State, src: Fighter | null, dst: Fighter) {
   dst.koT = 0;
   dst.cast = dst.channel = dst.dash = null;
   if (src) src.kos++;
+  if (src) gainUlt(src, 15);
   if (src?.isPlayer) S.score += 100 * Math.max(1, S.wave) * (dst.boss ? 5 : 1);
   S.events.push({ t: "ko", x: dst.x, y: dst.y, id: dst.id, id2: dst.sp.id, type: dst.sp.types[0] ?? "Normal", byPlayer: !!src?.isPlayer, player: dst.isPlayer, boss: dst.boss });
   S.freeze = Math.max(S.freeze, 0.12);
@@ -570,6 +610,23 @@ function startDodge(S: State, f: Fighter, dx: number, dy: number) {
   return true;
 }
 
+/** The special burst: a shockwave, then a few seconds of more damage, speed and recharge. */
+export function awaken(S: State, f: Fighter) {
+  if (!f.alive || f.ult < 100 || f.awaken > 0) return false;
+  f.ult = 0;
+  f.awaken = 8;
+  f.invuln = Math.max(f.invuln, 0.5);
+  const type = f.sp.types[0] ?? "Normal";
+  const r = 230;
+  S.events.push({ t: "awaken", x: f.x, y: f.y });
+  S.events.push({ t: "explode", x: f.x, y: f.y, r, type });
+  S.freeze = Math.max(S.freeze, 0.1);
+  for (const o of foesOf(S, f)) {
+    if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 30 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 420 });
+  }
+  return true;
+}
+
 /* ---------------------------------------------------------------- computer players */
 
 const useRange = (mv: MoveDef): [number, number] => {
@@ -709,6 +766,8 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     sy = f.dash.dy * speed;
   } else {
     let k = f.speedMul;
+    if (f.awaken > 0) k *= 1.25;
+    if (f.haste > 0) k *= 1.3;
     if (f.status.par > 0) k *= 0.55;
     if (f.status.frz > 0 || f.stun > 0) k = 0;
     if (f.channel) k *= 0.35;
@@ -762,6 +821,7 @@ export function step(S: State, input: Input, realDt: number) {
     p.vy = my * p.speed;
     if (input.dodge) startDodge(S, p, len(mx, my) > 0.1 ? mx : Math.cos(p.face), len(mx, my) > 0.1 ? my : Math.sin(p.face));
     for (let i = 0; i < 4; i++) if (input.cast[i]) tryCast(S, p, i, input);
+    if (input.ult) awaken(S, p);
     // a held beam follows the aim
     if (p.channel) {
       const a = aimOf(S, p, input);
@@ -787,7 +847,10 @@ export function step(S: State, input: Input, realDt: number) {
     if (!f.isPlayer) aiStep(S, f, dt);
 
     // timers
-    for (let i = 0; i < 4; i++) f.cd[i] = Math.max(0, f.cd[i]! - dt);
+    const cdRate = f.awaken > 0 ? 2 : 1;
+    for (let i = 0; i < 4; i++) f.cd[i] = Math.max(0, f.cd[i]! - dt * cdRate);
+    f.awaken = Math.max(0, f.awaken - dt);
+    f.haste = Math.max(0, f.haste - dt);
     f.invuln = Math.max(0, f.invuln - dt);
     f.flash = Math.max(0, f.flash - dt);
     f.stun = Math.max(0, f.stun - dt);
@@ -803,6 +866,17 @@ export function step(S: State, input: Input, realDt: number) {
     }
     f.ghost = f.ghost > f.hp ? Math.max(f.hp, f.ghost - Math.max(f.maxHp * 0.25, (f.ghost - f.hp) * 1.6) * dt * (f.flash > 0 ? 0 : 1)) : f.hp;
 
+    // sandstorm and hail wear down whoever they are not made for
+    if (S.field === "sand" || S.field === "hail") {
+      const chip = FIELDS[S.field].chip;
+      if (!f.sp.types.some((ty) => chip.includes(ty))) {
+        f.hp -= f.maxHp * 0.01 * dt;
+        if (f.hp <= 0) {
+          kill(S, null, f);
+          continue;
+        }
+      }
+    }
     // status effects over time
     for (const k of ["brn", "psn"] as const) {
       if (f.status[k] > 0) {
@@ -935,6 +1009,30 @@ export function step(S: State, input: Input, realDt: number) {
         z.struck = true;
         const src = S.fighters.find((f) => f.id === z.owner);
         if (z.shape === "circle") S.events.push({ t: "explode", x: z.x, y: z.y, r: z.r, type: z.type });
+        if (!src && z.team === -1) {
+          // lightning from the sky hurts everyone it touches
+          for (const o of S.fighters) {
+            if (!o.alive || len(o.x - z.x, o.y - z.y) > z.r + o.r) continue;
+            if (o.invuln > 0) {
+              if (o.isPlayer && o.dodge.t > 0 && !o.dodge.perfected) {
+                o.dodge.perfected = true;
+                o.dodge.cd = 0;
+                o.focus = 3;
+                gainUlt(o, 25);
+                S.slow = 0.7;
+                S.perfects++;
+                S.score += 50;
+                S.events.push({ t: "perfect", x: o.x, y: o.y });
+              }
+              continue;
+            }
+            const d = Math.max(1, Math.round(o.maxHp * 0.14));
+            o.hp -= d;
+            o.flash = 0.12;
+            S.events.push({ t: "hit", x: o.x, y: o.y, dmg: d, crit: false, eff: 1, type: "Electric", toPlayer: o.isPlayer, byPlayer: false, dx: 0, dy: -1, heavy: true });
+            if (o.hp <= 0) kill(S, null, o);
+          }
+        }
         if (src) {
           for (const o of S.fighters) {
             if (!o.alive || o.team === z.team) continue;
@@ -964,6 +1062,53 @@ export function step(S: State, input: Input, realDt: number) {
       S.events.push({ t: "storm" });
     }
     if (S.storm.on) S.storm.r = Math.max(130, S.storm.r - 7 * dt);
+  }
+
+  // ---- pickups: berries, orbs, boots and crystals appear now and then
+  S.itemT -= dt;
+  if (S.itemT <= 0 && S.items.length < 3) {
+    S.itemT = rnd(9, 14);
+    const kinds = Object.keys(ITEMS) as ItemKind[];
+    const kind = kinds[Math.floor(Math.random() * kinds.length)]!;
+    S.items.push({ id: S.nextId++, x: rnd(MARGIN + 60, W - MARGIN - 60), y: rnd(MARGIN + 60, H - MARGIN - 60), kind, life: 16 });
+  }
+  for (const it of S.items) {
+    it.life -= dt;
+    for (const f of live) {
+      if (!f.alive || (!f.isPlayer && S.mode !== "royale")) continue;
+      if (it.life > 0 && len(f.x - it.x, f.y - it.y) <= f.r + 20) {
+        it.life = 0;
+        if (it.kind === "heal") f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.25);
+        else if (it.kind === "orb") {
+          for (let i = 0; i < 4; i++) f.cd[i] = 0;
+          f.dodge.cd = 0;
+          gainUlt(f, 30);
+        } else if (it.kind === "boots") f.haste = 7;
+        else {
+          f.buffT = 7;
+          f.buffMul = Math.max(f.buffMul, 1.5);
+        }
+        S.events.push({ t: "item", x: it.x, y: it.y, kind: it.kind, byPlayer: f.isPlayer });
+      }
+    }
+  }
+  S.items = S.items.filter((it) => it.life > 0);
+
+  // ---- falling lightning from wave 3 (and a little later in a royale): move out of the circles
+  if ((S.mode === "survival" && S.wave >= 3) || (S.mode === "royale" && S.time > 14)) {
+    S.hazardT -= dt;
+    if (S.hazardT <= 0) {
+      S.hazardT = rnd(5.5, 8.5);
+      const n = 2 + Math.floor(Math.random() * 2);
+      const targets = S.fighters.filter((f) => f.alive);
+      for (let i = 0; i < n; i++) {
+        const t = targets[Math.floor(Math.random() * targets.length)];
+        const x = t && Math.random() < 0.6 ? clamp(t.x + rnd(-60, 60), MARGIN, W - MARGIN) : rnd(MARGIN, W - MARGIN);
+        const y = t && Math.random() < 0.6 ? clamp(t.y + rnd(-60, 60), MARGIN, H - MARGIN) : rnd(MARGIN, H - MARGIN);
+        S.zones.push({ id: S.nextId++, owner: 0, team: -1, shape: "circle", x, y, x2: x, y2: y, r: 56, delay: 1.1, life: 0.35, dmg: 0, type: "Electric", kb: 220, struck: false, mv: MOVES.thunder!, player: false });
+      }
+      S.events.push({ t: "hazard", x: CX, y: CY });
+    }
   }
 
   // ---- end of a wave or of the fight

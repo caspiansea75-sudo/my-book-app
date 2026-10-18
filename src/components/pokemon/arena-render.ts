@@ -3,7 +3,7 @@
  * extras that make it feel good: sparks, rings, floating numbers, screen shake, a slow-motion tint.
  */
 import { ARENA, type Ev, type Fighter, type State } from "@/lib/pokemon/arena-engine";
-import { MOVES } from "@/lib/pokemon/arena-data";
+import { FIELDS, ITEMS, MOVES } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
 type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text"; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
@@ -32,6 +32,9 @@ export class ArenaRenderer {
   private t = 0;
   private scale = 1;
   private banner: { text: string; t: number; color: string } | null = null;
+  private zoom = 1;
+  private camX = ARENA.CX;
+  private camY = ARENA.CY;
 
   constructor(private canvas: HTMLCanvasElement, private sources: SpriteSource = defaultSources) {
     this.ctx = canvas.getContext("2d")!;
@@ -45,6 +48,31 @@ export class ArenaRenderer {
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(w * (ARENA.H / ARENA.W) * dpr);
     this.scale = this.canvas.width / ARENA.W;
+  }
+
+  /** How close the view is: 1 shows the whole floor, more follows the player, less shows the stands around it. */
+  setZoom(z: number) {
+    this.zoom = Math.max(0.8, Math.min(2.2, z));
+  }
+  getZoom() {
+    return this.zoom;
+  }
+  /** Turns a point on the canvas (in arena units, 0–960 by 0–600) into a place on the floor, whatever the zoom. */
+  toWorld(px: number, py: number) {
+    return { x: this.camX + (px - ARENA.CX) / this.zoom, y: this.camY + (py - ARENA.CY) / this.zoom };
+  }
+  private followCamera(you: Fighter | undefined, dt: number) {
+    let tx = ARENA.CX;
+    let ty = ARENA.CY;
+    if (this.zoom > 1 && you) {
+      const hw = ARENA.W / (2 * this.zoom);
+      const hh = ARENA.H / (2 * this.zoom);
+      tx = Math.max(hw, Math.min(ARENA.W - hw, you.x));
+      ty = Math.max(hh, Math.min(ARENA.H - hh, you.y));
+    }
+    const k = 1 - Math.exp(-dt * 9);
+    this.camX += (tx - this.camX) * k;
+    this.camY += (ty - this.camY) * k;
   }
 
   /* --------------------------------------------------------------- the floor */
@@ -228,6 +256,25 @@ export class ArenaRenderer {
         case "combo":
           if (mine) this.pop(mine.x, mine.y - 38, e.finish ? "COMBO FINISH!" : `COMBO ×${e.n}`, e.finish ? "#ffd54a" : "#ffffff", e.finish ? 20 : 16, 900);
           break;
+        case "awaken":
+          this.ring(e.x, e.y, "#fff2a8", 260, 0.7);
+          this.ring(e.x, e.y, "#ffcf4d", 190, 0.9);
+          this.burst(e.x, e.y, "#ffe08a", 40, 420);
+          this.shake = 14;
+          this.shakeT = 0.45;
+          this.flashT = 0.3;
+          this.say("AWAKEN!", "#ffe08a");
+          break;
+        case "item": {
+          const it = ITEMS[e.kind];
+          this.burst(e.x, e.y, it.color, 14, 220);
+          this.ring(e.x, e.y, it.color, 70, 0.5);
+          this.pop(e.x, e.y - 10, it.name.toUpperCase(), it.color, 13, 900);
+          break;
+        }
+        case "field":
+          if (e.kind !== "none") this.say(`${FIELDS[e.kind].icon} ${FIELDS[e.kind].name}`, "#ffffff");
+          break;
         case "heal":
           break;
         case "status":
@@ -261,13 +308,16 @@ export class ArenaRenderer {
       if (this.banner.t <= 0) this.banner = null;
     }
 
+    this.followCamera(you, dtReal);
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    g.fillStyle = "#04070d";
+    g.fillRect(0, 0, ARENA.W, ARENA.H);
     const k = this.shakeT > 0 ? this.shake * (this.shakeT / 0.3) : 0;
-    const zoom = 1 + this.zoomPulse * 0.025;
+    const zoom = this.zoom * (1 + this.zoomPulse * 0.025);
     g.translate(ARENA.CX, ARENA.CY);
     g.scale(zoom, zoom);
-    g.translate(-ARENA.CX + rnd(-k, k), -ARENA.CY + rnd(-k, k));
+    g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
     g.drawImage(this.bg, 0, 0);
 
     // the storm ring in a royale
@@ -286,6 +336,7 @@ export class ArenaRenderer {
       g.restore();
     }
 
+    this.drawItems(g, S);
     this.drawZones(g, S);
     this.drawTelegraphs(g, S);
 
@@ -357,6 +408,7 @@ export class ArenaRenderer {
     // screen tints (not shaken)
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    this.drawField(g, S);
     if (this.perfectT > 0) {
       const a = Math.min(1, this.perfectT / 0.8);
       const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 140, ARENA.CX, ARENA.CY, 560);
@@ -395,23 +447,109 @@ export class ArenaRenderer {
 
   /* ---------------------------------------------------------------- the parts */
 
+  private drawItems(g: CanvasRenderingContext2D, S: State) {
+    for (const it of S.items) {
+      const d = ITEMS[it.kind];
+      const bob = Math.sin(this.t * 4 + it.id) * 3;
+      const fade = it.life < 3 ? (Math.sin(this.t * 14) > 0 ? 1 : 0.3) : 1;
+      g.save();
+      g.globalAlpha = fade;
+      g.fillStyle = "rgba(0,0,0,.35)";
+      g.beginPath();
+      g.ellipse(it.x, it.y + 14, 13, 5, 0, 0, Math.PI * 2);
+      g.fill();
+      g.globalCompositeOperation = "lighter";
+      const gr = g.createRadialGradient(it.x, it.y + bob, 0, it.x, it.y + bob, 34);
+      gr.addColorStop(0, d.color);
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.globalAlpha = fade * 0.55;
+      g.beginPath();
+      g.arc(it.x, it.y + bob, 34, 0, Math.PI * 2);
+      g.fill();
+      g.globalCompositeOperation = "source-over";
+      g.globalAlpha = fade;
+      g.fillStyle = "#101826";
+      g.strokeStyle = d.color;
+      g.lineWidth = 3;
+      g.beginPath();
+      g.arc(it.x, it.y + bob, 15, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+      g.fillStyle = d.color;
+      g.font = "900 17px system-ui";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(d.icon, it.x, it.y + bob + 1);
+      g.restore();
+    }
+  }
+
+  /** Weather over the whole screen: a tint and a few things falling or drifting. */
+  private drawField(g: CanvasRenderingContext2D, S: State) {
+    if (S.field === "none") return;
+    g.save();
+    if (S.field === "sun") {
+      const gr = g.createRadialGradient(ARENA.W * 0.9, 0, 20, ARENA.W * 0.9, 0, 760);
+      gr.addColorStop(0, "rgba(255,210,90,.34)");
+      gr.addColorStop(1, "rgba(255,180,60,.05)");
+      g.fillStyle = gr;
+      g.fillRect(0, 0, ARENA.W, ARENA.H);
+    } else if (S.field === "rain") {
+      g.fillStyle = "rgba(40,70,130,.18)";
+      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.strokeStyle = "rgba(190,215,255,.45)";
+      g.lineWidth = 1.5;
+      g.beginPath();
+      for (let i = 0; i < 70; i++) {
+        const x = (i * 97 + this.t * 140) % (ARENA.W + 80) - 40;
+        const y = (i * 53 + this.t * 900) % (ARENA.H + 40) - 20;
+        g.moveTo(x, y);
+        g.lineTo(x - 7, y + 20);
+      }
+      g.stroke();
+    } else if (S.field === "sand") {
+      g.fillStyle = "rgba(190,140,70,.2)";
+      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillStyle = "rgba(235,200,140,.5)";
+      for (let i = 0; i < 90; i++) {
+        const x = (i * 131 + this.t * 420) % (ARENA.W + 40) - 20;
+        const y = (i * 71 + Math.sin(this.t * 2 + i) * 14) % ARENA.H;
+        g.fillRect(x, y, 3, 2);
+      }
+    } else {
+      g.fillStyle = "rgba(170,220,255,.14)";
+      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillStyle = "rgba(240,250,255,.8)";
+      for (let i = 0; i < 80; i++) {
+        const x = (i * 113 + Math.sin(this.t + i) * 22 + this.t * 30) % ARENA.W;
+        const y = (i * 61 + this.t * 120) % (ARENA.H + 20);
+        g.beginPath();
+        g.arc(x, y, 1.6 + (i % 3) * 0.7, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    g.restore();
+  }
+
   private drawZones(g: CanvasRenderingContext2D, S: State) {
     for (const z of S.zones) {
       const c = col(z.type);
       if (!z.struck) {
-        const total = Math.max(0.2, z.mv.windup ?? 0.55);
+        const total = z.team === -1 ? 1.1 : Math.max(0.2, z.mv.windup ?? 0.55);
         const prog = 1 - Math.max(0, z.delay) / (z.player ? total * 0.6 : total);
         const pulse = 0.5 + Math.sin(this.t * 14) * 0.5;
         g.save();
         if (z.shape === "circle") {
-          g.fillStyle = z.player ? `${c}33` : `rgba(255,70,60,${0.1 + prog * 0.22})`;
-          g.strokeStyle = z.player ? c : `rgba(255,${90 + pulse * 80},70,.9)`;
+          const sky = z.team === -1;
+          g.fillStyle = z.player ? `${c}33` : sky ? `rgba(255,225,70,${0.1 + prog * 0.22})` : `rgba(255,70,60,${0.1 + prog * 0.22})`;
+          g.strokeStyle = z.player ? c : sky ? `rgba(255,${210 + pulse * 40},60,.95)` : `rgba(255,${90 + pulse * 80},70,.9)`;
           g.lineWidth = 3;
           g.beginPath();
           g.arc(z.x, z.y, z.r, 0, Math.PI * 2);
           g.fill();
           g.stroke();
-          g.fillStyle = z.player ? `${c}55` : "rgba(255,90,70,.35)";
+          g.fillStyle = z.player ? `${c}55` : z.team === -1 ? "rgba(255,225,70,.4)" : "rgba(255,90,70,.35)";
           g.beginPath();
           g.arc(z.x, z.y, z.r * Math.min(1, prog), 0, Math.PI * 2);
           g.fill();
@@ -567,6 +705,18 @@ export class ArenaRenderer {
     g.stroke();
     g.restore();
 
+    if (f.awaken > 0) {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const gr = g.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 3.2);
+      gr.addColorStop(0, "rgba(255,240,170,.7)");
+      gr.addColorStop(0.5, "rgba(255,190,70,.28)");
+      gr.addColorStop(1, "rgba(255,160,40,0)");
+      g.fillStyle = gr;
+      g.fillRect(f.x - f.r * 4, f.y - f.r * 4, f.r * 8, f.r * 8);
+      g.restore();
+      if (Math.random() < 0.6) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r), y: f.y + f.r * 0.4, vx: rnd(-20, 20), vy: -90, g: 0, life: 0.6, max: 0.6, size: 3.5, grow: 0, color: "#ffd96b" });
+    }
     if (f.buffT > 0) {
       g.save();
       g.globalCompositeOperation = "lighter";

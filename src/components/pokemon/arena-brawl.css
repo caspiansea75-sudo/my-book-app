@@ -1,10 +1,14 @@
 /* Arena Brawl screens. Uses the site's theme variables so it matches every theme. */
 .ab { display: grid; gap: 16px; }
-.ab-stage { position: relative; width: 100%; max-width: 960px; margin: 0 auto; aspect-ratio: 960 / 600; border-radius: 16px; overflow: hidden; border: 1px solid var(--book-border); background: #060a12; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ab-shell { position: relative; width: 100%; max-width: 960px; margin: 0 auto; aspect-ratio: 960 / 600; container-type: size; border-radius: 16px; overflow: hidden; border: 1px solid var(--book-border); background: #060a12; touch-action: none; user-select: none; -webkit-user-select: none; }
+.ab-stage { position: absolute; inset: 0; }
 .ab-stage canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; }
+/* full screen (the real thing where the browser allows it, and a screen-filling page where it does not) */
+.ab-shell.fs { position: fixed; inset: 0; z-index: 99999; width: 100vw; height: 100vh; height: 100dvh; max-width: none; aspect-ratio: auto; border: 0; border-radius: 0; background: #000; }
+.ab-shell.fs .ab-stage { inset: auto; left: 50%; top: 50%; width: min(100vw, 160dvh); height: min(62.5vw, 100dvh); transform: translate(-50%, -50%); }
 
 /* ----- HUD */
-.ab-hud { position: absolute; inset: 0; pointer-events: none; font-family: var(--font-sans); color: #f3f6ff; }
+.ab-hud { position: absolute; inset: 0; pointer-events: none; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); font-family: var(--font-sans); color: #f3f6ff; }
 .ab-me { position: absolute; left: 10px; top: 10px; width: min(44%, 300px); padding: 8px 10px; border-radius: 12px; background: rgba(8, 12, 22, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); backdrop-filter: blur(4px); }
 .ab-me b { font-size: clamp(11px, 2.4vw, 14px); }
 .ab-me small { opacity: 0.7; font-size: clamp(9px, 2vw, 11px); margin-left: 6px; }
@@ -14,27 +18,52 @@
 .ab-bar .fill { transition: width 0.12s linear; }
 .ab-top { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; padding: 5px 12px; border-radius: 99px; background: rgba(8, 12, 22, 0.72); border: 1px solid rgba(255, 255, 255, 0.12); font-size: clamp(10px, 2.2vw, 13px); font-weight: 700; white-space: nowrap; }
 .ab-top span { opacity: 0.75; font-weight: 500; }
-.ab-combo { position: absolute; left: 12px; top: 74px; font-weight: 900; font-size: clamp(14px, 3.4vw, 24px); color: #ffd54a; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); transition: transform 0.12s; }
+.ab-combo { position: absolute; left: 12px; top: 74px; transform-origin: left top; font-weight: 900; font-size: clamp(14px, 3.4vw, 24px); color: #ffd54a; text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); transition: transform 0.12s; }
 .ab-combo.pulse { transform: scale(1.25); }
-.ab-tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; pointer-events: auto; }
+.ab-tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 5px; pointer-events: auto; }
 .ab-ic { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(8, 12, 22, 0.72); color: #fff; font-size: 15px; cursor: pointer; }
 .ab-ic:hover { background: rgba(40, 52, 80, 0.9); }
 
-/* ----- moves and dodge */
-.ab-moves { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; max-width: 960px; margin: 0 auto; width: 100%; }
-.ab-mv { position: relative; overflow: hidden; display: grid; gap: 2px; padding: 8px 6px; border-radius: 12px; border: 1px solid var(--book-border); background: var(--book-surface); color: var(--book-fg); text-align: center; font-family: var(--font-sans); cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; }
-.ab-mv:active { transform: scale(0.97); }
-.ab-mv .nm { font-size: clamp(10px, 2.3vw, 13px); font-weight: 700; line-height: 1.15; }
-.ab-mv .ky { font-size: 10px; opacity: 0.6; }
-.ab-mv .ic { display: grid; place-items: center; height: 22px; }
-.ab-mv .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.55); transition: height 0.08s linear; }
-.ab-mv.ready { border-color: var(--c, var(--book-lamp)); box-shadow: 0 0 0 1px var(--c, var(--book-lamp)) inset; }
-.ab-mv.dodge { --c: #7fe3ff; }
-
-/* ----- joystick (touch) */
-.ab-joy { position: absolute; left: 14px; bottom: 14px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 2px solid rgba(255, 255, 255, 0.18); pointer-events: auto; touch-action: none; display: none; }
-.ab-joy i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255, 255, 255, 0.28); border: 2px solid rgba(255, 255, 255, 0.5); }
+/* ----- controls: joystick bottom-left, move pad bottom-right */
+.ab-ctl { position: absolute; inset: 0; pointer-events: none; --u: clamp(44px, 12.5cqh, 80px); }
+.ab-joy { position: absolute; left: calc(14px + env(safe-area-inset-left)); bottom: calc(14px + env(safe-area-inset-bottom)); width: calc(var(--u) * 2.1); height: calc(var(--u) * 2.1); border-radius: 50%; background: rgba(255, 255, 255, 0.06); border: 2px solid rgba(255, 255, 255, 0.18); pointer-events: auto; touch-action: none; display: none; }
+.ab-joy i { position: absolute; left: 50%; top: 50%; width: 44%; height: 44%; margin: -22% 0 0 -22%; border-radius: 50%; background: rgba(255, 255, 255, 0.28); border: 2px solid rgba(255, 255, 255, 0.5); }
 @media (pointer: coarse) { .ab-joy { display: block; } }
+.ab-pad { position: absolute; right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); width: calc(var(--u) * 4.25); height: calc(var(--u) * 3.1); pointer-events: none; }
+.ab-pb { position: absolute; width: var(--s); height: var(--s); display: grid; place-items: center; align-content: center; gap: 0; padding: 2px; border-radius: 50%; border: 2px solid color-mix(in oklab, var(--c, #fff) 55%, rgba(255, 255, 255, 0.25)); background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.16), rgba(10, 16, 28, 0.82) 70%); color: #fff; font-family: var(--font-sans); text-align: center; overflow: hidden; pointer-events: auto; touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); }
+.ab-pb:active { transform: scale(0.94); }
+.ab-pb::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(0, 0, 0, 0.66) calc(var(--f, 0) * 1turn), transparent 0); pointer-events: none; }
+.ab-pb.ready { border-color: var(--c); box-shadow: 0 0 0 2px color-mix(in oklab, var(--c) 40%, transparent), 0 0 16px color-mix(in oklab, var(--c) 55%, transparent), 0 4px 14px rgba(0, 0, 0, 0.45); }
+.ab-pb .pb-ic { display: grid; place-items: center; line-height: 1; font-size: calc(var(--s) * 0.34); }
+.ab-pb .pb-nm { max-width: 92%; font-size: clamp(7px, calc(var(--s) * 0.17), 11px); font-weight: 700; line-height: 1.05; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ab-pb .pb-ky { position: absolute; top: 5%; left: 0; right: 0; font-size: clamp(7px, calc(var(--s) * 0.15), 10px); opacity: 0.7; }
+.ab-pb .pb-cd { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; font-size: calc(var(--s) * 0.3); font-weight: 900; text-shadow: 0 1px 3px #000; }
+@media (pointer: coarse) { .ab-pb .pb-ky { display: none; } }
+.ab-pb.m1 { --s: calc(var(--u) * 1.5); right: calc(var(--u) * 0.1); bottom: calc(var(--u) * 0.1); }
+.ab-pb.m2 { --s: calc(var(--u) * 1.05); right: calc(var(--u) * 1.75); bottom: 0; }
+.ab-pb.m3 { --s: calc(var(--u) * 1.05); right: calc(var(--u) * 1.7); bottom: calc(var(--u) * 1.5); }
+.ab-pb.m4 { --s: calc(var(--u) * 1.05); right: calc(var(--u) * 0.15); bottom: calc(var(--u) * 1.8); }
+.ab-pb.dodge { --s: calc(var(--u) * 0.95); right: calc(var(--u) * 3.1); bottom: calc(var(--u) * 0.2); }
+.ab-pb.ult { --s: calc(var(--u) * 0.95); right: calc(var(--u) * 3.15); bottom: calc(var(--u) * 1.65); }
+.ab-pb.ult.full { animation: ab-pulse 0.9s ease-in-out infinite; }
+@keyframes ab-pulse { 50% { transform: scale(1.1); box-shadow: 0 0 26px #ffd54a, 0 0 0 3px rgba(255, 213, 74, 0.5); } }
+.ab-awk { margin-top: 4px; font-size: clamp(9px, 2vw, 11px); font-weight: 800; color: #ffd54a; }
+.ab-ic.wide { width: auto; min-width: 40px; padding: 0 6px; font-size: 12px; font-weight: 700; }
+.ab-tip { margin: 0 auto; max-width: 960px; padding: 8px 14px; border-radius: 99px; background: var(--book-surface-2); border: 1px solid var(--book-border); color: var(--book-fg); font: 600 13px var(--font-sans); text-align: center; }
+.ab-gimmicks { display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px dashed var(--book-border); font-size: 12px; line-height: 1.5; }
+.ab-gimmicks b { font-size: 13px; }
+.ab-gimmicks span { margin-right: 4px; }
+.ab-gimmicks em { font-style: normal; font-weight: 700; margin-right: 4px; }
+/* a phone held upright: the controls sit under the arena instead of on top of it */
+@media (pointer: coarse) and (orientation: portrait) {
+  .ab-shell:not(.fs) { aspect-ratio: auto; container-type: normal; overflow: visible; border: 0; background: transparent; }
+  .ab-shell:not(.fs) .ab-stage { position: relative; inset: auto; aspect-ratio: 960 / 600; border-radius: 14px; overflow: hidden; border: 1px solid var(--book-border); background: #060a12; }
+  .ab-shell:not(.fs) .ab-hud { display: contents; }
+  .ab-shell:not(.fs) .ab-me, .ab-shell:not(.fs) .ab-top, .ab-shell:not(.fs) .ab-combo { pointer-events: none; }
+  .ab-shell:not(.fs) .ab-tools { top: 6px; right: 6px; }
+  .ab-shell:not(.fs) .ab-ctl { position: relative; inset: auto; height: 220px; --u: 52px; margin-top: 6px; }
+  .ab-shell:not(.fs) .ab-ov { inset: 0 0 auto 0; aspect-ratio: 960 / 600; border-radius: 14px; }
+}
 
 /* ----- overlays */
 .ab-ov { position: absolute; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(4, 7, 14, 0.74); backdrop-filter: blur(3px); color: #f3f6ff; text-align: center; font-family: var(--font-sans); overflow: auto; }
@@ -73,8 +102,20 @@
 .ab-help { font-size: 12px; opacity: 0.75; line-height: 1.7; }
 .ab-help kbd { padding: 1px 6px; border-radius: 5px; border: 1px solid var(--book-border); background: var(--book-surface-2); font-size: 11px; }
 @media (max-width: 640px) {
-  .ab-moves { grid-template-columns: repeat(5, 1fr); gap: 5px; }
-  .ab-mv { padding: 6px 3px; }
   .ab-perks { grid-template-columns: 1fr; }
   .ab-mvlist { grid-template-columns: 1fr; }
+}
+
+/* a cooldown shows its number instead of the move's name */
+.ab-pb:has(.pb-cd) .pb-nm, .ab-pb:has(.pb-cd) .pb-ic { opacity: 0.25; }
+.ab-top .wx { font-style: normal; }
+/* narrow screens: less on the top bar so nothing overlaps */
+@media (max-width: 560px) {
+  .ab-me { width: 40%; padding: 5px 8px; }
+  .ab-top { left: auto; right: 6px; top: 40px; transform: none; padding: 3px 9px; gap: 6px; font-size: 10px; }
+  .ab-top .sc, .ab-top .wx { display: none; }
+  .ab-ic { width: 29px; height: 29px; font-size: 12px; }
+  .ab-ic.wide { display: none; }
+  .ab-tools { gap: 4px; top: 6px; right: 6px; }
+  .ab-combo { top: 56px; font-size: 15px; }
 }
