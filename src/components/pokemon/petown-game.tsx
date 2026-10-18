@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Bot, Flag, Search, Shuffle, Swords, X } from "lucide-react";
-import { BattleScene } from "@/components/pokemon/arena";
 import { MusicPanel } from "@/components/pokemon/music-panel";
 import { Sprite, StatBars, TypeBadge, useT } from "@/components/pokemon/ui";
 import { battleAudio } from "@/lib/pokemon/audio";
@@ -40,7 +39,6 @@ import {
   type Weather,
 } from "@/lib/petown/engine";
 import { abilitySummary, isInert } from "@/lib/petown/abilities";
-import { WEATHER_ATTR, sideId, spritesFor, tintOf, toBState } from "@/lib/petown/scene-state";
 
 type Pick = { id: number; item: string };
 
@@ -62,12 +60,15 @@ function Pic({ look, back, still, className, alt = "" }: { look: Look; back?: bo
   return <Sprite info={info} back={back} still={still} className={className} alt={alt} style={look.hue ? { filter: `hue-rotate(${look.hue}deg) saturate(1.2)` } : undefined} />;
 }
 
+const WEATHER_ATTR: Record<Weather, string> = { sun: "SunnyDay", rain: "RainDance", sand: "Sandstorm", hail: "Hail", harshsun: "DesolateLand", heavyrain: "PrimordialSea", wind: "DeltaStream" };
 const WEATHER_LABEL: Record<Weather, { bn: string; en: string }> = {
   sun: { bn: "☀️ রোদ", en: "☀️ Sun" }, rain: { bn: "🌧️ বৃষ্টি", en: "🌧️ Rain" }, sand: { bn: "🌪️ বালিঝড়", en: "🌪️ Sand" }, hail: { bn: "🧊 শিলাবৃষ্টি", en: "🧊 Hail" },
   harshsun: { bn: "🔥 প্রচণ্ড রোদ", en: "🔥 Harsh sun" }, heavyrain: { bn: "🌊 প্রবল বৃষ্টি", en: "🌊 Heavy rain" }, wind: { bn: "🌀 ডেল্টা স্ট্রিম", en: "🌀 Delta Stream" },
 };
-/** How long an attack takes to make contact before its damage lands (ms). The arena's own timing. */
-const CONTACT_MS = 760;
+const STATUS_LABEL: Record<Status, { bn: string; en: string; color: string }> = {
+  brn: { bn: "পোড়া", en: "BRN", color: "#ff7a3d" }, psn: { bn: "বিষ", en: "PSN", color: "#a050d0" }, par: { bn: "প্যারা", en: "PAR", color: "#e6c200" },
+  slp: { bn: "ঘুম", en: "SLP", color: "#7b8aa8" }, cnf: { bn: "বিভ্রান্ত", en: "CNF", color: "#d86bb0" }, inf: { bn: "মোহ", en: "LOVE", color: "#ff5c8a" },
+};
 const STAT_SHORT: Record<Stat, string> = { atk: "Atk", def: "Def", spa: "SpA", spd: "SpD", spe: "Spe", acc: "Acc", eva: "Eva" };
 
 function loadRecord(): { w: number; l: number } {
@@ -339,6 +340,8 @@ function SlotCard({ data, sp, item, onItem, onRemove }: { data: PetownData; sp: 
 
 /* ======================================================================== battle screen */
 
+type Fx = { id: number; side: 0 | 1; text: string; cls: string };
+type Banner = { id: number; text: string; cls: string };
 
 function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: Mon[]; foe: Mon[]; difficulty: Difficulty; onRematch: () => void; onExit: () => void }) {
   const { t, lang } = useT();
@@ -348,10 +351,8 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
   const b = bref.current;
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [log, setLog] = useState<{ id: number; text: string; cls?: string }[]>([]);
-  /** the effect the scene is playing right now (attack, hit, faint, status…) */
-  const [cue, setCue] = useState<Cue | null>(null);
-  /** the battle as it was just before the attack being shown, so HP and status change when the hit lands, not before */
-  const [held, setHeld] = useState<Battle | null>(null);
+  const [fx, setFx] = useState<Fx[]>([]);
+  const [banner, setBanner] = useState<Banner | null>(null);
   const [auto, setAuto] = useState(false);
   const [fast, setFast] = useState(false);
   const [intro, setIntro] = useState(true);
@@ -362,12 +363,14 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
   const genRef = useRef<Generator<Ev[], void, void> | null>(null);
   const timerRef = useRef<number | undefined>(undefined);
   const fastRef = useRef(false);
-  const cueId = useRef(0);
-  const timers = useRef<number[]>([]);
+  const meRef = useRef<HTMLDivElement | null>(null);
+  const foeRef = useRef<HTMLDivElement | null>(null);
   const recorded = useRef(false);
   const theme = useMemo(() => Math.floor(Math.random() * 4), []);
   const seed = useMemo(() => 1 + Math.floor(Math.random() * 1000), []);
   const audioState = useRef(initialState());
+  /** Sound effect for a battle event (the synth maps these onto its own cue kinds). */
+  const cue = useCallback((c: Omit<Cue, "id"> & { id: number }) => battleAudio.cue(c as Cue, audioState.current, "p1"), []);
 
   // Music: pick a theme by difficulty, start on the first tap or key press, and release the sound device when leaving.
   useEffect(() => {
@@ -385,49 +388,56 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { fastRef.current = fast; }, [fast]);
-  useEffect(() => () => { timers.current.forEach((id) => window.clearTimeout(id)); window.clearTimeout(timerRef.current); }, []);
 
   const say = useCallback(
     (text: string, cls?: string, id?: number) => setLog((l) => [...l.slice(-60), { id: id ?? Math.random(), text, cls }]),
     [],
   );
-  const later = useCallback((ms: number, fn: () => void) => {
-    const id = window.setTimeout(() => { timers.current = timers.current.filter((x) => x !== id); fn(); }, ms);
-    timers.current.push(id);
-  }, []);
-  /** Show an effect in the scene and play its sound (the sound synth and the scene read the same cue). */
-  const emit = useCallback((c: Omit<Cue, "id">) => {
-    const full = { ...c, id: ++cueId.current } as Cue;
-    battleAudio.cue(full, audioState.current, "p1");
-    setCue(full);
-  }, []);
 
   const handle = useCallback(
     (evs: Ev[]) => {
-      const cues: Omit<Cue, "id">[] = [];
-      const pct = (s: 0 | 1, n: number) => Math.max(1, Math.round((n / activeOf(b, s).maxHp) * 100));
-      const label = (s: 0 | 1, text: string) => cues.push({ kind: "ability", side: sideId(s), text });
+      const el = (s: 0 | 1) => (s === 0 ? meRef.current : foeRef.current);
+      const nameOf = (s: 0 | 1) => activeOf(b, s).name;
+      const float = (id: number, side: 0 | 1, text: string, cls: string) => {
+        setFx((f) => [...f, { id, side, text, cls }]);
+        window.setTimeout(() => setFx((f) => f.filter((x) => x.id !== id)), 1200);
+      };
+      const flash = (id: number, text: string, cls: string) => {
+        setBanner({ id, text, cls });
+        window.setTimeout(() => setBanner((x) => (x && x.id === id ? null : x)), 1000);
+      };
       for (const e of evs) {
         switch (e.k) {
           case "send":
-            cues.push({ kind: "switch", side: sideId(e.side) });
+            cue({ id: e.id, kind: "switch", side: e.side === 0 ? "p1" : "p2" });
             say(`${e.side === 0 ? t("আপনি পাঠালেন", "You sent out") : t("CPU পাঠাল", "CPU sent out")} ${e.mon}!`, undefined, e.id);
             break;
           case "use":
-            cues.push({ kind: "move", side: sideId(e.side === 0 ? 1 : 0), from: sideId(e.side), moveName: e.move, moveType: e.type, cat: e.cat === "physical" ? "Physical" : "Special" });
+            cue({ id: e.id, kind: "move", side: e.side === 0 ? "p2" : "p1", from: e.side === 0 ? "p1" : "p2", moveName: e.move, moveType: e.type, cat: e.cat });
             say(`${e.mon} → ${e.move}`, undefined, e.id);
+            el(e.side)?.animate(
+              [{ transform: "translate(0,0)" }, { transform: e.side === 0 ? "translate(22%,-14%) scale(1.06)" : "translate(-22%,12%) scale(1.06)", offset: 0.35 }, { transform: "translate(0,0)" }],
+              { duration: 380, easing: "ease-out" },
+            );
             break;
           case "dmg": {
-            const effect = e.crit ? "crit" : e.mult > 1 ? "se" : e.mult < 1 ? "nve" : null;
-            cues.push({ kind: "hit", side: sideId(e.side), amount: pct(e.side, e.amount), effect });
-            if (effect) say(e.crit ? t("ক্রিটিক্যাল!", "CRITICAL!") : e.mult > 1 ? t("খুব কার্যকর!", "SUPER EFFECTIVE!") : t("কম কার্যকর", "Not very effective"), undefined, e.id + 0.1);
+            el(e.side)?.animate([{ transform: "translateX(0)", filter: "brightness(1)" }, { transform: "translateX(-5%)", filter: "brightness(2.2)", offset: 0.25 }, { transform: "translateX(4%)", offset: 0.5 }, { transform: "translateX(0)", filter: "brightness(1)" }], { duration: 340 });
+            float(e.id, e.side, `-${e.amount}`, "");
+            const cls = e.crit ? "crit" : e.mult > 1 ? "se" : e.mult < 1 ? "nve" : "";
+            cue({ id: e.id, kind: "hit", side: e.side === 0 ? "p1" : "p2", amount: e.amount, effect: cls ? (cls as "crit" | "se" | "nve") : null });
+            if (cls) {
+              const text = e.crit ? t("ক্রিটিক্যাল!", "CRITICAL!") : e.mult > 1 ? t("খুব কার্যকর!", "SUPER EFFECTIVE!") : t("কম কার্যকর", "Not very effective");
+              flash(e.id, text, cls);
+              say(text, undefined, e.id + 0.1);
+            }
             break;
           }
-          case "miss": cues.push({ kind: "miss", side: sideId(e.side === 0 ? 1 : 0) }); say(`${e.move} ${t("লক্ষ্যভ্রষ্ট হল!", "missed!")}`, undefined, e.id); break;
-          case "dodge": cues.push({ kind: "miss", side: sideId(e.side) }); say(`${e.mon} ${t("আঘাত এড়িয়ে গেল!", "avoided the attack!")}`, undefined, e.id); break;
-          case "immune": label(e.side, t("কোনো প্রভাব নেই", "NO EFFECT")); say(`${e.mon} ${t("অক্ষত!", "is unaffected!")}`, undefined, e.id); break;
-          case "heal": cues.push({ kind: "heal", side: sideId(e.side), amount: pct(e.side, e.amount) }); break;
+          case "miss": cue({ id: e.id, kind: "miss" }); say(`${e.move} ${t("লক্ষ্যভ্রষ্ট হল!", "missed!")}`, undefined, e.id); break;
+          case "dodge": cue({ id: e.id, kind: "miss" }); say(`${e.mon} ${t("আঘাত এড়িয়ে গেল!", "avoided the attack!")}`, undefined, e.id); break;
+          case "immune": say(`${e.mon} ${t("অক্ষত!", "is unaffected!")}`, undefined, e.id); break;
+          case "heal": cue({ id: e.id, kind: "heal", side: e.side === 0 ? "p1" : "p2" }); float(e.id, e.side, `+${e.amount}`, "heal"); break;
           case "ability": {
+            cue({ id: e.id, kind: "ability" });
             const msg: Record<string, [string, string]> = {
               trigger: ["অ্যাবিলিটি সক্রিয়!", "activated!"],
               trace: ["অ্যাবিলিটি কপি করল!", "traced it!"],
@@ -437,28 +447,29 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
               negate: ["আঘাত ঠেকিয়ে দিল!", "shrugged it off!"],
             };
             const m = msg[e.what];
-            label(e.side, e.ability);
             say(`${e.mon}'s ${e.ability}: ${t(m[0], m[1])}`, undefined, e.id);
             break;
           }
           case "status": {
+            cue({ id: e.id, kind: "status" });
             const msg: Record<Status, [string, string]> = {
               brn: ["পুড়ে গেল!", "was burned!"], psn: ["বিষে আক্রান্ত!", "was poisoned!"], par: ["প্যারালাইসড — ধীর হল!", "is paralysed — slowed!"],
               slp: ["ঘুমিয়ে পড়ল!", "fell asleep!"], cnf: ["বিভ্রান্ত হল!", "became confused!"], inf: ["মোহে পড়ল!", "fell in love!"],
             };
-            cues.push({ kind: "status", side: sideId(e.side), text: e.status === "cnf" ? "confused" : e.status === "inf" ? "in love" : e.status });
             say(`${e.mon} ${t(msg[e.status][0], msg[e.status][1])}`, undefined, e.id);
+            float(e.id, e.side, STATUS_LABEL[e.status][lg === "en" ? "en" : "bn"], "nve");
             break;
           }
-          case "cure": label(e.side, e.why === "wake" ? t("জেগে উঠল", "AWAKE") : t("সুস্থ", "CURED")); say(`${e.mon} ${e.why === "wake" ? t("জেগে উঠল!", "woke up!") : t("সুস্থ হল!", "recovered!")}`, undefined, e.id); break;
+          case "cure": say(`${e.mon} ${e.why === "wake" ? t("জেগে উঠল!", "woke up!") : t("সুস্থ হল!", "recovered!")}`, undefined, e.id); break;
           case "stage": {
             const up = e.n > 0;
-            cues.push({ kind: "boost", side: sideId(e.side), stat: e.stat, up });
+            cue({ id: e.id, kind: "boost", up });
             say(`${e.mon}'s ${STAT_SHORT[e.stat]} ${up ? t("বাড়ল", "rose") : t("কমল", "fell")}${Math.abs(e.n) > 1 ? t(" অনেক", " sharply") : ""}!`, undefined, e.id);
+            float(e.id, e.side, `${STAT_SHORT[e.stat]} ${up ? "+" : ""}${e.n}`, up ? "heal" : "nve");
             break;
           }
           case "weather":
-            if (e.w) cues.push({ kind: "weather", text: WEATHER_ATTR[e.w] });
+            if (e.w) cue({ id: e.id, kind: "weather" });
             say(e.w ? `${t(WEATHER_LABEL[e.w].bn, WEATHER_LABEL[e.w].en)} ${t("শুরু হল", "began")}` : t("আবহাওয়া শান্ত হল।", "The weather cleared."), undefined, e.id);
             break;
           case "chip": {
@@ -468,8 +479,9 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
               sudden: ["সাডেন ডেথে ক্ষয় হল", "is worn down (sudden death)"],
               reflect: ["ফেরত আসা ক্ষতি পেল", "was hurt by the reflected damage"], confusion: ["বিভ্রান্ত হয়ে নিজেকেই আঘাত করল", "hurt itself in its confusion"], aftermath: ["আফটারম্যাথে আহত", "was hurt by Aftermath"],
             };
-            cues.push({ kind: "hit", side: sideId(e.side), amount: pct(e.side, e.amount), text: e.why });
-            say(`${activeOf(b, e.side).name} ${t(why[e.why][0], why[e.why][1])} (-${e.amount})`, undefined, e.id);
+            say(`${nameOf(e.side)} ${t(why[e.why][0], why[e.why][1])} (-${e.amount})`, undefined, e.id);
+            cue({ id: e.id, kind: "hit", amount: Math.min(e.amount, 12), effect: null });
+            float(e.id, e.side, `-${e.amount}`, "nve");
             break;
           }
           case "skip": {
@@ -479,11 +491,10 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
               par: ["প্যারালাইসিসে নড়তে পারল না!", "is paralysed — it can't move!"],
               slp: ["গভীর ঘুমে আছে…", "is fast asleep…"],
             };
-            label(e.side, e.why === "slp" ? "ZZZ" : e.why === "par" ? t("প্যারালাইসড", "PARALYSED") : e.why === "cnf" ? t("বিভ্রান্ত", "CONFUSED") : t("মোহগ্রস্ত", "IN LOVE"));
             say(`${e.mon} ${t(why[e.why][0], why[e.why][1])}`, undefined, e.id);
             break;
           }
-          case "flinch": label(e.side, t("থমকে গেল", "FLINCHED")); say(`${e.mon} ${t("থমকে গেল!", "flinched!")}`, undefined, e.id); break;
+          case "flinch": say(`${e.mon} ${t("থমকে গেল!", "flinched!")}`, undefined, e.id); break;
           case "reveal": {
             const msg = e.what === "item"
               ? e.value ? t(`${e.mon} দেখল: প্রতিপক্ষের আইটেম ${e.value}`, `${e.mon} frisked the foe: it holds ${e.value}`) : t(`${e.mon} দেখল: প্রতিপক্ষের কোনো আইটেম নেই`, `${e.mon} frisked the foe: no item`)
@@ -494,21 +505,18 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
           }
           case "trapped":
             say(`${e.by} ${t("পথ আটকে রেখেছে — বদলানো যাবে না!", "blocks the way — you can't switch!")}`, "faint", e.id);
-            label(e.side, t("আটকা পড়েছেন!", "TRAPPED!"));
+            flash(e.id, t("আটকা পড়েছেন!", "TRAPPED!"), "nve");
             break;
-          case "faint": cues.push({ kind: "faint", side: sideId(e.side) }); say(`${e.mon} ${t("জ্ঞান হারাল!", "fainted!")}`, "faint", e.id); break;
+          case "faint": cue({ id: e.id, kind: "faint", side: e.side === 0 ? "p1" : "p2" }); say(`${e.mon} ${t("জ্ঞান হারাল!", "fainted!")}`, "faint", e.id); break;
           case "end":
             battleAudio.finish(e.winner === 0 ? "win" : "lose");
-            cues.push({ kind: "win", text: e.winner === 0 ? "You" : "CPU" });
             say(e.winner === 0 ? t("🏆 আপনি জিতেছেন!", "🏆 You win!") : t("💀 CPU জিতেছে।", "💀 The CPU wins."), "win", e.id);
-            later(1500, () => setDone(true));
+            window.setTimeout(() => setDone(true), 1300);
             break;
         }
       }
-      // a few frames apart, so every effect gets its moment
-      cues.forEach((c, i) => (i === 0 ? emit(c) : later(i * 110, () => emit(c))));
     },
-    [say, t, b, emit, later],
+    [say, t, lg, b, cue],
   );
 
   // first send-out
@@ -520,53 +528,34 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Show a round (or a replacement) one step at a time. For an attack the wind-up plays first and the result
-  // (damage, HP, status) is applied when it makes contact.
+  // Show a round (or a replacement) one step at a time, with a pause after each so it can be followed.
   const run = useCallback(
     (gen: Generator<Ev[], void, void>) => {
       window.clearTimeout(timerRef.current);
       genRef.current = gen;
       setPhase("play");
-      const speed = () => (fastRef.current ? 2 : 1);
-      const settle = (evs: Ev[]) => {
-        const hits = evs.filter((e) => e.k === "dmg" || e.k === "status" || e.k === "stage" || e.k === "heal" || e.k === "chip").length;
-        const faint = evs.some((e) => e.k === "faint");
-        timerRef.current = window.setTimeout(step, (500 + hits * 250 + (faint ? 700 : 0)) / speed());
-      };
       const step = () => {
         const g = genRef.current;
         if (!g) return;
-        const before = structuredClone(b);
         const r = g.next();
         if (r.done) {
           genRef.current = null;
-          setHeld(null);
           bump();
           if (b.winner === -1) setPhase(b.sides[0].needSwitch ? "forced" : "choose");
           return;
         }
-        const evs = r.value;
-        const i = evs.findIndex((e) => e.k === "use");
-        if (i < 0) {
-          handle(evs);
-          bump();
-          settle(evs);
-          return;
-        }
-        setHeld(before);
-        handle(evs.slice(0, i + 1));
+        handle(r.value);
         bump();
-        timerRef.current = window.setTimeout(() => {
-          setHeld(null);
-          handle(evs.slice(i + 1));
-          bump();
-          settle(evs.slice(i + 1));
-        }, CONTACT_MS / speed());
+        const hits = r.value.filter((e) => e.k === "dmg" || e.k === "status" || e.k === "stage" || e.k === "heal" || e.k === "chip").length;
+        const faint = r.value.some((e) => e.k === "faint");
+        const ms = (700 + hits * 250 + (faint ? 600 : 0)) * (fastRef.current ? 0.45 : 1);
+        timerRef.current = window.setTimeout(step, ms);
       };
       step();
     },
     [b, handle],
   );
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
   // record the result once
   useEffect(() => {
@@ -606,10 +595,11 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
       if (verdict === "trapped") {
         const by = activeOf(b, 1).name;
         say(`${by} ${t("পথ আটকে রেখেছে — বদলানো যাবে না!", "blocks the way — you can't switch!")}`, "faint", Math.random());
-        emit({ kind: "ability", side: "p1", text: t("আটকা পড়েছেন!", "TRAPPED!") });
+        setBanner({ id: Math.random(), text: t("আটকা পড়েছেন!", "TRAPPED!"), cls: "nve" });
+        window.setTimeout(() => setBanner(null), 1000);
       } else if (verdict === "ok") choose({ kind: "switch", idx: i });
     },
-    [b, choose, run, say, t, emit],
+    [b, choose, run, say, t],
   );
 
   // auto-pilot: picks moves and replacements for you
@@ -638,21 +628,16 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
     return () => window.removeEventListener("keydown", onKey);
   }, [doMove]);
 
-  const vb = held ?? b;
   const me = activeOf(b, 0);
   const op = activeOf(b, 1);
   const weather = activeWeather(b);
-  const shownMe = activeOf(vb, 0);
-  const shownOp = activeOf(vb, 1);
+  const mySide = b.sides[0];
   const myTurn = phase === "choose" && !intro && !me.fainted && b.winner === -1;
   const forced = phase === "forced" && b.winner === -1;
-  const sprites = useMemo(() => spritesFor(b), [b]);
-  // Playback speed for the scene. (The older arena has no such prop and simply ignores it.)
-  const sceneSpeed = { speed: fast ? 2 : 1 };
   const logRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { logRef.current?.scrollTo({ top: logRef.current.scrollHeight }); }, [log.length]);
   const rate = b.winner === 0 ? rating(b) : null;
-  const lowHp = !shownMe.fainted && b.winner === -1 && shownMe.hp / shownMe.maxHp <= 0.2;
+  const lowHp = !me.fainted && b.winner === -1 && me.hp / me.maxHp <= 0.2;
   useEffect(() => {
     battleAudio.lowHp(lowHp);
     return () => battleAudio.lowHp(false);
@@ -660,41 +645,62 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
 
   return (
     <section className="mx-auto max-w-5xl space-y-4 px-5 pb-24 pt-6 sm:px-8">
-      <div className="pt-hue" style={{ ["--pt-f-me" as string]: tintOf(shownMe), ["--pt-f-foe" as string]: tintOf(shownOp) }}>
-        <BattleScene state={toBState(vb)} you="p1" sprites={sprites} cue={cue} theme={theme} {...sceneSpeed}>
-          {intro ? (
-            <div className="pk-vs" onClick={() => setIntro(false)} role="presentation">
-              <div className="pk-vs-row">
-                <div className="pk-vs-card">
-                  <Pic look={monLook(me)} back className="size-24 object-contain sm:size-36" />
-                  <span>{t("আপনি", "You")}</span>
-                </div>
-                <div className="pk-vs-mid">VS</div>
-                <div className="pk-vs-card r">
-                  <Pic look={monLook(op)} className="size-24 object-contain sm:size-36" />
-                  <span>CPU</span>
-                </div>
-              </div>
-            </div>
-          ) : null}
+      <div className="pk-scene" data-weather={weather ? WEATHER_ATTR[weather] : ""} data-theme={theme} data-night={theme === 2 ? "1" : "0"}>
+        <div className="pk-camera">
+          <div className="pk-sky"><div className="pk-rays" /></div>
+          <div className="pk-hills" />
+          <div className="pk-floor" />
+          <div className="pk-platform foe" />
+          <div className="pk-platform me" />
+          <div className="pk-tint" />
+          <div className="pk-wx rain" /> <div className="pk-wx sun" /> <div className="pk-wx sand" /> <div className="pk-wx snow" /> <div className="pk-wx wind" />
+          <MonView mon={op} side="foe" anim={foeRef} />
+          <MonView mon={me} side="me" anim={meRef} back />
+          {fx.map((f) => (
+            <div key={f.id} className={`pk-float-num ${f.cls}`} style={{ left: f.side === 0 ? "27%" : "72%", top: f.side === 0 ? "56%" : "28%" }}>{f.text}</div>
+          ))}
+          {banner ? <div key={banner.id} className={`pk-banner ${banner.cls}`}>{banner.text}</div> : null}
+        </div>
+        <HpBox mon={op} side="foe" />
+        <HpBox mon={me} side="me" />
+        <div className="pk-field">
+          <span>{t("রাউন্ড", "Round")} {phase === "play" ? Math.max(1, b.round) : b.round + 1}</span>
+          <span>{t("CPU", "CPU")}: {t(DIFFICULTY[difficulty].bn, DIFFICULTY[difficulty].en)}</span>
+          {b.weather.w ? <span>{t(WEATHER_LABEL[b.weather.w].bn, WEATHER_LABEL[b.weather.w].en)}{Number.isFinite(b.weather.t) ? ` · ${b.weather.t} ${t("রাউন্ড", "rounds")}` : ""}{weather ? "" : ` (${t("বাতিল", "negated")})`}</span> : null}
+        </div>
 
-          {done ? (
-            <div className={`pk-result ${b.winner === 0 ? "win" : "lose"}`}>
-              <div className="pk-result-inner">
-                <div className={b.winner === 0 ? "pk-trophy" : "pk-skull"} aria-hidden="true">{b.winner === 0 ? "🏆" : "💀"}</div>
-                <h2 className={`pk-big ${b.winner === 0 ? "win" : "lose"}`}>{b.winner === 0 ? t("জয়!", "VICTORY!") : t("হার!", "DEFEAT")}</h2>
-                <p className="mt-3 font-sans text-sm text-white/85">
-                  {t("রাউন্ড", "Rounds")} {b.round} · {t("হিট", "Hits")} {b.stats.hits} · {t("ক্রিট", "Crits")} {b.stats.crits} · {t("সর্বোচ্চ আঘাত", "Biggest hit")} {b.stats.maxHit}
-                </p>
-                {rate?.flawless ? <p className="mt-2 font-display text-xl text-[#ffcb05]">👑 {t("ফ্ললেস ভিক্টরি — একজনও হারেনি!", "Flawless — nobody fainted!")}</p> : rate ? <p className="mt-2 font-sans text-sm text-white/85">{rate.survivors} {t("জন টিকে আছে", "survived")}</p> : null}
-                <div className="mt-5 flex flex-wrap justify-center gap-2 font-sans text-sm">
-                  <button type="button" onClick={onRematch} className="pressable rounded-full bg-accent px-4 py-2 text-accent-fg">⚔️ {t("আবার লড়ুন", "Rematch")}</button>
-                  <button type="button" onClick={onExit} className="pressable rounded-full border border-white/40 px-4 py-2 text-white">{t("টিম বদলান", "Change team")}</button>
-                </div>
+        {intro ? (
+          <div className="pk-vs" onClick={() => setIntro(false)} role="presentation">
+            <div className="pk-vs-row">
+              <div className="pk-vs-card">
+                <Pic look={monLook(me)} back className="size-24 object-contain sm:size-36" />
+                <span>{t("আপনি", "You")}</span>
+              </div>
+              <div className="pk-vs-mid">VS</div>
+              <div className="pk-vs-card r">
+                <Pic look={monLook(op)} className="size-24 object-contain sm:size-36" />
+                <span>CPU</span>
               </div>
             </div>
-          ) : null}
-        </BattleScene>
+          </div>
+        ) : null}
+
+        {done ? (
+          <div className={`pk-result ${b.winner === 0 ? "win" : "lose"}`}>
+            <div className="pk-result-inner">
+              <div className={b.winner === 0 ? "pk-trophy" : "pk-skull"} aria-hidden="true">{b.winner === 0 ? "🏆" : "💀"}</div>
+              <h2 className={`pk-big ${b.winner === 0 ? "win" : "lose"}`}>{b.winner === 0 ? t("জয়!", "VICTORY!") : t("হার!", "DEFEAT")}</h2>
+              <p className="mt-3 font-sans text-sm text-white/85">
+                {t("রাউন্ড", "Rounds")} {b.round} · {t("হিট", "Hits")} {b.stats.hits} · {t("ক্রিট", "Crits")} {b.stats.crits} · {t("সর্বোচ্চ আঘাত", "Biggest hit")} {b.stats.maxHit}
+              </p>
+              {rate?.flawless ? <p className="mt-2 font-display text-xl text-[#ffcb05]">👑 {t("ফ্ললেস ভিক্টরি — একজনও হারেনি!", "Flawless — nobody fainted!")}</p> : rate ? <p className="mt-2 font-sans text-sm text-white/85">{rate.survivors} {t("জন টিকে আছে", "survived")}</p> : null}
+              <div className="mt-5 flex flex-wrap justify-center gap-2 font-sans text-sm">
+                <button type="button" onClick={onRematch} className="pressable rounded-full bg-accent px-4 py-2 text-accent-fg">⚔️ {t("আবার লড়ুন", "Rematch")}</button>
+                <button type="button" onClick={onExit} className="pressable rounded-full border border-white/40 px-4 py-2 text-white">{t("টিম বদলান", "Change team")}</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="pk-dock">
@@ -711,7 +717,6 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
             <button type="button" className="pk-gbtn" onClick={onExit}><Flag className="mr-1 inline size-3.5" aria-hidden="true" />{t("হার মানুন", "Forfeit")}</button>
           </span>
         </div>
-        <p className="mt-1 font-sans text-[11px] text-muted">{t("রাউন্ড", "Round")} {phase === "play" ? Math.max(1, b.round) : b.round + 1} · CPU: {t(DIFFICULTY[difficulty].bn, DIFFICULTY[difficulty].en)}{b.weather.w ? ` · ${t(WEATHER_LABEL[b.weather.w].bn, WEATHER_LABEL[b.weather.w].en)}${Number.isFinite(b.weather.t) ? ` (${b.weather.t})` : ""}` : ""}</p>
 
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {me.moves.map((m, i) => {
@@ -735,9 +740,9 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
         </div>
 
         <div className="mt-2 grid grid-cols-3 gap-2">
-          {vb.sides[0].mons.map((m, i) => {
+          {mySide.mons.map((m, i) => {
             const pct = Math.round((m.hp / m.maxHp) * 100);
-            const active = i === vb.sides[0].active && !m.fainted;
+            const active = i === mySide.active && !m.fainted;
             return (
               <button key={m.uid} type="button" disabled={m.fainted || active || b.winner !== -1 || (phase === "play") || (phase === "choose" && !myTurn)} onClick={() => swap(i)} className={`pressable flex items-center gap-2 rounded-xl border px-2 py-1.5 text-left font-sans text-xs ${active ? "border-lamp bg-surface-2" : "border-border bg-bg"} disabled:opacity-60`}>
                 <Pic look={monLook(m)} still className="size-9 shrink-0 object-contain" />
@@ -766,5 +771,43 @@ function BattleScreen({ player, foe, difficulty, onRematch, onExit }: { player: 
         ))}
       </div>
     </section>
+  );
+}
+
+function MonView({ mon, side, anim, back }: { mon: Mon; side: "me" | "foe"; anim: React.RefObject<HTMLDivElement | null>; back?: boolean }) {
+  return (
+    <div className={`pk-mon ${side}`} data-fainted={mon.fainted ? "1" : "0"} data-mega={mon.form === 1 || mon.form === 3 ? "1" : "0"}>
+      <i className="pk-shadow" />
+      <div ref={anim} className="pk-anim">
+        <div className="pk-mon-inner"><Pic key={mon.uid} look={monLook(mon)} back={back} alt={mon.name} /></div>
+      </div>
+    </div>
+  );
+}
+
+function HpBox({ mon, side }: { mon: Mon; side: "me" | "foe" }) {
+  const { lang } = useT();
+  const pct = Math.max(0, Math.round((mon.hp / mon.maxHp) * 100));
+  const lvl = pct <= 20 ? "low" : pct <= 50 ? "mid" : "hi";
+  return (
+    <div className={`pk-hp ${side}`}>
+      <div className="pk-hp-row">
+        <span className="pk-hp-name">{mon.name}</span>
+        <span style={{ opacity: 0.7 }}>Lv50</span>
+        {mon.form > 0 ? <span className="pk-stat par" style={{ background: "#8338ec" }}>{FORM_LABEL[mon.form][lang === "en" ? "en" : "bn"]}</span> : null}
+      </div>
+      <div className="pk-hp-row" style={{ flexWrap: "wrap", gap: 3, marginTop: 3 }}>
+        {mon.status ? <span className="pk-stat" style={{ background: STATUS_LABEL[mon.status].color }}>{STATUS_LABEL[mon.status][lang === "en" ? "en" : "bn"]}</span> : null}
+        {mon.vol.cnf > 0 ? <span className="pk-stat" style={{ background: STATUS_LABEL.cnf.color }}>{STATUS_LABEL.cnf[lang === "en" ? "en" : "bn"]}</span> : null}
+        {mon.vol.inf > 0 ? <span className="pk-stat" style={{ background: STATUS_LABEL.inf.color }}>{STATUS_LABEL.inf[lang === "en" ? "en" : "bn"]}</span> : null}
+        {(Object.keys(mon.stages) as Stat[]).filter((k) => mon.stages[k] !== 0).map((k) => (
+          <span key={k} className={`pk-chip ${mon.stages[k] > 0 ? "up" : "down"}`}>{STAT_SHORT[k]} {mon.stages[k] > 0 ? "+" : ""}{mon.stages[k]}</span>
+        ))}
+      </div>
+      <div className="pk-bar"><i data-lvl={lvl} style={{ ["--w" as string]: `${pct}%` }} /></div>
+      <div className="pk-hp-row" style={{ justifyContent: "space-between", marginTop: 2, fontSize: 11, opacity: 0.9 }}>
+        <span>{mon.hp}/{mon.maxHp}</span>
+      </div>
+    </div>
   );
 }
