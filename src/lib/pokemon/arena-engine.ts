@@ -3,7 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { FIELDS, FOE_POOL, ITEMS, MOVES, PERKS, ROSTER, speciesOf, type FieldKind, type ItemKind, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { FIELDS, FOE_POOL, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
 export const W = 960;
@@ -69,6 +69,25 @@ export type Fighter = {
   ult: number; // the awakening gauge, 0 to 100
   awaken: number; // seconds of awakening left
   haste: number; // seconds of speed-boots left
+  /** The battle gimmick this Pokémon uses with the gauge: Awaken, Mega Evolution, Z-Move, Dynamax or Terastallization. */
+  gimmick: GimmickKind;
+  cpuGimmick: boolean; // a computer player that fills its gauge and uses its gimmick
+  /** Current types: they change with a Mega Evolution or Terastallization. */
+  types: string[];
+  megaForm: MegaForm | null; // the form chosen to evolve into
+  form: MegaForm | null; // the form it is in right now
+  mega: number;
+  megaP: number;
+  megaD: number;
+  megaS: number;
+  baseR: number;
+  dyna: number;
+  gmax: boolean;
+  tera: { type: string; t: number } | null;
+  teraType: string;
+  crystal: number; // the Tera crystal shield
+  zLock: boolean; // busy with a Z-Move
+  override: Record<number, MoveDef>; // a move slot that is temporarily a different move (Tera Blast)
   dealt: number;
   kos: number;
 };
@@ -91,6 +110,8 @@ export type Proj = {
   homing: boolean;
   beam: boolean;
   kb: number;
+  /** Dynamax shots burst on impact over this radius (0 for none). */
+  aoe: number;
 };
 
 export type Zone = {
@@ -103,7 +124,8 @@ export type Zone = {
   x2: number;
   y2: number;
   r: number; // radius, or half-width of a line
-  delay: number; // warning time before it strikes
+  delay: number; // warning time left before it strikes
+  total: number; // the whole warning time (for drawing how far along it is)
   life: number; // how long the strike is shown afterwards
   dmg: number;
   type: string;
@@ -129,6 +151,12 @@ export type Ev =
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
+  | { t: "mega"; x: number; y: number; name: string; z: boolean; type: string }
+  | { t: "zstart"; x: number; y: number; type: string; name: string }
+  | { t: "zhit"; x: number; y: number; type: string }
+  | { t: "dynamax"; x: number; y: number; gmax: boolean }
+  | { t: "tera"; x: number; y: number; type: string }
+  | { t: "gimmickEnd"; x: number; y: number; kind: GimmickKind }
   | { t: "awaken"; x: number; y: number }
   | { t: "item"; x: number; y: number; kind: ItemKind; byPlayer: boolean }
   | { t: "field"; kind: FieldKind }
@@ -161,6 +189,8 @@ export type State = {
   score: number;
   freeze: number; // hit-stop
   slow: number; // slow motion after a perfect dodge
+  /** A Z-Move that has been announced and strikes when the cinematic ends. */
+  zPending: { fid: number; type: string; name: string } | null;
   items: { id: number; x: number; y: number; kind: ItemKind; life: number }[];
   itemT: number;
   hazardT: number;
@@ -174,6 +204,9 @@ export type State = {
   /** Mean time the player has to dodge: higher is easier. */
   easy: number;
 };
+
+/** The move in a slot (Tera Blast takes over the fourth one for a while). */
+export const moveOf = (f: Fighter, slot: number): MoveDef => f.override[slot] ?? MOVES[f.sp.moves[slot]!]!;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -243,12 +276,31 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     ult: 0,
     awaken: 0,
     haste: 0,
+    gimmick: "awaken",
+    cpuGimmick: false,
+    types: [...sp.types],
+    megaForm: null,
+    form: null,
+    mega: 0,
+    megaP: 1,
+    megaD: 1,
+    megaS: 1,
+    baseR: sp.size * (boss ? 0.82 : 0.6),
+    dyna: 0,
+    gmax: false,
+    tera: null,
+    teraType: sp.types[0] ?? "Normal",
+    crystal: 0,
+    zLock: false,
+    override: {},
     dealt: 0,
     kos: 0,
   };
 }
 
-export function newGame(mode: Mode, speciesId: string, opts: { auto?: boolean } = {}): State {
+export type NewGameOptions = { auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string };
+
+export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}): State {
   const S: State = {
     mode,
     time: 0,
@@ -263,6 +315,7 @@ export function newGame(mode: Mode, speciesId: string, opts: { auto?: boolean } 
     score: 0,
     freeze: 0,
     slow: 0,
+    zPending: null,
     items: [],
     itemT: 7,
     hazardT: 6,
@@ -277,13 +330,26 @@ export function newGame(mode: Mode, speciesId: string, opts: { auto?: boolean } 
   };
   const player = makeFighter(S, speciesOf(speciesId), 0, true, mode === "royale" ? CX : 230, mode === "royale" ? CY + 150 : CY);
   player.auto = !!opts.auto;
+  player.cpuGimmick = !!opts.auto; // an auto-piloted player also uses its gimmick
+  player.gimmick = opts.gimmick ?? "awaken";
+  player.megaForm = (MEGAS[speciesId] ?? []).find((m) => m.id === opts.mega) ?? MEGAS[speciesId]?.[0] ?? null;
+  if (player.gimmick === "mega" && !player.megaForm) player.gimmick = "awaken";
+  if (opts.tera && TERA_TYPES.includes(opts.tera)) player.teraType = opts.tera;
   S.fighters.push(player);
   if (mode === "royale") {
     const pool = ROSTER.filter((s) => s.id !== speciesId && !s.unlock);
     for (let i = 0; i < 4; i++) {
       const sp = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      S.fighters.push(makeFighter(S, sp, i + 1, false, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200, { hp: 0.95, dmg: 0.95 }));
+      const cpu = makeFighter(S, sp, i + 1, false, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200, { hp: 0.95, dmg: 0.95 });
+      // in a royale everybody brings a gimmick
+      const kinds = gimmicksFor(sp.id);
+      cpu.cpuGimmick = true;
+      cpu.gimmick = kinds[Math.floor(Math.random() * kinds.length)]!;
+      const forms = MEGAS[sp.id] ?? [];
+      cpu.megaForm = forms[Math.floor(Math.random() * forms.length)] ?? null;
+      cpu.teraType = TERA_TYPES[Math.floor(Math.random() * TERA_TYPES.length)]!;
+      S.fighters.push(cpu);
     }
     S.wave = 1;
     S.storm = { r: 520, on: false };
@@ -370,7 +436,7 @@ function nearestFoe(S: State, f: Fighter, from = { x: f.x, y: f.y }): Fighter | 
 }
 
 function baseDamage(src: Fighter, mv: MoveDef, power = mv.power) {
-  return 13 * power * (src.power / 90) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1);
+  return 13 * power * ((src.power * (src.mega > 0 ? src.megaP : 1)) / 90) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1) * (src.dyna > 0 ? 1.35 : 1);
 }
 
 /** Weather helps some types and hurts others. */
@@ -380,11 +446,15 @@ function fieldMul(S: State, type: string) {
   return f.up.includes(type) ? 1.3 : f.down.includes(type) ? 0.75 : 1;
 }
 
+/** True while any gimmick is running (or a Z-Move is being announced). */
+export const gimmickActive = (f: Fighter) => f.awaken > 0 || f.mega > 0 || f.dyna > 0 || !!f.tera || f.zLock;
+
 function gainUlt(f: Fighter, amount: number) {
-  if (f.isPlayer && f.awaken <= 0) f.ult = Math.min(100, f.ult + amount);
+  if ((f.isPlayer || f.cpuGimmick) && !gimmickActive(f)) f.ult = Math.min(100, f.ult + amount);
 }
 
 function applyStatus(S: State, f: Fighter, kind: StatusKind) {
+  if (f.dyna > 0) return;
   if (kind === "frz") {
     if (f.status.frzImmune > 0 || f.boss) return;
     f.status.frz = 1.0;
@@ -412,14 +482,21 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     }
     return 0;
   }
-  const eff = typeMult(type, dst.sp.types);
-  const stab = src.sp.types.includes(type) ? STAB : 1;
+  const eff = typeMult(type, dst.types);
+  const orig = src.sp.types.includes(type);
+  // a Terastallized Pokémon gets a bigger same-type bonus for its Tera type, and keeps a little of its old one
+  const stab = src.tera ? (src.tera.type === type ? (orig ? 2 : 1.5) : orig ? 1.2 : 1) : src.types.includes(type) ? STAB : 1;
   const crit = Math.random() < src.critChance;
   const comboMul = src.isPlayer ? 1 + Math.min(0.5, 0.1 * Math.max(0, src.combo.n - 1)) : 1;
   const focusMul = src.isPlayer && src.focus > 0 ? 1.5 : 1;
-  let dmg = dmgBase * fieldMul(S, type) * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + dst.defence / 9));
+  let dmg = dmgBase * fieldMul(S, type) * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + (dst.defence * (dst.mega > 0 ? dst.megaD : 1)) / 9));
   if (dst.shield > 0) dmg *= 0.12;
-  dmg = Math.max(1, Math.round(dmg));
+  if (dst.crystal > 0) {
+    const soak = Math.min(dst.crystal, dmg);
+    dst.crystal -= soak;
+    dmg -= soak;
+  }
+  dmg = dmg > 0.5 ? Math.max(1, Math.round(dmg)) : 0;
   dst.hp -= dmg;
   dst.flash = 0.12;
   src.dealt += dmg;
@@ -427,7 +504,7 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   if (src.drain > 0) src.hp = Math.min(src.maxHp, src.hp + dmg * src.drain);
   const heavy = dmg >= dst.maxHp * 0.12 || crit;
   const [nx, ny] = norm(o.kx, o.ky);
-  if (!dst.boss) {
+  if (!dst.boss && dst.dyna <= 0) {
     dst.kx += nx * o.kb * (heavy ? 1.3 : 1);
     dst.ky += ny * o.kb * (heavy ? 1.3 : 1);
   }
@@ -447,7 +524,7 @@ function kill(S: State, src: Fighter | null, dst: Fighter) {
   if (src) src.kos++;
   if (src) gainUlt(src, 15);
   if (src?.isPlayer) S.score += 100 * Math.max(1, S.wave) * (dst.boss ? 5 : 1);
-  S.events.push({ t: "ko", x: dst.x, y: dst.y, id: dst.id, id2: dst.sp.id, type: dst.sp.types[0] ?? "Normal", byPlayer: !!src?.isPlayer, player: dst.isPlayer, boss: dst.boss });
+  S.events.push({ t: "ko", x: dst.x, y: dst.y, id: dst.id, id2: dst.sp.id, type: dst.types[0] ?? "Normal", byPlayer: !!src?.isPlayer, player: dst.isPlayer, boss: dst.boss });
   S.freeze = Math.max(S.freeze, 0.12);
 }
 
@@ -489,7 +566,7 @@ function spawnProj(S: State, f: Fighter, mv: MoveDef, dx: number, dy: number, o:
     y: f.y + cy * (f.r + 6),
     vx: cx * sp,
     vy: cy * sp,
-    r: o.r ?? (mv.kind === "beam" ? 9 : 11),
+    r: (o.r ?? (mv.kind === "beam" ? 9 : 11)) * (f.dyna > 0 ? 1.6 : 1),
     dmg: o.dmg ?? baseDamage(f, mv),
     type: mv.type,
     life: o.life ?? 1.6,
@@ -499,13 +576,34 @@ function spawnProj(S: State, f: Fighter, mv: MoveDef, dx: number, dy: number, o:
     homing: !!o.homing,
     beam: !!o.beam,
     kb: mv.kind === "beam" ? 30 : 150,
+    aoe: f.dyna > 0 && !o.beam ? 75 : 0,
   });
 }
 
 function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: number, ty: number) {
-  const mv = MOVES[f.sp.moves[slot]!]!;
+  const mv = moveOf(f, slot);
   S.events.push({ t: "cast", x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
   f.face = Math.atan2(dy, dx);
+  // Dynamax: moves become Max Moves that change the weather, and Gigantamax adds a blast where you aim
+  if (f.dyna > 0) {
+    const w: Record<string, FieldKind> = { Fire: "sun", Water: "rain", Ice: "hail", Rock: "sand" };
+    const kind = w[mv.type];
+    if (kind && S.field !== kind) {
+      S.field = kind;
+      S.events.push({ t: "field", kind });
+    }
+    if (f.gmax && mv.kind !== "heal" && mv.kind !== "guard" && mv.kind !== "buff") {
+      const gx = clamp(tx, MARGIN, W - MARGIN);
+      const gy = clamp(ty, MARGIN, H - MARGIN);
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x: gx, y: gy, x2: gx, y2: gy, r: 74, delay: 0.5, total: 0.5, life: 0.35, dmg: baseDamage(f, mv, 0.8), type: mv.type, status: mv.status, kb: 280, struck: false, mv, player: f.isPlayer });
+    }
+  }
+  // the new Z forms send out a pulse with every move
+  if (f.mega > 0 && f.form?.z && mv.kind !== "heal" && mv.kind !== "guard" && mv.kind !== "buff") {
+    const r = 95;
+    S.events.push({ t: "explode", x: f.x, y: f.y, r, type: f.types[0] ?? "Normal" });
+    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, baseDamage(f, mv, 0.4), f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 200 });
+  }
   switch (mv.kind) {
     case "proj":
       spawnProj(S, f, mv, dx, dy);
@@ -542,12 +640,12 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       const k = d > range ? range / d : 1;
       const x = clamp(f.x + (tx - f.x) * k, MARGIN, W - MARGIN);
       const y = clamp(f.y + (ty - f.y) * k, MARGIN, H - MARGIN);
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: 0.35, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 260, struck: false, mv, player: f.isPlayer });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: 0.35, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 260, struck: false, mv, player: f.isPlayer });
       break;
     }
     case "bolt": {
       const range = mv.range ?? 480;
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "line", x: f.x, y: f.y, x2: f.x + dx * range, y2: f.y + dy * range, r: 20, delay: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), life: 0.3, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 200, struck: false, mv, player: f.isPlayer });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "line", x: f.x, y: f.y, x2: f.x + dx * range, y2: f.y + dy * range, r: 20, delay: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), total: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), life: 0.3, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 200, struck: false, mv, player: f.isPlayer });
       break;
     }
     case "guard":
@@ -569,7 +667,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
 export function tryCast(S: State, f: Fighter, slot: number, input: Input | null = null): boolean {
   if (!f.alive || f.stun > 0 || f.status.frz > 0) return false;
   if (f.cd[slot]! > 0 || f.cast || f.channel || f.dash) return false;
-  const mv = MOVES[f.sp.moves[slot]!]!;
+  const mv = moveOf(f, slot);
   const a = aimOf(S, f, input);
   f.cd[slot] = mv.cd * f.cdMul;
   if (f.isPlayer) {
@@ -586,8 +684,8 @@ export function tryCast(S: State, f: Fighter, slot: number, input: Input | null 
       S.score += 150;
       S.events.push({ t: "combo", n: 4, finish: true });
       const r = 150;
-      S.events.push({ t: "explode", x: f.x, y: f.y, r, type: f.sp.types[0] ?? "Normal" });
-      for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, f.sp.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 300 });
+      S.events.push({ t: "explode", x: f.x, y: f.y, r, type: f.types[0] ?? "Normal" });
+      for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 300 });
     } else S.events.push({ t: "combo", n: c.n, finish: false });
   }
   // lobs and bolts warn with their own circle/line on the ground, so they fire at once
@@ -611,12 +709,10 @@ function startDodge(S: State, f: Fighter, dx: number, dy: number) {
 }
 
 /** The special burst: a shockwave, then a few seconds of more damage, speed and recharge. */
-export function awaken(S: State, f: Fighter) {
-  if (!f.alive || f.ult < 100 || f.awaken > 0) return false;
-  f.ult = 0;
+function doAwaken(S: State, f: Fighter) {
   f.awaken = 8;
   f.invuln = Math.max(f.invuln, 0.5);
-  const type = f.sp.types[0] ?? "Normal";
+  const type = f.types[0] ?? "Normal";
   const r = 230;
   S.events.push({ t: "awaken", x: f.x, y: f.y });
   S.events.push({ t: "explode", x: f.x, y: f.y, r, type });
@@ -624,8 +720,135 @@ export function awaken(S: State, f: Fighter) {
   for (const o of foesOf(S, f)) {
     if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 30 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 420 });
   }
+}
+
+/** Mega Evolution: a new form for a while, with its own stats and sometimes new types. */
+function doMega(S: State, f: Fighter) {
+  const form = f.megaForm;
+  if (!form) return doAwaken(S, f);
+  f.mega = 15;
+  f.form = form;
+  f.types = form.types ? [...form.types] : [...f.sp.types];
+  f.megaP = form.p ?? 1.28;
+  f.megaD = form.d ?? 1.2;
+  f.megaS = form.s ?? 1.1;
+  f.r = f.baseR * 1.12;
+  f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.25);
+  f.invuln = Math.max(f.invuln, 0.5);
+  const type = f.types[0] ?? "Normal";
+  S.events.push({ t: "mega", x: f.x, y: f.y, name: form.name, z: !!form.z, type });
+  S.events.push({ t: "explode", x: f.x, y: f.y, r: 190, type });
+  S.freeze = Math.max(S.freeze, 0.14);
+  for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 190 + o.r) strike(S, f, o, 22 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 380 });
+}
+function endMega(S: State, f: Fighter) {
+  f.mega = 0;
+  f.form = null;
+  f.types = [...f.sp.types];
+  f.megaP = f.megaD = f.megaS = 1;
+  f.r = f.baseR;
+  S.events.push({ t: "gimmickEnd", x: f.x, y: f.y, kind: "mega" });
+}
+
+/** Z-Move: the world freezes for a cinematic, then a finisher of your type hits everyone, whatever they are doing. */
+function doZ(S: State, f: Fighter) {
+  const sig = Z_SIGNATURE[f.sp.id];
+  const type = sig?.type ?? f.types[0] ?? "Normal";
+  const name = sig?.name ?? Z_MOVES[type]?.name ?? "Z-Move";
+  f.zLock = true;
+  f.invuln = Math.max(f.invuln, 1.6);
+  f.cast = f.channel = f.dash = null;
+  S.zPending = { fid: f.id, type, name };
+  S.freeze = Math.max(S.freeze, 1.2);
+  S.events.push({ t: "zstart", x: f.x, y: f.y, type, name });
+}
+function resolveZ(S: State) {
+  const z = S.zPending;
+  S.zPending = null;
+  if (!z) return;
+  const f = S.fighters.find((x) => x.id === z.fid);
+  if (!f) return;
+  f.zLock = false;
+  f.invuln = Math.max(f.invuln, 0.6);
+  if (!f.alive) return;
+  S.events.push({ t: "explode", x: f.x, y: f.y, r: 200, type: z.type });
+  for (const o of foesOf(S, f)) {
+    o.invuln = 0;
+    o.shield = 0;
+    S.events.push({ t: "zhit", x: o.x, y: o.y, type: z.type });
+    strike(S, f, o, 13 * 8.5 * (f.power / 90) * f.dmgMul * (f.mega > 0 ? f.megaP : 1), z.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 560 });
+  }
+  S.freeze = Math.max(S.freeze, 0.18);
+}
+
+/** Dynamax and Gigantamax: huge for a while, with more HP and Max Moves. */
+function doDynamax(S: State, f: Fighter) {
+  f.dyna = 12;
+  f.gmax = GMAX.has(f.sp.id);
+  f.r = f.baseR * 1.55;
+  f.maxHp = Math.round(f.maxHp * 1.5);
+  f.hp = Math.round(f.hp * 1.5);
+  f.ghost = f.hp;
+  f.invuln = Math.max(f.invuln, 0.5);
+  f.status.brn = f.status.psn = f.status.par = f.status.frz = 0;
+  const type = f.types[0] ?? "Normal";
+  S.events.push({ t: "dynamax", x: f.x, y: f.y, gmax: f.gmax });
+  S.events.push({ t: "explode", x: f.x, y: f.y, r: 210, type });
+  S.freeze = Math.max(S.freeze, 0.14);
+  for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 210 + o.r) strike(S, f, o, 26 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 520 });
+}
+function endDynamax(S: State, f: Fighter) {
+  f.dyna = 0;
+  f.r = f.baseR;
+  f.maxHp = Math.max(1, Math.round(f.maxHp / 1.5));
+  f.hp = Math.max(1, Math.min(f.maxHp, Math.round(f.hp / 1.5)));
+  f.ghost = f.hp;
+  S.events.push({ t: "gimmickEnd", x: f.x, y: f.y, kind: "dynamax" });
+  if (f.gmax && f.alive) {
+    // the Gigantamax finishing blast
+    const type = f.types[0] ?? "Normal";
+    S.events.push({ t: "explode", x: f.x, y: f.y, r: 230, type });
+    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 230 + o.r) strike(S, f, o, 24 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 480 });
+  }
+}
+
+/** Terastallization: a crystal of any type, with a shield, a stronger same-type bonus and Tera Blast. */
+function doTera(S: State, f: Fighter) {
+  const type = f.teraType;
+  f.tera = { type, t: 25 };
+  f.types = [type];
+  f.crystal = f.maxHp * 0.3;
+  f.override[3] = { id: "terablast", name: "Tera Blast", type, kind: "proj", power: 2.1, cd: 3.4, speed: 560, pierce: true, desc: "A piercing blast of your Tera type." };
+  f.cd[3] = 0;
+  f.invuln = Math.max(f.invuln, 0.5);
+  S.events.push({ t: "tera", x: f.x, y: f.y, type });
+  S.events.push({ t: "explode", x: f.x, y: f.y, r: 170, type });
+  S.freeze = Math.max(S.freeze, 0.12);
+  for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 170 + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 360 });
+}
+function endTera(S: State, f: Fighter) {
+  f.tera = null;
+  f.types = f.form?.types ? [...f.form.types] : [...f.sp.types];
+  f.crystal = 0;
+  delete f.override[3];
+  S.events.push({ t: "gimmickEnd", x: f.x, y: f.y, kind: "tera" });
+}
+
+/** Use the gimmick once the gauge is full. */
+export function activateGimmick(S: State, f: Fighter) {
+  if (!f.alive || f.ult < 100 || gimmickActive(f)) return false;
+  f.ult = 0;
+  switch (f.gimmick) {
+    case "mega": doMega(S, f); break;
+    case "zmove": doZ(S, f); break;
+    case "dynamax": doDynamax(S, f); break;
+    case "tera": doTera(S, f); break;
+    default: doAwaken(S, f);
+  }
   return true;
 }
+/** Kept for older callers. */
+export const awaken = activateGimmick;
 
 /* ---------------------------------------------------------------- computer players */
 
@@ -709,6 +932,10 @@ function aiStep(S: State, f: Fighter, dt: number) {
       }
     }
   }
+  if (f.cpuGimmick && f.ult >= 100 && !gimmickActive(f) && Math.random() < 0.5) {
+    activateGimmick(S, f);
+    return;
+  }
   if (f.cast || f.channel || f.dash || f.gcd > 0) return;
 
   // the boss's ring of shots
@@ -730,7 +957,7 @@ function aiStep(S: State, f: Fighter, dt: number) {
   const options: number[] = [];
   for (let i = 0; i < 4; i++) {
     if (f.cd[i]! > 0) continue;
-    const mv = MOVES[f.sp.moves[i]!]!;
+    const mv = moveOf(f, i);
     if (mv.kind === "heal") {
       if (f.hp < f.maxHp * 0.5) options.push(i, i);
       continue;
@@ -767,6 +994,8 @@ function moveFighter(S: State, f: Fighter, dt: number) {
   } else {
     let k = f.speedMul;
     if (f.awaken > 0) k *= 1.25;
+    if (f.mega > 0) k *= f.megaS;
+    if (f.dyna > 0) k *= 0.92;
     if (f.haste > 0) k *= 1.3;
     if (f.status.par > 0) k *= 0.55;
     if (f.status.frz > 0 || f.stun > 0) k = 0;
@@ -800,6 +1029,7 @@ export function step(S: State, input: Input, realDt: number) {
     S.freeze -= dt0;
     return;
   }
+  if (S.zPending) resolveZ(S);
   const dt = dt0 * (S.slow > 0 ? 0.32 : 1);
   S.slow = Math.max(0, S.slow - dt0);
   S.time += dt;
@@ -821,7 +1051,7 @@ export function step(S: State, input: Input, realDt: number) {
     p.vy = my * p.speed;
     if (input.dodge) startDodge(S, p, len(mx, my) > 0.1 ? mx : Math.cos(p.face), len(mx, my) > 0.1 ? my : Math.sin(p.face));
     for (let i = 0; i < 4; i++) if (input.cast[i]) tryCast(S, p, i, input);
-    if (input.ult) awaken(S, p);
+    if (input.ult) activateGimmick(S, p);
     // a held beam follows the aim
     if (p.channel) {
       const a = aimOf(S, p, input);
@@ -847,9 +1077,21 @@ export function step(S: State, input: Input, realDt: number) {
     if (!f.isPlayer) aiStep(S, f, dt);
 
     // timers
-    const cdRate = f.awaken > 0 ? 2 : 1;
+    const cdRate = (f.awaken > 0 ? 2 : 1) * (f.dyna > 0 ? 1.25 : 1);
     for (let i = 0; i < 4; i++) f.cd[i] = Math.max(0, f.cd[i]! - dt * cdRate);
     f.awaken = Math.max(0, f.awaken - dt);
+    if (f.mega > 0) {
+      f.mega -= dt;
+      if (f.mega <= 0) endMega(S, f);
+    }
+    if (f.dyna > 0) {
+      f.dyna -= dt;
+      if (f.dyna <= 0) endDynamax(S, f);
+    }
+    if (f.tera) {
+      f.tera.t -= dt;
+      if (f.tera.t <= 0) endTera(S, f);
+    }
     f.haste = Math.max(0, f.haste - dt);
     f.invuln = Math.max(0, f.invuln - dt);
     f.flash = Math.max(0, f.flash - dt);
@@ -869,7 +1111,7 @@ export function step(S: State, input: Input, realDt: number) {
     // sandstorm and hail wear down whoever they are not made for
     if (S.field === "sand" || S.field === "hail") {
       const chip = FIELDS[S.field].chip;
-      if (!f.sp.types.some((ty) => chip.includes(ty))) {
+      if (!f.types.some((ty) => chip.includes(ty))) {
         f.hp -= f.maxHp * 0.01 * dt;
         if (f.hp <= 0) {
           kill(S, null, f);
@@ -912,7 +1154,7 @@ export function step(S: State, input: Input, realDt: number) {
     }
     // a beam being held
     if (f.channel) {
-      const mv = MOVES[f.sp.moves[f.channel.slot]!]!;
+      const mv = moveOf(f, f.channel.slot);
       f.channel.t -= dt;
       f.channel.tick -= dt;
       if (f.channel.tick <= 0) {
@@ -993,7 +1235,12 @@ export function step(S: State, input: Input, realDt: number) {
         if (src) strike(S, src, o, pr.dmg, pr.type, { kx: pr.vx, ky: pr.vy, kb: pr.kb, status: pr.status });
         if (!pr.pierce) {
           pr.life = 0;
-          S.events.push({ t: "explode", x: pr.x, y: pr.y, r: 34, type: pr.type });
+          S.events.push({ t: "explode", x: pr.x, y: pr.y, r: pr.aoe > 0 ? pr.aoe : 34, type: pr.type });
+          if (pr.aoe > 0 && src) {
+            for (const o2 of S.fighters) {
+              if (o2.alive && o2.team !== pr.team && o2.id !== o.id && len(o2.x - pr.x, o2.y - pr.y) <= pr.aoe + o2.r) strike(S, src, o2, pr.dmg * 0.6, pr.type, { kx: o2.x - pr.x, ky: o2.y - pr.y, kb: 200, status: pr.status });
+            }
+          }
           break;
         }
       }
@@ -1105,7 +1352,7 @@ export function step(S: State, input: Input, realDt: number) {
         const t = targets[Math.floor(Math.random() * targets.length)];
         const x = t && Math.random() < 0.6 ? clamp(t.x + rnd(-60, 60), MARGIN, W - MARGIN) : rnd(MARGIN, W - MARGIN);
         const y = t && Math.random() < 0.6 ? clamp(t.y + rnd(-60, 60), MARGIN, H - MARGIN) : rnd(MARGIN, H - MARGIN);
-        S.zones.push({ id: S.nextId++, owner: 0, team: -1, shape: "circle", x, y, x2: x, y2: y, r: 56, delay: 1.1, life: 0.35, dmg: 0, type: "Electric", kb: 220, struck: false, mv: MOVES.thunder!, player: false });
+        S.zones.push({ id: S.nextId++, owner: 0, team: -1, shape: "circle", x, y, x2: x, y2: y, r: 56, delay: 1.1, total: 1.1, life: 0.35, dmg: 0, type: "Electric", kb: 220, struck: false, mv: MOVES.thunder!, player: false });
       }
       S.events.push({ t: "hazard", x: CX, y: CY });
     }

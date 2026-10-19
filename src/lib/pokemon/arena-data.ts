@@ -150,6 +150,39 @@ export const ROSTER: Species[] = [
   { id: "sceptile", num: 254, name: "Sceptile", types: ["Grass"], bs: [70, 85, 65, 105, 85, 120], moves: ["leafblade", "leafstorm", "dragonpulse", "aerialace"], role: "shooter", size: 26, blurb: "Quick blades and a storm of leaves." },
   { id: "dragapult", num: 887, name: "Dragapult", types: ["Dragon", "Ghost"], bs: [88, 120, 75, 100, 75, 142], moves: ["dragonpulse", "shadowball", "phantomforce", "dracometeor"], role: "bomber", size: 28, blurb: "Blindingly fast, with a meteor to finish." },
   { id: "aegislash", num: 681, name: "Aegislash", types: ["Steel", "Ghost"], bs: [60, 50, 140, 50, 140, 60], moves: ["shadowclaw", "flashcannon", "kingsshield", "swordsdance"], role: "brawler", size: 26, blurb: "Hold the shield, then strike." },
+  { id: "absol", num: 359, name: "Absol", types: ["Dark"], bs: [65, 130, 60, 75, 60, 75], moves: ["nightslash", "shadowclaw", "swordsdance", "aerialace"], role: "brawler", size: 26, blurb: "A sharp, fast cutter. Mega Absol Z waits for you." },
+  { id: "clefable", num: 36, name: "Clefable", types: ["Fairy"], bs: [95, 70, 73, 95, 90, 60], moves: ["moonblast", "psybeam", "calmmind", "recover"], role: "bomber", size: 26, blurb: "Moonlight, patience and self-healing." },
+  { id: "starmie", num: 121, name: "Starmie", types: ["Water", "Psychic"], bs: [60, 75, 85, 100, 85, 115], moves: ["waterpulse", "psychic", "icebeam", "recover"], role: "shooter", size: 24, blurb: "Fast, bright and tricky to pin down." },
+  { id: "victreebel", num: 71, name: "Victreebel", types: ["Grass", "Poison"], bs: [80, 105, 65, 100, 70, 70], moves: ["razorleaf", "sludgebomb", "leafblade", "synthesis"], role: "bomber", size: 28, blurb: "Leaves and poison from a distance." },
+  { id: "meganium", num: 154, name: "Meganium", types: ["Grass"], bs: [80, 82, 100, 83, 100, 80], moves: ["razorleaf", "solarbeam", "bodyslam", "synthesis"], role: "shooter", size: 30, blurb: "Steady, tough and gentle healing." },
+  { id: "feraligatr", num: 160, name: "Feraligatr", types: ["Water"], bs: [85, 105, 100, 79, 83, 78], moves: ["waterpulse", "crunch", "surf", "swordsdance"], role: "brawler", size: 30, blurb: "Bites hard once it is powered up." },
+  { id: "emboar", num: 500, name: "Emboar", types: ["Fire", "Fighting"], bs: [110, 123, 65, 100, 65, 65], moves: ["flamethrower", "flareblitz", "crosschop", "fireblast"], role: "brawler", size: 32, blurb: "A heavy fire fighter with big HP." },
+  { id: "excadrill", num: 530, name: "Excadrill", types: ["Ground", "Steel"], bs: [110, 135, 60, 50, 65, 88], moves: ["bulletpunch", "earthquake", "stoneedge", "swordsdance"], role: "brawler", size: 28, blurb: "Drills through anything at speed." },
+  { id: "chandelure", num: 609, name: "Chandelure", types: ["Ghost", "Fire"], bs: [60, 55, 90, 145, 90, 80], moves: ["shadowball", "flamethrower", "fireblast", "calmmind"], role: "bomber", size: 26, blurb: "Ghost fire. Fragile, with a huge reach." },
+  { id: "chesnaught", num: 652, name: "Chesnaught", types: ["Grass", "Fighting"], bs: [88, 107, 122, 74, 75, 64], moves: ["leafblade", "dynamicpunch", "kingsshield", "synthesis"], role: "brawler", size: 30, blurb: "A spiky wall that hits back." },
+  { id: "delphox", num: 655, name: "Delphox", types: ["Fire", "Psychic"], bs: [75, 69, 72, 114, 100, 104], moves: ["flamethrower", "psybeam", "fireblast", "calmmind"], role: "shooter", size: 26, blurb: "Fire and mind, from a safe distance." },
+  { id: "hawlucha", num: 701, name: "Hawlucha", types: ["Fighting", "Flying"], bs: [78, 92, 75, 74, 63, 118], moves: ["aerialace", "closecombat", "bravebird", "swordsdance"], role: "brawler", size: 24, blurb: "A flying wrestler. Dive in, then dive out." },
+  { id: "skarmory", num: 227, name: "Skarmory", types: ["Steel", "Flying"], bs: [65, 80, 140, 40, 70, 70], moves: ["airslash", "flashcannon", "bravebird", "protect"], role: "shooter", size: 28, blurb: "Steel wings. Very hard to hurt." },
+  { id: "froslass", num: 478, name: "Froslass", types: ["Ice", "Ghost"], bs: [70, 80, 70, 80, 70, 110], moves: ["icebeam", "shadowball", "blizzard", "shadowsneak"], role: "shooter", size: 24, blurb: "Cold and quick. Freezes what it touches." },
+  { id: "mimikyu", num: 778, name: "Mimikyu", types: ["Ghost", "Fairy"], bs: [55, 90, 80, 50, 105, 96], moves: ["shadowclaw", "moonblast", "swordsdance", "shadowsneak"], role: "brawler", size: 22, blurb: "Small, spooky, and terribly strong in a Z-Move." },
+  { id: "corviknight", num: 823, name: "Corviknight", types: ["Flying", "Steel"], bs: [98, 87, 105, 53, 85, 67], moves: ["bravebird", "flashcannon", "aerialace", "kingsshield"], role: "brawler", size: 32, blurb: "An armoured crow. Gigantamax is a sight." },
+  { id: "hydreigon", num: 635, name: "Hydreigon", types: ["Dark", "Dragon"], bs: [92, 105, 90, 125, 90, 98], moves: ["darkpulse", "dragonpulse", "dracometeor", "flashcannon"], role: "bomber", size: 30, blurb: "Three heads, three kinds of trouble." },
+  { id: "kommoo", num: 784, name: "Kommo-o", types: ["Dragon", "Fighting"], bs: [75, 110, 125, 100, 105, 85], moves: ["dragonpulse", "closecombat", "outrage", "swordsdance"], role: "brawler", size: 30, blurb: "Scales that ring. Great Z-Move." },
+  { id: "zeraora", num: 807, name: "Zeraora", types: ["Electric"], bs: [88, 112, 75, 102, 80, 143], moves: ["wildcharge", "thunderbolt", "quickattack", "aurasphere"], role: "brawler", size: 24, blurb: "The fastest of the fast. Mega Zeraora is out of this world." },
+  { id: "darkrai", num: 491, name: "Darkrai", types: ["Dark"], bs: [70, 90, 90, 135, 90, 125], moves: ["darkpulse", "shadowball", "nightslash", "calmmind"], role: "bomber", size: 26, blurb: "Nightmares in the arena." },
+  { id: "heatran", num: 485, name: "Heatran", types: ["Fire", "Steel"], bs: [91, 90, 106, 130, 106, 77], moves: ["flamethrower", "flashcannon", "earthquake", "protect"], role: "shooter", size: 30, blurb: "A molten tank." },
+  { id: "golurk", num: 623, name: "Golurk", types: ["Ground", "Ghost"], bs: [89, 124, 80, 55, 80, 55], moves: ["earthquake", "shadowclaw", "dynamicpunch", "stoneedge"], role: "brawler", size: 34, blurb: "A giant that shakes the floor." },
+  { id: "raichu", num: 26, name: "Raichu", types: ["Electric"], bs: [60, 90, 55, 90, 80, 110], moves: ["thundershock", "thunderbolt", "quickattack", "wildcharge"], role: "shooter", size: 24, blurb: "Mega Raichu X or Y for a shock finish." },
+  { id: "staraptor", num: 398, name: "Staraptor", types: ["Normal", "Flying"], bs: [85, 120, 70, 50, 60, 100], moves: ["bravebird", "aerialace", "closecombat", "extremespeed"], role: "brawler", size: 28, blurb: "Divebombs from every direction." },
+  { id: "baxcalibur", num: 998, name: "Baxcalibur", types: ["Dragon", "Ice"], bs: [115, 145, 92, 75, 86, 87], moves: ["icebeam", "dragonrush", "blizzard", "outrage"], role: "brawler", size: 32, blurb: "Ice and dragon fury." },
+  { id: "chimecho", num: 358, name: "Chimecho", types: ["Psychic"], bs: [75, 50, 80, 95, 90, 65], moves: ["psychic", "psybeam", "recover", "calmmind"], role: "bomber", size: 20, blurb: "A tiny bell with a big mind." },
+  { id: "crabominable", num: 740, name: "Crabominable", types: ["Fighting", "Ice"], bs: [97, 132, 77, 62, 67, 43], moves: ["dynamicpunch", "crosschop", "icebeam", "blizzard"], role: "brawler", size: 32, blurb: "Frozen fists." },
+  { id: "golisopod", num: 768, name: "Golisopod", types: ["Bug", "Water"], bs: [75, 125, 140, 60, 90, 40], moves: ["xscissor", "waterpulse", "closecombat", "protect"], role: "brawler", size: 30, blurb: "Armour first, claws second." },
+  { id: "scovillain", num: 952, name: "Scovillain", types: ["Grass", "Fire"], bs: [65, 108, 65, 108, 65, 75], moves: ["flamethrower", "razorleaf", "solarbeam", "synthesis"], role: "shooter", size: 26, blurb: "Spicy two-faced attacker." },
+  { id: "glimmora", num: 970, name: "Glimmora", types: ["Rock", "Poison"], bs: [83, 55, 90, 130, 81, 86], moves: ["sludgebomb", "rockslide", "stoneedge", "darkpulse"], role: "bomber", size: 26, blurb: "Crystal blasts from above." },
+  { id: "tatsugiri", num: 978, name: "Tatsugiri", types: ["Dragon", "Water"], bs: [68, 50, 60, 120, 95, 82], moves: ["dragonpulse", "hydropump", "dracometeor", "calmmind"], role: "shooter", size: 20, blurb: "Small, but it sits in a very big dragon." },
+  { id: "meowstic", num: 678, name: "Meowstic", types: ["Psychic"], bs: [74, 48, 76, 83, 81, 104], moves: ["psybeam", "shadowball", "calmmind", "recover"], role: "shooter", size: 22, blurb: "Quick psychic cat." },
+  { id: "magearna", num: 801, name: "Magearna", types: ["Steel", "Fairy"], bs: [80, 95, 115, 130, 115, 65], moves: ["flashcannon", "moonblast", "shadowball", "kingsshield"], role: "bomber", size: 28, blurb: "A wind-up wonder. Mega form too." },
   { id: "mewtwo", num: 150, name: "Mewtwo", types: ["Psychic"], bs: [106, 110, 90, 154, 90, 130], moves: ["psystrike", "shadowball", "aurasphere", "recover"], role: "shooter", size: 30, blurb: "The first boss. Reach wave 5 to play as it.", unlock: 5 },
   { id: "rayquaza", num: 384, name: "Rayquaza", types: ["Dragon", "Flying"], bs: [105, 150, 90, 150, 90, 95], moves: ["dragonpulse", "dracometeor", "aerialace", "outrage"], role: "brawler", size: 34, blurb: "The sky boss. Reach wave 10 to play as it.", unlock: 10 },
 ];
@@ -157,7 +190,7 @@ export const ROSTER: Species[] = [
 export const speciesOf = (id: string) => ROSTER.find((s) => s.id === id) ?? ROSTER[0]!;
 
 /** Foes for the survival waves, easiest first. */
-export const FOE_POOL = ["pikachu", "jolteon", "umbreon", "gengar", "sceptile", "arcanine", "gyarados", "lucario", "scizor", "machamp", "greninja", "venusaur", "blastoise", "charizard", "blaziken", "lapras", "garchomp", "gardevoir", "metagross", "tyranitar", "salamence", "dragonite", "dragapult", "aegislash", "snorlax", "alakazam"];
+export const FOE_POOL = ["pikachu", "jolteon", "umbreon", "gengar", "sceptile", "arcanine", "gyarados", "lucario", "scizor", "machamp", "greninja", "venusaur", "blastoise", "charizard", "blaziken", "lapras", "garchomp", "gardevoir", "metagross", "tyranitar", "salamence", "dragonite", "dragapult", "aegislash", "snorlax", "alakazam", "hydreigon", "kommoo", "corviknight", "heatran", "darkrai", "baxcalibur", "zeraora"];
 
 export type Perk = { id: string; name: string; desc: string; icon: string };
 export const PERKS: Perk[] = [
@@ -186,3 +219,122 @@ export const ITEMS: Record<ItemKind, { icon: string; color: string; name: string
   boots: { icon: "➤", color: "#7fe3ff", name: "Speed Boots", bn: "স্পিড বুট" },
   crystal: { icon: "◆", color: "#d28bff", name: "Power Crystal", bn: "পাওয়ার ক্রিস্টাল" },
 };
+
+/* ------------------------------------------------------------------ gimmicks */
+
+export type GimmickKind = "awaken" | "mega" | "zmove" | "dynamax" | "tera";
+
+export const GIMMICKS: Record<GimmickKind, { icon: string; label: string; bn: string; short: string; blurb: string; blurbBn: string }> = {
+  awaken: { icon: "⚡", label: "Awaken", bn: "জাগরণ", short: "AWAKEN", blurb: "A shockwave, then 8 seconds of more damage, speed and faster recharge.", blurbBn: "একটি ঝলক, তারপর ৮ সেকেন্ড বেশি ড্যামেজ, গতি ও দ্রুত রিচার্জ।" },
+  mega: { icon: "💎", label: "Mega Evolution", bn: "মেগা বিবর্তন", short: "MEGA", blurb: "Evolve for 15 seconds: new look, stronger stats, sometimes a new type. Z forms also pulse on every move.", blurbBn: "১৫ সেকেন্ডের জন্য নতুন রূপ: বেশি শক্তি, কখনো নতুন টাইপ। Z রূপ প্রতিটি চালে ঢেউ ছাড়ে।" },
+  zmove: { icon: "✨", label: "Z-Move", bn: "জেড-মুভ", short: "Z-MOVE", blurb: "A cinematic finisher of your type that hits every foe on the floor and cannot be dodged.", blurbBn: "আপনার টাইপের সিনেমাটিক ফিনিশার: মাঠের সব শত্রুকে আঘাত করে, এড়ানো যায় না।" },
+  dynamax: { icon: "🌋", label: "Dynamax / Gigantamax", bn: "ডায়নাম্যাক্স / গিগান্টাম্যাক্স", short: "MAX", blurb: "Grow huge for 12 seconds: +50% HP, moves become Max Moves with area blasts and weather. Gigantamax forms add a G-Max blast.", blurbBn: "১২ সেকেন্ড বিশাল হয়ে যান: +৫০% HP, চালগুলো এলাকা-বিস্ফোরণ ও আবহাওয়াসহ ম্যাক্স মুভ হয়। গিগান্টাম্যাক্সে বাড়তি বিস্ফোরণ।" },
+  tera: { icon: "🔮", label: "Terastallize", bn: "টেরাস্টালাইজ", short: "TERA", blurb: "Become a crystal of any type for 25 seconds: a crystal shield, a stronger same-type bonus, and your 4th move turns into Tera Blast.", blurbBn: "২৫ সেকেন্ডের জন্য যেকোনো টাইপের ক্রিস্টাল: ক্রিস্টাল ঢাল, শক্তিশালী একই-টাইপ বোনাস, আর ৪র্থ চাল হয় টেরা ব্লাস্ট।" },
+};
+
+export const TERA_TYPES = ["Normal", "Fire", "Water", "Electric", "Grass", "Ice", "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug", "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy"];
+
+export type MegaForm = {
+  id: string;
+  name: string;
+  /** The sprite name on the picture server. */
+  sprite: string;
+  /** Types after evolving, when they change. */
+  types?: string[];
+  /** Attack, defence and speed multipliers while evolved. */
+  p?: number;
+  d?: number;
+  s?: number;
+  /** The new Z forms: they send out a pulse with every move. */
+  z?: boolean;
+  /** Introduced with Legends Z-A or its Mega Dimension DLC. */
+  za?: boolean;
+};
+const mf = (id: string, name: string, o: Partial<MegaForm> = {}): MegaForm => ({ id, name, sprite: id, ...o });
+
+export const MEGAS: Record<string, MegaForm[]> = {
+  charizard: [mf("charizard-megax", "Mega Charizard X", { types: ["Fire", "Dragon"], p: 1.34, d: 1.3, s: 1.0 }), mf("charizard-megay", "Mega Charizard Y", { p: 1.36, d: 1.12, s: 1.08 })],
+  venusaur: [mf("venusaur-mega", "Mega Venusaur", { p: 1.2, d: 1.35, s: 1.0 })],
+  blastoise: [mf("blastoise-mega", "Mega Blastoise", { p: 1.3, d: 1.2, s: 1.0 })],
+  gengar: [mf("gengar-mega", "Mega Gengar", { p: 1.2, d: 1.1, s: 1.18 })],
+  lucario: [mf("lucario-mega", "Mega Lucario", { p: 1.3, d: 1.1, s: 1.12 }), mf("lucario-megaz", "Mega Lucario Z", { types: ["Fighting", "Steel"], p: 1.42, d: 1.2, s: 1.18, z: true, za: true })],
+  garchomp: [mf("garchomp-mega", "Mega Garchomp", { p: 1.28, d: 1.12, s: 1.0 }), mf("garchomp-megaz", "Mega Garchomp Z", { types: ["Dragon"], p: 1.42, d: 1.2, s: 1.15, z: true, za: true })],
+  gardevoir: [mf("gardevoir-mega", "Mega Gardevoir", { p: 1.3, d: 1.2, s: 1.0 })],
+  alakazam: [mf("alakazam-mega", "Mega Alakazam", { p: 1.3, d: 1.15, s: 1.12 })],
+  scizor: [mf("scizor-mega", "Mega Scizor", { p: 1.25, d: 1.25, s: 1.05 })],
+  gyarados: [mf("gyarados-mega", "Mega Gyarados", { types: ["Water", "Dark"], p: 1.28, d: 1.25, s: 1.05 })],
+  tyranitar: [mf("tyranitar-mega", "Mega Tyranitar", { p: 1.25, d: 1.3, s: 1.05 })],
+  blaziken: [mf("blaziken-mega", "Mega Blaziken", { p: 1.3, d: 1.1, s: 1.15 })],
+  salamence: [mf("salamence-mega", "Mega Salamence", { p: 1.3, d: 1.2, s: 1.05 })],
+  metagross: [mf("metagross-mega", "Mega Metagross", { p: 1.28, d: 1.25, s: 1.1 })],
+  absol: [mf("absol-mega", "Mega Absol", { p: 1.3, d: 1.1, s: 1.1 }), mf("absol-megaz", "Mega Absol Z", { types: ["Dark", "Ghost"], p: 1.42, d: 1.15, s: 1.2, z: true, za: true })],
+  mewtwo: [mf("mewtwo-megax", "Mega Mewtwo X", { types: ["Psychic", "Fighting"], p: 1.3, d: 1.2, s: 1.05 }), mf("mewtwo-megay", "Mega Mewtwo Y", { p: 1.32, d: 1.15, s: 1.1 })],
+  // new in Pokémon Legends: Z-A
+  dragonite: [mf("dragonite-mega", "Mega Dragonite", { p: 1.28, d: 1.25, s: 1.05, za: true })],
+  greninja: [mf("greninja-mega", "Mega Greninja", { p: 1.28, d: 1.12, s: 1.15, za: true })],
+  delphox: [mf("delphox-mega", "Mega Delphox", { p: 1.3, d: 1.15, s: 1.08, za: true })],
+  chesnaught: [mf("chesnaught-mega", "Mega Chesnaught", { p: 1.25, d: 1.3, s: 1.0, za: true })],
+  emboar: [mf("emboar-mega", "Mega Emboar", { p: 1.3, d: 1.2, s: 1.0, za: true })],
+  feraligatr: [mf("feraligatr-mega", "Mega Feraligatr", { p: 1.3, d: 1.2, s: 1.05, za: true })],
+  meganium: [mf("meganium-mega", "Mega Meganium", { p: 1.2, d: 1.3, s: 1.0, za: true })],
+  clefable: [mf("clefable-mega", "Mega Clefable", { p: 1.25, d: 1.25, s: 1.0, za: true })],
+  starmie: [mf("starmie-mega", "Mega Starmie", { p: 1.28, d: 1.15, s: 1.12, za: true })],
+  victreebel: [mf("victreebel-mega", "Mega Victreebel", { p: 1.28, d: 1.15, s: 1.0, za: true })],
+  excadrill: [mf("excadrill-mega", "Mega Excadrill", { p: 1.3, d: 1.2, s: 1.1, za: true })],
+  froslass: [mf("froslass-mega", "Mega Froslass", { p: 1.25, d: 1.15, s: 1.12, za: true })],
+  hawlucha: [mf("hawlucha-mega", "Mega Hawlucha", { p: 1.3, d: 1.1, s: 1.15, za: true })],
+  // new in the Mega Dimension DLC
+  raichu: [mf("raichu-megax", "Mega Raichu X", { p: 1.35, d: 1.1, s: 1.05, za: true }), mf("raichu-megay", "Mega Raichu Y", { p: 1.3, d: 1.1, s: 1.15, za: true })],
+  zeraora: [mf("zeraora-mega", "Mega Zeraora", { types: ["Electric"], p: 1.3, d: 1.15, s: 1.15, za: true })],
+  heatran: [mf("heatran-mega", "Mega Heatran", { types: ["Fire", "Steel"], p: 1.28, d: 1.25, s: 1.05, za: true })],
+  darkrai: [mf("darkrai-mega", "Mega Darkrai", { types: ["Dark"], p: 1.3, d: 1.15, s: 1.1, za: true })],
+  golurk: [mf("golurk-mega", "Mega Golurk", { types: ["Ground", "Ghost"], p: 1.28, d: 1.25, s: 1.0, za: true })],
+  staraptor: [mf("staraptor-mega", "Mega Staraptor", { types: ["Fighting", "Flying"], p: 1.3, d: 1.1, s: 1.12, za: true })],
+  baxcalibur: [mf("baxcalibur-mega", "Mega Baxcalibur", { types: ["Dragon", "Ice"], p: 1.3, d: 1.2, s: 1.05, za: true })],
+  chimecho: [mf("chimecho-mega", "Mega Chimecho", { types: ["Psychic", "Steel"], p: 1.3, d: 1.25, s: 1.05, za: true })],
+  crabominable: [mf("crabominable-mega", "Mega Crabominable", { types: ["Fighting", "Ice"], p: 1.28, d: 1.2, s: 1.05, za: true })],
+  golisopod: [mf("golisopod-mega", "Mega Golisopod", { types: ["Bug", "Steel"], p: 1.28, d: 1.25, s: 1.05, za: true })],
+  scovillain: [mf("scovillain-mega", "Mega Scovillain", { types: ["Grass", "Fire"], p: 1.3, d: 1.1, s: 1.05, za: true })],
+  glimmora: [mf("glimmora-mega", "Mega Glimmora", { types: ["Rock", "Poison"], p: 1.3, d: 1.15, s: 1.05, za: true })],
+  tatsugiri: [mf("tatsugiri-mega", "Mega Tatsugiri", { types: ["Dragon", "Water"], p: 1.3, d: 1.15, s: 1.08, za: true })],
+  meowstic: [mf("meowstic-mega", "Mega Meowstic", { types: ["Psychic"], p: 1.28, d: 1.15, s: 1.1, za: true })],
+  magearna: [mf("magearna-mega", "Mega Magearna", { types: ["Steel", "Fairy"], p: 1.3, d: 1.25, s: 1.0, za: true })],
+};
+
+/** Pokémon that can Gigantamax (their Dynamax looks different and ends with an extra blast). */
+export const GMAX = new Set(["charizard", "venusaur", "blastoise", "pikachu", "gengar", "lapras", "snorlax", "machamp", "corviknight"]);
+
+export const Z_MOVES: Record<string, { name: string; bn: string }> = {
+  Normal: { name: "Breakneck Blitz", bn: "ব্রেকনেক ব্লিটজ" },
+  Fire: { name: "Inferno Overdrive", bn: "ইনফার্নো ওভারড্রাইভ" },
+  Water: { name: "Hydro Vortex", bn: "হাইড্রো ভর্টেক্স" },
+  Electric: { name: "Gigavolt Havoc", bn: "গিগাভোল্ট হ্যাভক" },
+  Grass: { name: "Bloom Doom", bn: "ব্লুম ডুম" },
+  Ice: { name: "Subzero Slammer", bn: "সাবজিরো স্ল্যামার" },
+  Fighting: { name: "All-Out Pummeling", bn: "অল-আউট পামেলিং" },
+  Poison: { name: "Acid Downpour", bn: "অ্যাসিড ডাউনপাউর" },
+  Ground: { name: "Tectonic Rage", bn: "টেকটনিক রেজ" },
+  Flying: { name: "Supersonic Skystrike", bn: "সুপারসনিক স্কাইস্ট্রাইক" },
+  Psychic: { name: "Shattered Psyche", bn: "শ্যাটার্ড সাইকি" },
+  Bug: { name: "Savage Spin-Out", bn: "স্যাভেজ স্পিন-আউট" },
+  Rock: { name: "Continental Crush", bn: "কন্টিনেন্টাল ক্রাশ" },
+  Ghost: { name: "Never-Ending Nightmare", bn: "নেভার-এন্ডিং নাইটমেয়ার" },
+  Dragon: { name: "Devastating Drake", bn: "ডেভাস্টেটিং ড্রেক" },
+  Dark: { name: "Black Hole Eclipse", bn: "ব্ল্যাক হোল ইক্লিপস" },
+  Steel: { name: "Corkscrew Crash", bn: "কর্কস্ক্রু ক্র্যাশ" },
+  Fairy: { name: "Twinkle Tackle", bn: "টুইঙ্কল ট্যাকল" },
+};
+/** A few Pokémon have a Z-Move of their own. */
+export const Z_SIGNATURE: Record<string, { name: string; bn: string; type: string }> = {
+  pikachu: { name: "Catastropika", bn: "ক্যাটাস্ট্রোপিকা", type: "Electric" },
+  snorlax: { name: "Pulverizing Pancake", bn: "পালভারাইজিং প্যানকেক", type: "Normal" },
+  mimikyu: { name: "Let's Snuggle Forever", bn: "লেটস স্ন্যাগল ফরএভার", type: "Fairy" },
+  kommoo: { name: "Clangorous Soulblaze", bn: "ক্ল্যাঙ্গরাস সোলব্লেজ", type: "Dragon" },
+};
+
+/** The most a Pokémon can do with each gimmick: which ones this species can use. */
+export function gimmicksFor(id: string): GimmickKind[] {
+  const out: GimmickKind[] = ["awaken", "zmove", "dynamax", "tera"];
+  if (MEGAS[id]) out.splice(1, 0, "mega");
+  return out;
+}

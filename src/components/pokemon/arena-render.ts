@@ -33,6 +33,8 @@ export class ArenaRenderer {
   private scale = 1;
   private banner: { text: string; t: number; color: string } | null = null;
   private zoom = 1;
+  /** The Z-Move cinematic playing right now. */
+  private z: { t: number; name: string; type: string; x: number; y: number } | null = null;
   private camX = ARENA.CX;
   private camY = ARENA.CY;
 
@@ -60,6 +62,9 @@ export class ArenaRenderer {
   /** Turns a point on the canvas (in arena units, 0–960 by 0–600) into a place on the floor, whatever the zoom. */
   toWorld(px: number, py: number) {
     return { x: this.camX + (px - ARENA.CX) / this.zoom, y: this.camY + (py - ARENA.CY) / this.zoom };
+  }
+  private toCanvas(x: number, y: number) {
+    return { x: (x - this.camX) * this.zoom + ARENA.CX, y: (y - this.camY) * this.zoom + ARENA.CY };
   }
   private followCamera(you: Fighter | undefined, dt: number) {
     let tx = ARENA.CX;
@@ -212,6 +217,10 @@ export class ArenaRenderer {
             const v = rnd(200, 420);
             this.parts.push({ kind: "streak", x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, life: 0.3, max: 0.3, size: rnd(5, 9), grow: 0, color: i % 2 ? "#fff" : c });
           }
+          if (e.dmg === 0) {
+            this.pop(e.x, e.y, e.toPlayer ? "CRYSTAL" : "BLOCKED", "#8fd8ff", 13, 800);
+            break;
+          }
           const mag = e.crit ? 24 : e.heavy ? 19 : 15;
           const color = e.toPlayer ? "#ff6a6a" : e.crit ? "#ffd54a" : e.eff > 1 ? "#ff9a3c" : e.eff < 1 ? "#a8b3c2" : "#ffffff";
           this.pop(e.x, e.y, `${e.dmg}${e.crit ? "!" : ""}`, color, mag);
@@ -275,6 +284,63 @@ export class ArenaRenderer {
         case "field":
           if (e.kind !== "none") this.say(`${FIELDS[e.kind].icon} ${FIELDS[e.kind].name}`, "#ffffff");
           break;
+        case "mega": {
+          const c = col(e.type);
+          this.ring(e.x, e.y, "#ffffff", 280, 0.7);
+          this.ring(e.x, e.y, e.z ? "#ffd54a" : "#ff9be6", 210, 0.9);
+          this.ring(e.x, e.y, "#7fe3ff", 150, 1.0);
+          for (let i = 0; i < 36; i++) {
+            const a = (i / 36) * Math.PI * 2;
+            this.parts.push({ kind: i % 3 ? "dot" : "streak", x: e.x, y: e.y, vx: Math.cos(a) * rnd(140, 420), vy: Math.sin(a) * rnd(140, 420), g: 0, life: 0.8, max: 0.8, size: rnd(3, 6), grow: 0, color: ["#ffffff", "#ff9be6", "#7fe3ff", c][i % 4]! });
+          }
+          this.shake = 14;
+          this.shakeT = 0.45;
+          this.flashT = 0.35;
+          this.zoomPulse = 1;
+          this.say(e.name.toUpperCase() + "!", e.z ? "#ffd54a" : "#ff9be6");
+          break;
+        }
+        case "zstart":
+          this.z = { t: 0, name: e.name, type: e.type, x: e.x, y: e.y };
+          break;
+        case "zhit": {
+          const c = col(e.type);
+          this.ring(e.x, e.y, "#ffffff", 220, 0.6);
+          this.ring(e.x, e.y, c, 160, 0.9);
+          this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.7, max: 0.7, size: 60, grow: 220, color: c });
+          this.burst(e.x, e.y, c, 34, 460);
+          this.shake = 18;
+          this.shakeT = 0.5;
+          this.flashT = 0.35;
+          break;
+        }
+        case "dynamax":
+          this.ring(e.x, e.y, "#ff3b5c", 300, 0.8);
+          this.ring(e.x, e.y, "#ffffff", 200, 0.6);
+          this.burst(e.x, e.y, "#ff5c7a", 40, 380);
+          this.shake = 16;
+          this.shakeT = 0.5;
+          this.flashT = 0.3;
+          this.zoomPulse = 1;
+          this.say(e.gmax ? "GIGANTAMAX!" : "DYNAMAX!", "#ff6a86");
+          break;
+        case "tera": {
+          const c = col(e.type);
+          this.ring(e.x, e.y, c, 260, 0.8);
+          this.ring(e.x, e.y, "#ffffff", 170, 0.6);
+          for (let i = 0; i < 24; i++) {
+            const a = (i / 24) * Math.PI * 2;
+            this.parts.push({ kind: "dot", x: e.x, y: e.y, vx: Math.cos(a) * rnd(120, 380), vy: Math.sin(a) * rnd(120, 380) - 40, g: 120, life: 0.9, max: 0.9, size: rnd(3, 7), grow: 0, color: i % 2 ? c : "#ffffff" });
+          }
+          this.shake = 12;
+          this.shakeT = 0.4;
+          this.flashT = 0.25;
+          this.say(`TERASTALLIZE! ${e.type.toUpperCase()}`, c);
+          break;
+        }
+        case "gimmickEnd":
+          this.ring(e.x, e.y, "#aab4c8", 90, 0.5);
+          break;
         case "heal":
           break;
         case "status":
@@ -303,6 +369,10 @@ export class ArenaRenderer {
     this.zoomPulse = Math.max(0, this.zoomPulse - dtReal * 3);
     this.flashT = Math.max(0, this.flashT - dtReal);
     this.perfectT = Math.max(0, this.perfectT - dtReal);
+    if (this.z) {
+      this.z.t += dtReal;
+      if (this.z.t > 1.4) this.z = null;
+    }
     if (this.banner) {
       this.banner.t -= dtReal;
       if (this.banner.t <= 0) this.banner = null;
@@ -409,6 +479,7 @@ export class ArenaRenderer {
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     this.drawField(g, S);
+    this.drawZ(g);
     if (this.perfectT > 0) {
       const a = Math.min(1, this.perfectT / 0.8);
       const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 140, ARENA.CX, ARENA.CY, 560);
@@ -485,6 +556,75 @@ export class ArenaRenderer {
     }
   }
 
+  /** The Z-Move cinematic: the screen darkens, light rays turn from the caster, and the move's name sweeps in. */
+  private drawZ(g: CanvasRenderingContext2D) {
+    const z = this.z;
+    if (!z) return;
+    const c = col(z.type);
+    const T = 1.2;
+    const p = Math.min(1, z.t / T);
+    const inA = Math.min(1, z.t / 0.25);
+    const outA = z.t > T ? Math.max(0, 1 - (z.t - T) / 0.2) : 1;
+    const a = inA * outA;
+    const at = this.toCanvas(z.x, z.y);
+    g.save();
+    g.fillStyle = `rgba(0,0,8,${0.72 * a})`;
+    g.fillRect(0, 0, ARENA.W, ARENA.H);
+    // rays turning around the caster
+    g.translate(at.x, at.y);
+    g.rotate(z.t * 1.4);
+    g.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 18; i++) {
+      g.rotate((Math.PI * 2) / 18);
+      const gr = g.createLinearGradient(0, 0, 900, 0);
+      gr.addColorStop(0, "#ffffff");
+      gr.addColorStop(0.15, c);
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.globalAlpha = a * (i % 2 ? 0.35 : 0.18);
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(900, -26 - p * 30);
+      g.lineTo(900, 26 + p * 30);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    // a growing glow and pose rings around the caster
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    const rad = 40 + p * 150;
+    const gl = g.createRadialGradient(at.x, at.y, 0, at.x, at.y, rad);
+    gl.addColorStop(0, "#ffffff");
+    gl.addColorStop(0.4, c);
+    gl.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = gl;
+    g.globalAlpha = a * 0.9;
+    g.beginPath();
+    g.arc(at.x, at.y, rad, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    // letterbox bars and the name
+    const bar = 70 * Math.min(1, z.t / 0.2) * outA;
+    g.fillStyle = "#000";
+    g.fillRect(0, 0, ARENA.W, bar);
+    g.fillRect(0, ARENA.H - bar, ARENA.W, bar);
+    const slide = (1 - Math.min(1, z.t / 0.35)) * 400;
+    g.save();
+    g.globalAlpha = a;
+    g.textAlign = "center";
+    g.font = "800 15px system-ui, sans-serif";
+    g.fillStyle = "#ffd54a";
+    g.fillText("Z - M O V E", ARENA.CX - slide, ARENA.CY - 70);
+    g.font = "italic 900 46px system-ui, sans-serif";
+    g.lineWidth = 8;
+    g.strokeStyle = "rgba(0,0,0,.8)";
+    g.strokeText(z.name, ARENA.CX + slide, ARENA.CY - 24);
+    g.fillStyle = "#fff";
+    g.fillText(z.name, ARENA.CX + slide, ARENA.CY - 24);
+    g.restore();
+  }
+
   /** Weather over the whole screen: a tint and a few things falling or drifting. */
   private drawField(g: CanvasRenderingContext2D, S: State) {
     if (S.field === "none") return;
@@ -536,8 +676,7 @@ export class ArenaRenderer {
     for (const z of S.zones) {
       const c = col(z.type);
       if (!z.struck) {
-        const total = z.team === -1 ? 1.1 : Math.max(0.2, z.mv.windup ?? 0.55);
-        const prog = 1 - Math.max(0, z.delay) / (z.player ? total * 0.6 : total);
+        const prog = Math.max(0, Math.min(1, 1 - Math.max(0, z.delay) / Math.max(0.05, z.total)));
         const pulse = 0.5 + Math.sin(this.t * 14) * 0.5;
         g.save();
         if (z.shape === "circle") {
@@ -686,7 +825,14 @@ export class ArenaRenderer {
   }
 
   private drawFighter(g: CanvasRenderingContext2D, f: Fighter, S: State, isYou: boolean) {
-    const im = this.load(f.sp.id, f.sp.num);
+    // the picture: a Mega or Gigantamax form when there is one, and the plain Pokémon until it has loaded (or if there is none)
+    const formId = f.dyna > 0 && f.gmax ? `${f.sp.id}-gmax` : f.form ? f.form.sprite : f.sp.id;
+    let usedId = formId;
+    let im = this.load(formId, f.sp.num);
+    if (!im && formId !== f.sp.id) {
+      usedId = f.sp.id;
+      im = this.load(f.sp.id, f.sp.num);
+    }
     const size = f.r * 4.1;
     const bob = Math.sin(this.t * 6 + f.id) * 2 * (Math.hypot(f.vx, f.vy) > 20 ? 1.6 : 0.8);
     const c = col(f.sp.types[0] ?? "Normal");
@@ -705,6 +851,51 @@ export class ArenaRenderer {
     g.stroke();
     g.restore();
 
+    // Mega Evolution: orbiting crystal light (gold for the new Z forms)
+    if (f.mega > 0) {
+      const gold = !!f.form?.z;
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const gr = g.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 3);
+      gr.addColorStop(0, gold ? "rgba(255,225,120,.55)" : "rgba(255,150,230,.5)");
+      gr.addColorStop(0.6, gold ? "rgba(255,170,60,.18)" : "rgba(120,220,255,.16)");
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.fillRect(f.x - f.r * 4, f.y - f.r * 4, f.r * 8, f.r * 8);
+      for (let i = 0; i < 6; i++) {
+        const an = this.t * 2.4 + (i / 6) * Math.PI * 2;
+        const rr = f.r * 1.9;
+        g.save();
+        g.translate(f.x + Math.cos(an) * rr, f.y - f.r * 0.3 + Math.sin(an) * rr * 0.45);
+        g.rotate(an);
+        g.fillStyle = i % 2 ? (gold ? "#ffe08a" : "#7fe3ff") : "#ffffff";
+        g.beginPath();
+        g.moveTo(0, -6);
+        g.lineTo(4, 0);
+        g.lineTo(0, 6);
+        g.lineTo(-4, 0);
+        g.closePath();
+        g.fill();
+        g.restore();
+      }
+      g.restore();
+    }
+    // Dynamax: a swirling red cloud around a giant
+    if (f.dyna > 0) {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const gr = g.createRadialGradient(f.x, f.y, f.r * 0.4, f.x, f.y, f.r * 2.6);
+      gr.addColorStop(0, "rgba(255,80,110,.5)");
+      gr.addColorStop(0.6, f.gmax ? "rgba(255,200,80,.2)" : "rgba(220,40,90,.2)");
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.fillRect(f.x - f.r * 3, f.y - f.r * 3, f.r * 6, f.r * 6);
+      g.restore();
+      if (Math.random() < 0.7) {
+        const an = Math.random() * Math.PI * 2;
+        this.parts.push({ kind: "smoke", x: f.x + Math.cos(an) * f.r * 1.3, y: f.y + Math.sin(an) * f.r * 0.8, vx: Math.cos(an) * 30, vy: -50, g: 0, life: 0.8, max: 0.8, size: 10, grow: 24, color: f.gmax ? "#ffb04d" : "#ff4d73" });
+      }
+    }
     if (f.awaken > 0) {
       g.save();
       g.globalCompositeOperation = "lighter";
@@ -743,10 +934,12 @@ export class ArenaRenderer {
       g.drawImage(im, -w / 2, -h / 2 - f.r * 0.2, w, h);
       if (f.flash > 0) {
         g.globalAlpha = Math.min(1, f.flash * 9);
-        g.drawImage(this.tinted(f.sp.id, im, "#ffffff"), -w / 2, -h / 2 - f.r * 0.2, w, h);
+        g.drawImage(this.tinted(usedId, im, "#ffffff"), -w / 2, -h / 2 - f.r * 0.2, w, h);
       } else if (f.status.frz > 0) {
         g.globalAlpha = 0.55;
-        g.drawImage(this.tinted(f.sp.id, im, "#8ee8ff"), -w / 2, -h / 2 - f.r * 0.2, w, h);
+        g.drawImage(this.tinted(usedId, im, "#8ee8ff"), -w / 2, -h / 2 - f.r * 0.2, w, h);      } else if (f.tera) {
+        g.globalAlpha = 0.3 + Math.sin(this.t * 4) * 0.08;
+        g.drawImage(this.tinted(usedId, im, col(f.tera.type)), -w / 2, -h / 2 - f.r * 0.2, w, h);
       }
     } else {
       g.fillStyle = c;
@@ -761,6 +954,46 @@ export class ArenaRenderer {
     }
     g.restore();
 
+    if (f.tera) {
+      const tc = col(f.tera.type);
+      g.save();
+      // a jewelled crown over the head
+      g.translate(f.x, f.y - f.r * 2.3 + Math.sin(this.t * 3) * 2);
+      g.fillStyle = tc;
+      g.strokeStyle = "#fff";
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.moveTo(0, -11);
+      g.lineTo(9, -2);
+      g.lineTo(5, 9);
+      g.lineTo(-5, 9);
+      g.lineTo(-9, -2);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.restore();
+      if (f.crystal > 0) {
+        // the crystal shield: a faceted hexagon that fades as it takes damage
+        const k = Math.min(1, f.crystal / (f.maxHp * 0.3));
+        g.save();
+        g.translate(f.x, f.y - f.r * 0.3);
+        g.rotate(this.t * 0.5);
+        g.strokeStyle = tc;
+        g.fillStyle = tc + "22";
+        g.globalAlpha = 0.35 + k * 0.6;
+        g.lineWidth = 3;
+        g.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const an = (i / 6) * Math.PI * 2;
+          g.lineTo(Math.cos(an) * f.r * 2.1, Math.sin(an) * f.r * 2.1);
+        }
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.restore();
+      }
+      if (Math.random() < 0.35) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r), y: f.y + rnd(-f.r * 2, 0), vx: 0, vy: -26, g: 0, life: 0.7, max: 0.7, size: 2.6, grow: 0, color: "#ffffff" });
+    }
     if (f.shield > 0) {
       g.save();
       g.strokeStyle = "rgba(160,215,255,.9)";

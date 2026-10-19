@@ -4,8 +4,8 @@ import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
-import { FIELDS, ITEMS, MOVES, PERKS, ROSTER, speciesOf, type FieldKind } from "@/lib/pokemon/arena-data";
-import { ARENA, begin, choosePerk, newGame, playerOf, step, type Ev, type Input, type Mode, type State } from "@/lib/pokemon/arena-engine";
+import { FIELDS, GIMMICKS, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, speciesOf, type FieldKind, type GimmickKind } from "@/lib/pokemon/arena-data";
+import { ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, playerOf, step, type Ev, type Input, type Mode, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
@@ -30,7 +30,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string };
+type Hud = { gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string };
 const KEYS = ["1", "2", "3", "4"];
 
 type Runtime = {
@@ -62,6 +62,9 @@ export function ArenaBrawl() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [mode, setMode] = useState<Mode>("survival");
   const [pick, setPick] = useState("charizard");
+  const [gimmick, setGimmick] = useState<GimmickKind>("awaken");
+  const [megaId, setMegaId] = useState("");
+  const [teraType, setTeraType] = useState("Fire");
   const [save, setSave] = useState<Save>({ bestWave: 0, bestScore: 0, royaleWins: 0, royalePlays: 0 });
   const [hud, setHud] = useState<Hud | null>(null);
   const [paused, setPaused] = useState(false);
@@ -89,6 +92,13 @@ export function ArenaBrawl() {
 
   const unlocked = (need?: number) => !need || save.bestWave >= need;
   const sp = speciesOf(pick);
+  const avail = gimmicksFor(pick);
+  const forms = MEGAS[pick] ?? [];
+  useEffect(() => {
+    setGimmick((g) => (gimmicksFor(pick).includes(g) ? g : "awaken"));
+    setMegaId((MEGAS[pick] ?? [])[0]?.id ?? "");
+    setTeraType(speciesOf(pick).types[0] ?? "Normal");
+  }, [pick]);
   const inGame = screen !== "menu";
 
   /* ------------------------------------------------------------ zoom */
@@ -184,7 +194,7 @@ export function ArenaBrawl() {
 
   const start = useCallback(() => {
     sfx.unlock();
-    const S = newGame(mode, pick);
+    const S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType });
     begin(S);
     const r = rt.current;
     r.S = S;
@@ -197,7 +207,7 @@ export function ArenaBrawl() {
     setResult(null);
     setHud(null);
     setScreen("play");
-  }, [mode, pick]);
+  }, [mode, pick, gimmick, megaId, teraType]);
 
   /* ----------------------------------------------------------- the loop */
 
@@ -215,6 +225,11 @@ export function ArenaBrawl() {
         case "ko": sfx.ko(e.boss); break;
         case "combo": sfx.combo(e.n, e.finish); break;
         case "awaken": sfx.boom(); sfx.perfect(); break;
+        case "mega": sfx.mega(); break;
+        case "zstart": sfx.zstart(); break;
+        case "zhit": sfx.zhit(); break;
+        case "dynamax": sfx.dynamax(); break;
+        case "tera": sfx.tera(); break;
         case "item": if (e.byPlayer) sfx.combo(3, true); break;
         case "wave":
           sfx.wave(e.boss);
@@ -303,11 +318,21 @@ export function ArenaBrawl() {
       if (now - r.hudAt > 90) {
         r.hudAt = now;
         const ids = p.sp.moves;
+        void gimmickActive;
+        const moves = ids.map((_, i) => {
+          const mv = moveOf(p, i);
+          return { id: mv.id, name: mv.name, type: mv.type };
+        });
+        const left = Math.max(p.awaken, p.mega, p.dyna, p.tera?.t ?? 0);
         setHud({
+          gimmick: p.gimmick,
+          gimmickT: left,
+          formName: p.form?.name ?? null,
+          moves,
           hp: p.hp,
           ghost: p.ghost,
           max: p.maxHp,
-          cds: ids.map((id, i) => Math.max(0, p.cd[i]! / (MOVES[id]!.cd * p.cdMul))),
+          cds: ids.map((_, i) => Math.max(0, p.cd[i]! / (moveOf(p, i).cd * p.cdMul))),
           cdLeft: ids.map((_, i) => p.cd[i]!),
           dodge: Math.max(0, p.dodge.cd / (1.15 * p.dodgeMul)),
           dodgeLeft: p.dodge.cd,
@@ -522,16 +547,56 @@ export function ArenaBrawl() {
             })}
           </div>
 
+          <div className="ab-gim">
+            <b>{t("ব্যাটল জিমিক", "Battle gimmick")}</b>
+            <div className="ab-gim-row">
+              {(["awaken", "mega", "zmove", "dynamax", "tera"] as GimmickKind[]).map((g) => {
+                const ok = avail.includes(g);
+                const info = GIMMICKS[g];
+                return (
+                  <button key={g} type="button" disabled={!ok} className={`ab-gbtn ${gimmick === g ? "on" : ""}`} onClick={() => { sfx.pick(); setGimmick(g); }} title={ok ? "" : t("এই পোকেমনের মেগা রূপ নেই", "This Pokémon has no Mega form")}>
+                    <span>{info.icon}</span>
+                    <em>{t(info.bn, g === "dynamax" && GMAX.has(pick) ? "Gigantamax" : info.label)}</em>
+                  </button>
+                );
+              })}
+            </div>
+            <p>{t(GIMMICKS[gimmick].blurbBn, GIMMICKS[gimmick].blurb)}</p>
+            {gimmick === "mega" && forms.length ? (
+              <div className="ab-chips">
+                {forms.map((m) => (
+                  <button key={m.id} type="button" className={`ab-chip ${megaId === m.id ? "on" : ""}`} onClick={() => setMegaId(m.id)}>
+                    {m.name}
+                    {m.z ? " Z" : ""}
+                    {m.za ? <small> Z-A</small> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {gimmick === "tera" ? (
+              <div className="ab-chips">
+                {TERA_TYPES.map((ty) => (
+                  <button key={ty} type="button" className={`ab-chip ty ${teraType === ty ? "on" : ""}`} onClick={() => setTeraType(ty)} title={ty}>
+                    <TypeIcon type={ty} size={16} />
+                  </button>
+                ))}
+                <span className="ab-chip-name">{t("টেরা টাইপ", "Tera type")}: {teraType}</span>
+              </div>
+            ) : null}
+            {gimmick === "dynamax" ? <p className="ab-note">{GMAX.has(pick) ? t("এই পোকেমন গিগান্টাম্যাক্স হতে পারে: বিশেষ রূপ ও শেষে বিস্ফোরণ।", "This Pokémon can Gigantamax: a special form and a blast at the end.") : t("সাধারণ ডায়নাম্যাক্স।", "Plain Dynamax for this Pokémon.")}</p> : null}
+            {gimmick === "zmove" ? <p className="ab-note">{t("আপনার জেড-মুভ", "Your Z-Move")}: <b>{(Z_SIGNATURE[pick]?.name ?? Z_MOVES[sp.types[0] ?? "Normal"]?.name) ?? ""}</b></p> : null}
+          </div>
+
           <div className="ab-gimmicks">
             <b>{t("মাঠের চমক", "Arena gimmicks")}</b>
-            <div><span>⚡</span> <em>{t("জাগরণ (Q)", "Awaken (Q)")}</em> {t("ড্যামেজ দিলে ও ঠিক সময়ে গড়ালে গেজ ভরে। পূর্ণ হলে Q: ঝলক, তারপর ৮ সেকেন্ড বেশি ড্যামেজ, গতি ও দ্রুত রিচার্জ।", "Dealing damage and perfect dodges fill the gauge. When full, press Q: a shockwave, then 8 seconds of more damage, speed and faster recharge.")}</div>
+            <div><span>⚡</span> <em>{t("জিমিক গেজ (Q)", "Gimmick gauge (Q)")}</em> {t("ড্যামেজ দিলে ও ঠিক সময়ে গড়ালে গেজ ভরে। পূর্ণ হলে Q চাপুন: আপনার বেছে নেওয়া জিমিক চালু হয়।", "Dealing damage and perfect dodges fill the gauge. When full, press Q to use the gimmick you picked.")}</div>
             <div><span>🎁</span> <em>{t("পিকআপ", "Pickups")}</em> {t("বেরি, এনার্জি অর্ব, স্পিড বুট ও পাওয়ার ক্রিস্টাল মাঠে পড়ে। ছুঁয়ে নিন।", "Berries, Energy Orbs, Speed Boots and Power Crystals appear on the floor. Walk over them.")}</div>
             <div><span>🌦️</span> <em>{t("আবহাওয়া", "Weather")}</em> {t("রোদে আগুন, বৃষ্টিতে জল ও বিদ্যুৎ জোরালো। বালুঝড় ও শিলাবৃষ্টি বেশিরভাগ পোকেমনকে ক্ষয় করে।", "Sun boosts Fire, rain boosts Water and Electric. Sand and hail wear most Pokémon down.")}</div>
             <div><span>🌩️</span> <em>{t("বজ্র", "Lightning")}</em> {t("ওয়েভ ৩ থেকে আকাশ থেকে হলুদ বৃত্তে বজ্র পড়ে। সরে যান।", "From wave 3, lightning falls in yellow circles. Step out of them.")}</div>
           </div>
 
           <div className="ab-help">
-            <kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> {t("চলুন", "move")} · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> {t("চাল", "moves")} · <kbd>Space</kbd> {t("গড়ান", "dodge roll")} · <kbd>Q</kbd> {t("জাগরণ", "awaken")} · <kbd>+</kbd> <kbd>−</kbd> / {t("মাউস হুইল", "mouse wheel")} {t("জুম", "zoom")} · <kbd>F</kbd> {t("ফুল স্ক্রিন", "full screen")} · <kbd>P</kbd> {t("বিরতি", "pause")}
+            <kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> {t("চলুন", "move")} · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> {t("চাল", "moves")} · <kbd>Space</kbd> {t("গড়ান", "dodge roll")} · <kbd>Q</kbd> {t("জিমিক", "gimmick")} · <kbd>+</kbd> <kbd>−</kbd> / {t("মাউস হুইল", "mouse wheel")} {t("জুম", "zoom")} · <kbd>F</kbd> {t("ফুল স্ক্রিন", "full screen")} · <kbd>P</kbd> {t("বিরতি", "pause")}
             <br />
             {t("ফোনে: ফোন আড়াআড়ি ঘোরালে নিজে থেকে ফুল স্ক্রিন হয়। বাঁ দিকে জয়স্টিক, ডান দিকে চালের বোতাম, দুই আঙুলে জুম।", "On a phone: turn it sideways and it goes full screen by itself. Joystick on the left, move buttons on the right, pinch with two fingers to zoom.")}
             <br />
@@ -551,8 +616,9 @@ export function ArenaBrawl() {
   const pct = hud ? hud.hp / hud.max : 1;
   const fld = hud && hud.field !== "none" ? FIELDS[hud.field] : null;
   const padBtn = (i: number, cls: string) => {
-    const id = sp.moves[i]!;
-    const mv = MOVES[id]!;
+    const cur = hud?.moves[i];
+    const id = cur?.id ?? sp.moves[i]!;
+    const mv = cur ? { name: cur.name, type: cur.type } : MOVES[sp.moves[i]!]!;
     const f = hud?.cds[i] ?? 0;
     return (
       <button
@@ -589,13 +655,13 @@ export function ArenaBrawl() {
         {hud ? (
           <div className="ab-hud">
             <div className="ab-me">
-              <b>{hud.name}</b>
+              <b>{hud.formName ?? hud.name}</b>
               <small>{Math.ceil(hud.hp)} / {hud.max}</small>
               <div className="ab-bar">
                 <i className="ghost" style={{ width: `${Math.max(0, (hud.ghost / hud.max) * 100)}%` }} />
                 <i className="fill" style={{ width: `${Math.max(0, pct * 100)}%`, background: hpColor(pct) }} />
               </div>
-              {hud.awaken > 0 ? <div className="ab-awk">{t("জাগরণ", "AWAKENED")} {hud.awaken.toFixed(1)}s</div> : null}
+              {hud.gimmickT > 0 ? <div className="ab-awk">{GIMMICKS[hud.gimmick].icon} {t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].short)} {hud.gimmickT.toFixed(1)}s</div> : null}
             </div>
             <div className="ab-top">
               {rt.current.mode === "survival" ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("ব্যাটল রয়্যাল", "Battle Royale")}</>}
@@ -638,13 +704,13 @@ export function ArenaBrawl() {
               </button>
               <button
                 type="button"
-                className={`ab-pb ult ${hud.ult >= 100 && hud.awaken <= 0 ? "ready full" : ""}`}
-                style={{ ["--c" as string]: "#ffd54a", ["--f" as string]: 1 - Math.min(1, hud.ult / 100) }}
-                aria-label={t("জাগরণ", "Awaken")}
+                className={`ab-pb ult ${hud.ult >= 100 && hud.gimmickT <= 0 ? "ready full" : ""}`}
+                style={{ ["--c" as string]: "#ffd54a", ["--f" as string]: hud.gimmickT > 0 ? 0 : 1 - Math.min(1, hud.ult / 100) }}
+                aria-label={t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].label)}
                 onPointerDown={(e) => { e.preventDefault(); rt.current.ult = true; }}
               >
-                <span className="pb-ic">⚡</span>
-                <span className="pb-nm">{hud.awaken > 0 ? `${hud.awaken.toFixed(0)}s` : `${Math.floor(hud.ult)}%`}</span>
+                <span className="pb-ic">{GIMMICKS[hud.gimmick].icon}</span>
+                <span className="pb-nm">{hud.gimmickT > 0 ? `${hud.gimmickT.toFixed(0)}s` : hud.ult >= 100 ? GIMMICKS[hud.gimmick].short : `${Math.floor(hud.ult)}%`}</span>
                 <span className="pb-ky">Q</span>
               </button>
             </div>
@@ -710,7 +776,7 @@ export function ArenaBrawl() {
 
       {portraitHint && !fs ? <div className="ab-tip">{t("ফোন আড়াআড়ি ঘোরালে ফুল স্ক্রিনে খেলা যাবে ↻", "Turn your phone sideways to play full screen ↻")}</div> : null}
       <div className="ab-help">
-        {t("চাল: ১–৪ · গড়ান: Space · জাগরণ: Q · জুম: + − বা মাউস হুইল / দুই আঙুল · ফুল স্ক্রিন: F", "Moves 1–4 · Roll: Space · Awaken: Q · Zoom: + − or mouse wheel / two fingers · Full screen: F")}
+        {t("চাল: ১–৪ · গড়ান: Space · জিমিক: Q · জুম: + − বা মাউস হুইল / দুই আঙুল · ফুল স্ক্রিন: F", "Moves 1–4 · Roll: Space · Gimmick: Q · Zoom: + − or mouse wheel / two fingers · Full screen: F")}
       </div>
     </div>
   );

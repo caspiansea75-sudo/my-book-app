@@ -112,6 +112,29 @@ export const sfx = {
   lose() {
     [67, 64, 60, 55].forEach((m, i) => tone("sawtooth", 440 * 2 ** ((m - 69) / 12), 0.3, 0.1, undefined, i * 0.14));
   },
+  mega() {
+    [64, 68, 71, 76, 80, 83].forEach((m, i) => tone("triangle", 440 * 2 ** ((m - 69) / 12), 0.22, 0.12, undefined, i * 0.06));
+    noise(0.7, 0.2, 800, 4000, "bandpass");
+    tone("sine", 90, 0.6, 0.3, 40);
+  },
+  zstart() {
+    tone("sawtooth", 80, 1.1, 0.14, 420);
+    noise(1.1, 0.16, 300, 3800, "bandpass");
+  },
+  zhit() {
+    noise(0.7, 0.4, 3000, 100);
+    tone("sine", 100, 0.8, 0.4, 28);
+    tone("square", 900, 0.2, 0.1, 1800);
+  },
+  dynamax() {
+    tone("sawtooth", 70, 0.9, 0.22, 36);
+    noise(0.9, 0.3, 700, 70);
+    tone("sine", 50, 1.1, 0.3, 28);
+  },
+  tera() {
+    [84, 88, 91, 96].forEach((m, i) => tone("sine", 440 * 2 ** ((m - 69) / 12), 0.3, 0.1, undefined, i * 0.05));
+    noise(0.4, 0.18, 6000, 2000, "highpass");
+  },
   pick() {
     tone("triangle", 660, 0.08, 0.1, 990);
   },

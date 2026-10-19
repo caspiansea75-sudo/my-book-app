@@ -119,3 +119,22 @@
   .ab-tools { gap: 4px; top: 6px; right: 6px; }
   .ab-combo { top: 56px; font-size: 15px; }
 }
+
+/* ----- choosing a battle gimmick */
+.ab-gim { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--book-border); background: color-mix(in oklab, var(--book-lamp) 6%, var(--book-surface)); }
+.ab-gim > b { font-size: 13px; }
+.ab-gim p { margin: 0; font-size: 12px; line-height: 1.5; opacity: 0.85; }
+.ab-gim .ab-note b { color: var(--book-lamp); }
+.ab-gim-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.ab-gbtn { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 10px; border: 1px solid var(--book-border); background: var(--book-surface); color: var(--book-fg); font-family: var(--font-sans); cursor: pointer; }
+.ab-gbtn span { font-size: 20px; line-height: 1; }
+.ab-gbtn em { font-style: normal; font-size: 11px; font-weight: 700; text-align: center; line-height: 1.15; }
+.ab-gbtn.on { border-color: var(--book-lamp); box-shadow: 0 0 0 1px var(--book-lamp) inset; background: color-mix(in oklab, var(--book-lamp) 14%, var(--book-surface)); }
+.ab-gbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.ab-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ab-chip { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--book-border); background: var(--book-surface); color: var(--book-fg); font: 600 12px var(--font-sans); cursor: pointer; }
+.ab-chip small { opacity: 0.7; font-size: 10px; margin-left: 2px; }
+.ab-chip.on { border-color: var(--book-lamp); background: color-mix(in oklab, var(--book-lamp) 16%, var(--book-surface)); }
+.ab-chip.ty { padding: 4px 6px; display: grid; place-items: center; }
+.ab-chip-name { font-size: 12px; opacity: 0.8; margin-left: 4px; }
+@media (max-width: 560px) { .ab-gim-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
