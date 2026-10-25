@@ -4,7 +4,7 @@ import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
-import { FIELDS, GIMMICKS, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, speciesOf, type FieldKind, type GimmickKind } from "@/lib/pokemon/arena-data";
+import { FIELDS, GIMMICKS, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
 import { ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, playerOf, step, type Ev, type Input, type Mode, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
@@ -535,6 +535,11 @@ export function ArenaBrawl() {
         <div className="ab-detail">
           <h3>{sp.name}</h3>
           <div style={{ fontSize: 13, opacity: 0.8 }}>{sp.blurb}</div>
+          <div className="ab-loco">
+            <span>{LOCO_LABEL[locoOf(sp)].icon}</span> {t(LOCO_LABEL[locoOf(sp)].bn, LOCO_LABEL[locoOf(sp)].en)}
+            {isSwimmer(sp) && locoOf(sp) !== "surf" ? <> · <span>🌊</span> {t("পানিতে দ্রুত", "Fast in water")}</> : null}
+            {sp.id === "garchomp" || sp.id === "excadrill" ? <> · <span>⛏️</span> {t("গড়ানোর সময় মাটির নিচে ঢোকে", "Burrows when it rolls")}</> : null}
+          </div>
           <div className="ab-mvlist">
             {sp.moves.map((id, i) => {
               const mv = MOVES[id]!;
@@ -592,6 +597,9 @@ export function ArenaBrawl() {
             <div><span>⚡</span> <em>{t("জিমিক গেজ (Q)", "Gimmick gauge (Q)")}</em> {t("ড্যামেজ দিলে ও ঠিক সময়ে গড়ালে গেজ ভরে। পূর্ণ হলে Q চাপুন: আপনার বেছে নেওয়া জিমিক চালু হয়।", "Dealing damage and perfect dodges fill the gauge. When full, press Q to use the gimmick you picked.")}</div>
             <div><span>🎁</span> <em>{t("পিকআপ", "Pickups")}</em> {t("বেরি, এনার্জি অর্ব, স্পিড বুট ও পাওয়ার ক্রিস্টাল মাঠে পড়ে। ছুঁয়ে নিন।", "Berries, Energy Orbs, Speed Boots and Power Crystals appear on the floor. Walk over them.")}</div>
             <div><span>🌦️</span> <em>{t("আবহাওয়া", "Weather")}</em> {t("রোদে আগুন, বৃষ্টিতে জল ও বিদ্যুৎ জোরালো। বালুঝড় ও শিলাবৃষ্টি বেশিরভাগ পোকেমনকে ক্ষয় করে।", "Sun boosts Fire, rain boosts Water and Electric. Sand and hail wear most Pokémon down.")}</div>
+            <div><span>🧱</span> <em>{t("বাধা", "Obstacles")}</em> {t("কাঠের বাক্স ভাঙা যায় (মাঝেমধ্যে পিকআপ দেয়); পিলার, পাথর ও ক্রিস্টাল পথ ও গুলি আটকায়। ওড়া ও ভাসা পোকেমন নিচু বাধা পার হয়।", "Wooden crates break (and sometimes drop a pickup); pillars, rocks and crystals block the way and your shots. Flyers and floaters pass over the low ones.")}</div>
+            <div><span>🕳️</span> <em>{t("গর্ত ও পানি", "Pits & water")}</em> {t("মাটির পোকেমন গর্ত পার হতে পারে না: ধাক্কা দিয়ে ফেলে দিন! সাঁতারুরা পানিতে দ্রুত, বাকিরা ধীর।", "Ground Pokémon cannot cross a pit: knock them in! Swimmers are fast in water, everyone else wades.")}</div>
+            <div><span>🏟️</span> <em>{t("মাঠ", "Stages")}</em> {t("ঘাসের মাঠ, পাথরের আখড়া, ধুলোর মাঠ — আর বসের সময় অতল গর্তসহ ক্রিস্টাল গুহা।", "A grass pitch, a stone arena, a dirt field — and the crystal cave with its bottomless pit for the bosses.")}</div>
             <div><span>🌩️</span> <em>{t("বজ্র", "Lightning")}</em> {t("ওয়েভ ৩ থেকে আকাশ থেকে হলুদ বৃত্তে বজ্র পড়ে। সরে যান।", "From wave 3, lightning falls in yellow circles. Step out of them.")}</div>
           </div>
 
@@ -781,6 +789,16 @@ export function ArenaBrawl() {
     </div>
   );
 }
+
+/** How each kind of Pokémon moves, for the menu. */
+const LOCO_LABEL: Record<Loco, { icon: string; bn: string; en: string }> = {
+  walk: { icon: "🚶", bn: "হাঁটে", en: "Walks" },
+  run: { icon: "🏃", bn: "দৌড়ায়", en: "Runs" },
+  fly: { icon: "🪽", bn: "ওড়ে: গর্ত ও নিচু বাধা পার হয়", en: "Flies: crosses pits and low obstacles" },
+  float: { icon: "👻", bn: "ভাসে: গর্ত ও নিচু বাধা পার হয়", en: "Floats: crosses pits and low obstacles" },
+  surf: { icon: "🌊", bn: "সাঁতরায়", en: "Swims" },
+  slither: { icon: "🐍", bn: "এঁকেবেঁকে চলে", en: "Slithers" },
+};
 
 /** Bangla names for the perks (the English ones live with the perk data). */
 const PERK_BN: Record<string, [string, string]> = {

@@ -138,3 +138,5 @@
 .ab-chip.ty { padding: 4px 6px; display: grid; place-items: center; }
 .ab-chip-name { font-size: 12px; opacity: 0.8; margin-left: 4px; }
 @media (max-width: 560px) { .ab-gim-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.ab-loco { font-size: 12px; opacity: 0.85; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }

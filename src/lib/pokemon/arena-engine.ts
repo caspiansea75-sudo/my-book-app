@@ -3,7 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { FIELDS, FOE_POOL, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { DIGGERS, FIELDS, FOE_POOL, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
 export const W = 960;
@@ -13,6 +13,13 @@ const CX = W / 2;
 const CY = H / 2;
 
 export type Mode = "survival" | "royale";
+
+export type StageKind = "grass" | "stone" | "dirt" | "crystal";
+export type ObsKind = "crate" | "pillar" | "crystal" | "rock";
+/** Something standing in the arena: crates break, the rest do not. */
+export type Obstacle = { id: number; kind: ObsKind; x: number; y: number; r: number; hp: number; hit: number };
+/** An oval patch of the floor: a bottomless pit or a pool of water. */
+export type Patch = { id: number; x: number; y: number; rx: number; ry: number };
 
 export type Fighter = {
   id: number;
@@ -43,7 +50,7 @@ export type Fighter = {
   cd: [number, number, number, number];
   cast: { slot: number; t: number; total: number; dx: number; dy: number; tx: number; ty: number } | null;
   channel: { slot: number; t: number; tick: number; dx: number; dy: number } | null;
-  dash: { t: number; total: number; dx: number; dy: number; dist: number; mv: MoveDef; hit: Set<number> } | null;
+  dash: { t: number; total: number; dx: number; dy: number; dist: number; mv: MoveDef; hit: Set<number>; under?: boolean } | null;
   dodge: { t: number; cd: number; dx: number; dy: number; perfected: boolean };
   invuln: number;
   shield: number;
@@ -88,6 +95,15 @@ export type Fighter = {
   crystal: number; // the Tera crystal shield
   zLock: boolean; // busy with a Z-Move
   override: Record<number, MoveDef>; // a move slot that is temporarily a different move (Tera Blast)
+  /** How it gets around: walking, running, flying, floating, swimming or slithering. */
+  loco: Loco;
+  canFly: boolean; // crosses pits and low obstacles
+  swimmer: boolean; // fast in water
+  digger: boolean;
+  mvx: number; // the speed it is actually moving at (it takes time to speed up or stop)
+  mvy: number;
+  inWater: boolean;
+  stride: number; // distance walked, for the footstep animation
   dealt: number;
   kos: number;
 };
@@ -112,6 +128,8 @@ export type Proj = {
   kb: number;
   /** Dynamax shots burst on impact over this radius (0 for none). */
   aoe: number;
+  mv: string; // the move it came from (the picture depends on it)
+  born: number;
 };
 
 export type Zone = {
@@ -139,7 +157,11 @@ export type Zone = {
 export type Ev =
   | { t: "cast"; x: number; y: number; type: string; kind: string; byPlayer: boolean }
   | { t: "hit"; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean }
-  | { t: "explode"; x: number; y: number; r: number; type: string }
+  | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string }
+  | { t: "crate"; x: number; y: number }
+  | { t: "fall"; x: number; y: number; id: number; player: boolean }
+  | { t: "dig"; x: number; y: number; id: number; phase: "down" | "up"; type: string }
+  | { t: "stage"; kind: StageKind }
   | { t: "dodge"; x: number; y: number }
   | { t: "perfect"; x: number; y: number }
   | { t: "ko"; x: number; y: number; id: number; id2: string; type: string; byPlayer: boolean; player: boolean; boss: boolean }
@@ -151,13 +173,13 @@ export type Ev =
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
-  | { t: "mega"; x: number; y: number; name: string; z: boolean; type: string }
+  | { t: "mega"; x: number; y: number; id: number; name: string; z: boolean; type: string }
   | { t: "zstart"; x: number; y: number; type: string; name: string }
   | { t: "zhit"; x: number; y: number; type: string }
-  | { t: "dynamax"; x: number; y: number; gmax: boolean }
-  | { t: "tera"; x: number; y: number; type: string }
+  | { t: "dynamax"; x: number; y: number; id: number; gmax: boolean }
+  | { t: "tera"; x: number; y: number; id: number; type: string }
   | { t: "gimmickEnd"; x: number; y: number; kind: GimmickKind }
-  | { t: "awaken"; x: number; y: number }
+  | { t: "awaken"; x: number; y: number; id: number }
   | { t: "item"; x: number; y: number; kind: ItemKind; byPlayer: boolean }
   | { t: "field"; kind: FieldKind }
   | { t: "hazard"; x: number; y: number }
@@ -191,6 +213,10 @@ export type State = {
   slow: number; // slow motion after a perfect dodge
   /** A Z-Move that has been announced and strikes when the cinematic ends. */
   zPending: { fid: number; type: string; name: string } | null;
+  stage: StageKind;
+  obs: Obstacle[];
+  holes: Patch[];
+  pools: Patch[];
   items: { id: number; x: number; y: number; kind: ItemKind; life: number }[];
   itemT: number;
   hazardT: number;
@@ -217,6 +243,105 @@ const norm = (x: number, y: number): [number, number] => {
 };
 
 const emptyStatus = () => ({ brn: 0, psn: 0, par: 0, frz: 0, frzImmune: 0 });
+
+/* ----------------------------------------------------------------- the arena floor */
+
+const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, rock: 24 };
+
+/** An explosion, which also splinters any crates it reaches. */
+function boom(S: State, x: number, y: number, r: number, type: string, fx?: string) {
+  S.events.push({ t: "explode", x, y, r, type, fx });
+  for (const o of S.obs) if (o.kind === "crate" && o.hp > 0 && len(o.x - x, o.y - y) <= r + o.r * 0.6) breakCrate(S, o);
+}
+
+function breakCrate(S: State, o: Obstacle) {
+  if (o.hp <= 0) return;
+  o.hp = 0;
+  S.events.push({ t: "crate", x: o.x, y: o.y });
+  if (Math.random() < 0.22 && S.items.length < 4) {
+    const kinds = Object.keys(ITEMS) as ItemKind[];
+    S.items.push({ id: S.nextId++, x: o.x, y: o.y, kind: kinds[Math.floor(Math.random() * kinds.length)]!, life: 14 });
+  }
+}
+
+const inPatch = (p: Patch, x: number, y: number, pad = 0) => ((x - p.x) / (p.rx + pad)) ** 2 + ((y - p.y) / (p.ry + pad)) ** 2 < 1;
+
+/** Lays out crates, pillars, crystals, a pond or a pit — each stage has its own. */
+export function buildStage(S: State, kind: StageKind) {
+  S.stage = kind;
+  S.obs = [];
+  S.holes = [];
+  S.pools = [];
+  const free = (x: number, y: number, r: number) =>
+    x > MARGIN + r + 10 && x < W - MARGIN - r - 10 && y > MARGIN + r + 10 && y < H - MARGIN - r - 10 &&
+    S.obs.every((o) => len(o.x - x, o.y - y) > o.r + r + 46) &&
+    S.holes.every((h) => !inPatch(h, x, y, r + 30)) &&
+    S.pools.every((h) => !inPatch(h, x, y, r + 20)) &&
+    S.fighters.every((f) => !f.alive || len(f.x - x, f.y - y) > f.r + r + 60);
+  const scatter = (k: ObsKind, n: number) => {
+    for (let i = 0; i < n; i++) {
+      for (let t = 0; t < 30; t++) {
+        const x = rnd(MARGIN + 40, W - MARGIN - 40);
+        const y = rnd(MARGIN + 40, H - MARGIN - 40);
+        if (free(x, y, OBS_R[k])) {
+          S.obs.push({ id: S.nextId++, kind: k, x, y, r: OBS_R[k], hp: k === "crate" ? 1 : 99, hit: 0 });
+          break;
+        }
+      }
+    }
+  };
+  const patch = (list: Patch[], rx: number, ry: number, x: number, y: number) => list.push({ id: S.nextId++, x, y, rx, ry });
+  switch (kind) {
+    case "grass":
+      patch(S.pools, rnd(80, 110), rnd(55, 75), rnd(300, 660), rnd(190, 410));
+      scatter("crate", 6);
+      scatter("rock", 3);
+      break;
+    case "stone":
+      scatter("crate", 5);
+      scatter("pillar", 3);
+      break;
+    case "dirt":
+      scatter("crate", 4);
+      scatter("rock", 5);
+      break;
+    case "crystal":
+      patch(S.holes, 190, 105, CX, CY);
+      scatter("crystal", 8);
+      scatter("pillar", 1);
+      break;
+  }
+}
+
+/** Anyone left standing inside something solid steps out to the nearest free spot. */
+function unstick(S: State) {
+  for (const f of S.fighters) {
+    if (!f.alive) continue;
+    for (let k = 0; k < 6; k++) {
+      let moved = false;
+      for (const o of S.obs) {
+        if (o.hp <= 0) continue;
+        const d = len(f.x - o.x, f.y - o.y);
+        const min = f.r + o.r + 6;
+        if (d < min) {
+          const [nx, ny] = norm(f.x - o.x, f.y - o.y);
+          f.x = clamp(o.x + nx * min, MARGIN, W - MARGIN);
+          f.y = clamp(o.y + ny * min, MARGIN, H - MARGIN);
+          moved = true;
+        }
+      }
+      for (const h of S.holes) {
+        if (!f.canFly && inPatch(h, f.x, f.y, 6)) {
+          const [nx, ny] = norm((f.x - h.x) / h.rx, (f.y - h.y) / h.ry);
+          f.x = clamp(h.x + nx * (h.rx + 18), MARGIN, W - MARGIN);
+          f.y = clamp(h.y + ny * (h.ry + 18), MARGIN, H - MARGIN);
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+  }
+}
 
 /* ----------------------------------------------------------------------- setup */
 
@@ -293,6 +418,14 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     crystal: 0,
     zLock: false,
     override: {},
+    loco: locoOf(sp),
+    canFly: ["fly", "float"].includes(locoOf(sp)),
+    swimmer: isSwimmer(sp),
+    digger: DIGGERS.has(sp.id),
+    mvx: 0,
+    mvy: 0,
+    inWater: false,
+    stride: 0,
     dealt: 0,
     kos: 0,
   };
@@ -316,6 +449,10 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     freeze: 0,
     slow: 0,
     zPending: null,
+    stage: "stone",
+    obs: [],
+    holes: [],
+    pools: [],
     items: [],
     itemT: 7,
     hazardT: 6,
@@ -336,6 +473,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   if (player.gimmick === "mega" && !player.megaForm) player.gimmick = "awaken";
   if (opts.tera && TERA_TYPES.includes(opts.tera)) player.teraType = opts.tera;
   S.fighters.push(player);
+  buildStage(S, mode === "royale" ? (["grass", "stone", "dirt", "crystal"] as StageKind[])[Math.floor(Math.random() * 4)]! : "grass");
   if (mode === "royale") {
     const pool = ROSTER.filter((s) => s.id !== speciesId && !s.unlock);
     for (let i = 0; i < 4; i++) {
@@ -351,6 +489,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
       cpu.teraType = TERA_TYPES[Math.floor(Math.random() * TERA_TYPES.length)]!;
       S.fighters.push(cpu);
     }
+    unstick(S);
     S.wave = 1;
     S.storm = { r: 520, on: false };
     const kinds: FieldKind[] = ["none", "sun", "rain", "sand", "hail"];
@@ -391,6 +530,11 @@ function spawnWave(S: State) {
       S.fighters.push(makeFighter(S, speciesOf(id), 1, false, x, y, scale));
     }
   }
+  // each wave has its own floor: grass, stone, dirt — and the boss comes with the crystal cave and its pit
+  const order: StageKind[] = ["grass", "stone", "dirt", "stone"];
+  buildStage(S, boss ? "crystal" : order[(w - 1) % order.length]!);
+  unstick(S);
+  S.events.push({ t: "stage", kind: S.stage });
   S.events.push({ t: "wave", n: w, boss });
   S.phase = "intro";
   S.introT = 1.4;
@@ -577,6 +721,8 @@ function spawnProj(S: State, f: Fighter, mv: MoveDef, dx: number, dy: number, o:
     beam: !!o.beam,
     kb: mv.kind === "beam" ? 30 : 150,
     aoe: f.dyna > 0 && !o.beam ? 75 : 0,
+    mv: mv.id,
+    born: S.time,
   });
 }
 
@@ -601,7 +747,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
   // the new Z forms send out a pulse with every move
   if (f.mega > 0 && f.form?.z && mv.kind !== "heal" && mv.kind !== "guard" && mv.kind !== "buff") {
     const r = 95;
-    S.events.push({ t: "explode", x: f.x, y: f.y, r, type: f.types[0] ?? "Normal" });
+    boom(S, f.x, f.y, r, f.types[0] ?? "Normal");
     for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, baseDamage(f, mv, 0.4), f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 200 });
   }
   switch (mv.kind) {
@@ -625,9 +771,15 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       f.invuln = Math.max(f.invuln, 0.14);
       break;
     }
+    case "burrow": {
+      f.dash = { t: 0, total: 0.62, dx, dy, dist: mv.range ?? 260, mv, hit: new Set(), under: true };
+      f.invuln = Math.max(f.invuln, 0.66);
+      S.events.push({ t: "dig", x: f.x, y: f.y, id: f.id, phase: "down", type: mv.type });
+      break;
+    }
     case "nova": {
       const r = mv.range ?? 130;
-      S.events.push({ t: "explode", x: f.x, y: f.y, r, type: mv.type });
+      boom(S, f.x, f.y, r, mv.type, mv.id);
       for (const o of foesOf(S, f)) {
         const d = len(o.x - f.x, o.y - f.y);
         if (d <= r + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 240, status: mv.status });
@@ -684,13 +836,13 @@ export function tryCast(S: State, f: Fighter, slot: number, input: Input | null 
       S.score += 150;
       S.events.push({ t: "combo", n: 4, finish: true });
       const r = 150;
-      S.events.push({ t: "explode", x: f.x, y: f.y, r, type: f.types[0] ?? "Normal" });
+      boom(S, f.x, f.y, r, f.types[0] ?? "Normal");
       for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 300 });
     } else S.events.push({ t: "combo", n: c.n, finish: false });
   }
   // lobs and bolts warn with their own circle/line on the ground, so they fire at once
   const own = mv.kind === "lob" || mv.kind === "bolt";
-  const wind = own ? 0 : f.isPlayer ? (mv.windup ?? 0) * 0.45 : mv.windup ?? (mv.kind === "proj" || mv.kind === "homing" || mv.kind === "spread" ? 0.32 : mv.kind === "dash" ? 0.4 : mv.kind === "beam" ? 0.4 : 0);
+  const wind = own ? 0 : f.isPlayer ? (mv.windup ?? 0) * 0.45 : mv.windup ?? (mv.kind === "proj" || mv.kind === "homing" || mv.kind === "spread" ? 0.32 : (mv.kind === "dash" || mv.kind === "burrow") ? 0.4 : mv.kind === "beam" ? 0.4 : 0);
   if (wind > 0.04) {
     f.cast = { slot, t: wind, total: wind, dx: a.dx, dy: a.dy, tx: a.tx, ty: a.ty };
     f.face = Math.atan2(a.dy, a.dx);
@@ -714,8 +866,8 @@ function doAwaken(S: State, f: Fighter) {
   f.invuln = Math.max(f.invuln, 0.5);
   const type = f.types[0] ?? "Normal";
   const r = 230;
-  S.events.push({ t: "awaken", x: f.x, y: f.y });
-  S.events.push({ t: "explode", x: f.x, y: f.y, r, type });
+  S.events.push({ t: "awaken", x: f.x, y: f.y, id: f.id });
+  boom(S, f.x, f.y, r, type);
   S.freeze = Math.max(S.freeze, 0.1);
   for (const o of foesOf(S, f)) {
     if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 30 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 420 });
@@ -736,9 +888,9 @@ function doMega(S: State, f: Fighter) {
   f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.25);
   f.invuln = Math.max(f.invuln, 0.5);
   const type = f.types[0] ?? "Normal";
-  S.events.push({ t: "mega", x: f.x, y: f.y, name: form.name, z: !!form.z, type });
-  S.events.push({ t: "explode", x: f.x, y: f.y, r: 190, type });
-  S.freeze = Math.max(S.freeze, 0.14);
+  S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type });
+  boom(S, f.x, f.y, 190, type);
+  S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 190 + o.r) strike(S, f, o, 22 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 380 });
 }
 function endMega(S: State, f: Fighter) {
@@ -771,7 +923,7 @@ function resolveZ(S: State) {
   f.zLock = false;
   f.invuln = Math.max(f.invuln, 0.6);
   if (!f.alive) return;
-  S.events.push({ t: "explode", x: f.x, y: f.y, r: 200, type: z.type });
+  boom(S, f.x, f.y, 200, z.type);
   for (const o of foesOf(S, f)) {
     o.invuln = 0;
     o.shield = 0;
@@ -792,9 +944,9 @@ function doDynamax(S: State, f: Fighter) {
   f.invuln = Math.max(f.invuln, 0.5);
   f.status.brn = f.status.psn = f.status.par = f.status.frz = 0;
   const type = f.types[0] ?? "Normal";
-  S.events.push({ t: "dynamax", x: f.x, y: f.y, gmax: f.gmax });
-  S.events.push({ t: "explode", x: f.x, y: f.y, r: 210, type });
-  S.freeze = Math.max(S.freeze, 0.14);
+  S.events.push({ t: "dynamax", x: f.x, y: f.y, id: f.id, gmax: f.gmax });
+  boom(S, f.x, f.y, 210, type);
+  S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 210 + o.r) strike(S, f, o, 26 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 520 });
 }
 function endDynamax(S: State, f: Fighter) {
@@ -807,7 +959,7 @@ function endDynamax(S: State, f: Fighter) {
   if (f.gmax && f.alive) {
     // the Gigantamax finishing blast
     const type = f.types[0] ?? "Normal";
-    S.events.push({ t: "explode", x: f.x, y: f.y, r: 230, type });
+    boom(S, f.x, f.y, 230, type);
     for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 230 + o.r) strike(S, f, o, 24 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 480 });
   }
 }
@@ -821,9 +973,9 @@ function doTera(S: State, f: Fighter) {
   f.override[3] = { id: "terablast", name: "Tera Blast", type, kind: "proj", power: 2.1, cd: 3.4, speed: 560, pierce: true, desc: "A piercing blast of your Tera type." };
   f.cd[3] = 0;
   f.invuln = Math.max(f.invuln, 0.5);
-  S.events.push({ t: "tera", x: f.x, y: f.y, type });
-  S.events.push({ t: "explode", x: f.x, y: f.y, r: 170, type });
-  S.freeze = Math.max(S.freeze, 0.12);
+  S.events.push({ t: "tera", x: f.x, y: f.y, id: f.id, type });
+  boom(S, f.x, f.y, 170, type);
+  S.freeze = Math.max(S.freeze, f.isPlayer ? 0.85 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 170 + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 360 });
 }
 function endTera(S: State, f: Fighter) {
@@ -856,7 +1008,7 @@ const useRange = (mv: MoveDef): [number, number] => {
   switch (mv.kind) {
     case "proj": case "spread": case "homing": return [80, 460];
     case "beam": return [0, (mv.range ?? 260) * 0.9];
-    case "dash": return [70, (mv.range ?? 200) + 40];
+    case "dash": case "burrow": return [70, (mv.range ?? 200) + 40];
     case "nova": return [0, (mv.range ?? 130) * 0.85];
     case "lob": return [90, mv.range ?? 320];
     case "bolt": return [100, (mv.range ?? 480) * 0.9];
@@ -947,7 +1099,7 @@ function aiStep(S: State, f: Fighter, dt: number) {
       const n = f.hp < f.maxHp * 0.5 ? 20 : 14;
       const off = Math.random() * 6;
       for (let i = 0; i < n; i++) spawnProj(S, f, mv, Math.cos(off + (i / n) * Math.PI * 2), Math.sin(off + (i / n) * Math.PI * 2), { speed: 230, life: 3.4, dmg: baseDamage(f, mv, 0.8) });
-      S.events.push({ t: "explode", x: f.x, y: f.y, r: 80, type: "Psychic" });
+      boom(S, f.x, f.y, 80, "Psychic");
       f.gcd = 1.0;
       return;
     }
@@ -981,16 +1133,25 @@ function aiStep(S: State, f: Fighter, dt: number) {
 
 /* ------------------------------------------------------------------- step */
 
+/** How quickly each kind of mover gets up to speed and slows down (flyers and floaters drift). */
+const ACCEL: Record<string, number> = { fly: 5.5, float: 3.8, surf: 6, slither: 6.5, run: 11, walk: 15 };
+
 function moveFighter(S: State, f: Fighter, dt: number) {
-  let sx = f.vx;
-  let sy = f.vy;
+  const under = !!f.dash?.under;
+  f.inWater = S.pools.some((p) => inPatch(p, f.x, f.y));
+  let sx = 0;
+  let sy = 0;
   if (f.dodge.t > 0) {
     sx = f.dodge.dx * 560;
     sy = f.dodge.dy * 560;
+    f.mvx = sx * 0.5;
+    f.mvy = sy * 0.5;
   } else if (f.dash) {
     const speed = f.dash.dist / f.dash.total;
     sx = f.dash.dx * speed;
     sy = f.dash.dy * speed;
+    f.mvx = sx * 0.4;
+    f.mvy = sy * 0.4;
   } else {
     let k = f.speedMul;
     if (f.awaken > 0) k *= 1.25;
@@ -1000,8 +1161,13 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     if (f.status.par > 0) k *= 0.55;
     if (f.status.frz > 0 || f.stun > 0) k = 0;
     if (f.channel) k *= 0.35;
-    sx *= k;
-    sy *= k;
+    // water: swimmers are quick, flyers do not care, everyone else wades
+    if (f.inWater) k *= f.swimmer ? 1.3 : f.canFly ? 1 : 0.62;
+    const a = 1 - Math.exp(-dt * (ACCEL[f.loco] ?? 15));
+    f.mvx += (f.vx * k - f.mvx) * a;
+    f.mvy += (f.vy * k - f.mvy) * a;
+    sx = f.mvx;
+    sy = f.mvy;
   }
   // knock-back decays quickly
   sx += f.kx;
@@ -1009,8 +1175,11 @@ function moveFighter(S: State, f: Fighter, dt: number) {
   const decay = Math.pow(0.0008, dt);
   f.kx *= decay;
   f.ky *= decay;
+  const ox = f.x;
+  const oy = f.y;
   f.x += sx * dt;
   f.y += sy * dt;
+  f.stride += len(f.x - ox, f.y - oy);
   if (S.storm.on) {
     const d = len(f.x - CX, f.y - CY);
     if (d > S.storm.r) {
@@ -1020,6 +1189,55 @@ function moveFighter(S: State, f: Fighter, dt: number) {
   }
   f.x = clamp(f.x, MARGIN, W - MARGIN);
   f.y = clamp(f.y, MARGIN, H - MARGIN);
+
+  if (!under) {
+    // things standing in the way: pillars stop everyone; crates, rocks and crystals stop whoever cannot fly over them
+    for (const o of S.obs) {
+      if (o.hp <= 0) continue;
+      if (!(o.kind === "pillar" || !f.canFly)) continue;
+      const min = f.r * 0.85 + o.r;
+      const d = len(f.x - o.x, f.y - o.y);
+      if (d >= min) continue;
+      if (f.dash && o.kind === "crate") {
+        breakCrate(S, o);
+        continue;
+      }
+      const [nx, ny] = norm(f.x - o.x, f.y - o.y);
+      f.x = o.x + nx * min;
+      f.y = o.y + ny * min;
+      const dot = f.mvx * nx + f.mvy * ny;
+      if (dot < 0) {
+        f.mvx -= dot * nx;
+        f.mvy -= dot * ny;
+      }
+      if (f.dash) {
+        f.dash = null;
+        f.kx *= 0.2;
+        f.ky *= 0.2;
+      }
+    }
+    // pits: whoever cannot fly or float is stopped at the edge, or falls in if thrown there
+    if (!f.canFly) {
+      for (const h of S.holes) {
+        if (!inPatch(h, f.x, f.y)) continue;
+        const thrown = !!f.dash || len(f.kx, f.ky) > 220;
+        const [nx, ny] = norm((f.x - h.x) / h.rx, (f.y - h.y) / h.ry);
+        f.x = clamp(h.x + nx * (h.rx + 16), MARGIN, W - MARGIN);
+        f.y = clamp(h.y + ny * (h.ry + 16), MARGIN, H - MARGIN);
+        f.mvx = f.mvy = 0;
+        if (thrown && f.alive) {
+          f.dash = null;
+          f.kx = f.ky = 0;
+          f.stun = Math.max(f.stun, 0.5);
+          f.hp -= f.maxHp * 0.1;
+          S.events.push({ t: "fall", x: f.x, y: f.y, id: f.id, player: f.isPlayer });
+          if (f.hp <= 0) kill(S, null, f);
+        }
+      }
+    }
+    f.x = clamp(f.x, MARGIN, W - MARGIN);
+    f.y = clamp(f.y, MARGIN, H - MARGIN);
+  }
   if (len(sx, sy) > 20 && !f.cast && !f.channel) f.face = Math.atan2(sy, sx);
 }
 
@@ -1163,16 +1381,27 @@ export function step(S: State, input: Input, realDt: number) {
       }
       if (f.channel.t <= 0 || f.status.frz > 0) f.channel = null;
     }
-    // a rush
+    // a rush (or a burrow)
     if (f.dash) {
       f.dash.t += dt;
-      for (const o of foesOf(S, f)) {
-        if (!f.dash.hit.has(o.id) && len(o.x - f.x, o.y - f.y) <= f.r + o.r + 6) {
-          f.dash.hit.add(o.id);
-          strike(S, f, o, baseDamage(f, f.dash.mv), f.dash.mv.type, { kx: f.dash.dx, ky: f.dash.dy, kb: 330, status: f.dash.mv.status });
+      if (f.dash.under) {
+        f.invuln = Math.max(f.invuln, 0.08);
+        if (f.dash.t >= f.dash.total) {
+          const mv = f.dash.mv;
+          S.events.push({ t: "dig", x: f.x, y: f.y, id: f.id, phase: "up", type: mv.type });
+          boom(S, f.x, f.y, 95, mv.type, mv.id);
+          for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 95 + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 460, status: mv.status });
+          f.dash = null;
         }
+      } else {
+        for (const o of foesOf(S, f)) {
+          if (!f.dash.hit.has(o.id) && len(o.x - f.x, o.y - f.y) <= f.r + o.r + 6) {
+            f.dash.hit.add(o.id);
+            strike(S, f, o, baseDamage(f, f.dash.mv), f.dash.mv.type, { kx: f.dash.dx, ky: f.dash.dy, kb: 330, status: f.dash.mv.status });
+          }
+        }
+        if (f.dash.t >= f.dash.total) f.dash = null;
       }
-      if (f.dash.t >= f.dash.total) f.dash = null;
     }
     moveFighter(S, f, dt);
   }
@@ -1226,6 +1455,21 @@ export function step(S: State, input: Input, realDt: number) {
     pr.x += pr.vx * dt;
     pr.y += pr.vy * dt;
     if (pr.x < -30 || pr.x > W + 30 || pr.y < -30 || pr.y > H + 30) pr.life = 0;
+    for (const o of S.obs) {
+      if (o.hp <= 0 || pr.life <= 0) continue;
+      if (len(o.x - pr.x, o.y - pr.y) > o.r + pr.r * 0.6) continue;
+      if (o.kind === "crate") {
+        breakCrate(S, o);
+        if (!pr.pierce) {
+          pr.life = 0;
+          S.events.push({ t: "explode", x: pr.x, y: pr.y, r: 30, type: pr.type });
+        }
+      } else {
+        // pillars, rocks and crystals stop every shot
+        pr.life = 0;
+        S.events.push({ t: "explode", x: pr.x, y: pr.y, r: 30, type: pr.type });
+      }
+    }
     if (pr.life <= 0) continue;
     const src = S.fighters.find((f) => f.id === pr.owner);
     for (const o of S.fighters) {
@@ -1235,7 +1479,7 @@ export function step(S: State, input: Input, realDt: number) {
         if (src) strike(S, src, o, pr.dmg, pr.type, { kx: pr.vx, ky: pr.vy, kb: pr.kb, status: pr.status });
         if (!pr.pierce) {
           pr.life = 0;
-          S.events.push({ t: "explode", x: pr.x, y: pr.y, r: pr.aoe > 0 ? pr.aoe : 34, type: pr.type });
+          boom(S, pr.x, pr.y, pr.aoe > 0 ? pr.aoe : 34, pr.type);
           if (pr.aoe > 0 && src) {
             for (const o2 of S.fighters) {
               if (o2.alive && o2.team !== pr.team && o2.id !== o.id && len(o2.x - pr.x, o2.y - pr.y) <= pr.aoe + o2.r) strike(S, src, o2, pr.dmg * 0.6, pr.type, { kx: o2.x - pr.x, ky: o2.y - pr.y, kb: 200, status: pr.status });
@@ -1255,7 +1499,17 @@ export function step(S: State, input: Input, realDt: number) {
       if (z.delay <= 0) {
         z.struck = true;
         const src = S.fighters.find((f) => f.id === z.owner);
-        if (z.shape === "circle") S.events.push({ t: "explode", x: z.x, y: z.y, r: z.r, type: z.type });
+        if (z.shape === "circle") boom(S, z.x, z.y, z.r, z.type, z.mv.id);
+        else {
+          const [ux, uy] = norm(z.x2 - z.x, z.y2 - z.y);
+          const L = len(z.x2 - z.x, z.y2 - z.y);
+          for (const o of S.obs) {
+            if (o.kind !== "crate" || o.hp <= 0) continue;
+            const along = (o.x - z.x) * ux + (o.y - z.y) * uy;
+            const across = Math.abs((o.x - z.x) * uy - (o.y - z.y) * ux);
+            if (along > 0 && along < L && across <= z.r + o.r) breakCrate(S, o);
+          }
+        }
         if (!src && z.team === -1) {
           // lightning from the sky hurts everyone it touches
           for (const o of S.fighters) {
@@ -1296,7 +1550,7 @@ export function step(S: State, input: Input, realDt: number) {
             if (inside) strike(S, src, o, z.dmg, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: z.kb, status: z.status });
           }
         }
-        if (z.shape === "line") S.events.push({ t: "explode", x: z.x2, y: z.y2, r: 26, type: z.type });
+        if (z.shape === "line") boom(S, z.x2, z.y2, 26, z.type);
       }
     } else z.life -= dt;
   }

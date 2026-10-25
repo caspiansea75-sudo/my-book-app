@@ -9,6 +9,7 @@ export type MoveKind =
   | "homing" // a shot that bends towards the nearest foe
   | "beam" //   a short stream held in front of you
   | "dash" //   a rush forward that hits everything on the way
+  | "burrow" // dig under the floor, untouchable, and burst out at the end
   | "nova" //   a burst all around you
   | "lob" //    lands on the target spot after a moment (a telegraphed circle)
   | "bolt" //   a long line that strikes after a short wind-up
@@ -45,6 +46,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
   [
     m({ id: "flamethrower", name: "Flamethrower", type: "Fire", kind: "beam", power: 0.42, cd: 2.6, n: 9, range: 260, status: { kind: "brn", chance: 0.18 }, desc: "A stream of fire that burns what it touches." }),
     m({ id: "fireblast", name: "Fire Blast", type: "Fire", kind: "lob", power: 2.2, cd: 5.5, range: 340, windup: 0.55, status: { kind: "brn", chance: 0.5 }, desc: "A huge blast that lands where you aim." }),
+    m({ id: "dig", name: "Dig", type: "Ground", kind: "burrow", power: 1.9, cd: 4.6, range: 270, desc: "Burrow under the floor, untouchable, and burst out under your foe." }),
     m({ id: "flamewheel", name: "Flame Wheel", type: "Fire", kind: "dash", power: 1.2, cd: 3.4, range: 230, status: { kind: "brn", chance: 0.3 }, desc: "Roll through foes, trailing flame." }),
     m({ id: "waterpulse", name: "Water Pulse", type: "Water", kind: "proj", power: 1.0, cd: 1.1, speed: 480, desc: "A quick ball of water." }),
     m({ id: "hydropump", name: "Hydro Pump", type: "Water", kind: "beam", power: 0.52, cd: 3.4, n: 8, range: 300, desc: "A powerful jet of water." }),
@@ -130,7 +132,7 @@ export const ROSTER: Species[] = [
   { id: "pikachu", num: 25, name: "Pikachu", types: ["Electric"], bs: [35, 55, 40, 50, 50, 90], moves: ["thundershock", "quickattack", "thunderbolt", "thunder"], role: "shooter", size: 20, blurb: "Small and fast. Hard to hit, quick to strike." },
   { id: "gengar", num: 94, name: "Gengar", types: ["Ghost", "Poison"], bs: [60, 65, 60, 130, 75, 110], moves: ["shadowball", "shadowsneak", "sludgebomb", "darkpulse"], role: "bomber", size: 26, blurb: "Slippery and strong, but fragile." },
   { id: "lucario", num: 448, name: "Lucario", types: ["Fighting", "Steel"], bs: [70, 110, 70, 115, 70, 90], moves: ["aurasphere", "bulletpunch", "closecombat", "swordsdance"], role: "brawler", size: 26, blurb: "Close combat and a homing sphere. Great combos." },
-  { id: "garchomp", num: 445, name: "Garchomp", types: ["Dragon", "Ground"], bs: [108, 130, 95, 80, 85, 102], moves: ["dragonrush", "earthquake", "stoneedge", "dragonpulse"], role: "brawler", size: 30, blurb: "Fast, tough and heavy-handed." },
+  { id: "garchomp", num: 445, name: "Garchomp", types: ["Dragon", "Ground"], bs: [108, 130, 95, 80, 85, 102], moves: ["dragonrush", "earthquake", "stoneedge", "dig"], role: "brawler", size: 30, blurb: "Fast, tough and heavy-handed. Digs under the floor." },
   { id: "gardevoir", num: 282, name: "Gardevoir", types: ["Psychic", "Fairy"], bs: [68, 65, 65, 125, 115, 80], moves: ["psybeam", "moonblast", "calmmind", "shadowball"], role: "bomber", size: 26, blurb: "Moonlight and focus for slow, heavy hits." },
   { id: "alakazam", num: 65, name: "Alakazam", types: ["Psychic"], bs: [55, 50, 45, 135, 95, 120], moves: ["psybeam", "psychic", "recover", "shadowball"], role: "shooter", size: 24, blurb: "Very fast, very fragile. Heals itself." },
   { id: "dragonite", num: 149, name: "Dragonite", types: ["Dragon", "Flying"], bs: [91, 134, 95, 100, 100, 80], moves: ["dragonpulse", "dragonrush", "hyperbeam", "protect"], role: "brawler", size: 32, blurb: "A huge charge and an even bigger beam." },
@@ -157,7 +159,7 @@ export const ROSTER: Species[] = [
   { id: "meganium", num: 154, name: "Meganium", types: ["Grass"], bs: [80, 82, 100, 83, 100, 80], moves: ["razorleaf", "solarbeam", "bodyslam", "synthesis"], role: "shooter", size: 30, blurb: "Steady, tough and gentle healing." },
   { id: "feraligatr", num: 160, name: "Feraligatr", types: ["Water"], bs: [85, 105, 100, 79, 83, 78], moves: ["waterpulse", "crunch", "surf", "swordsdance"], role: "brawler", size: 30, blurb: "Bites hard once it is powered up." },
   { id: "emboar", num: 500, name: "Emboar", types: ["Fire", "Fighting"], bs: [110, 123, 65, 100, 65, 65], moves: ["flamethrower", "flareblitz", "crosschop", "fireblast"], role: "brawler", size: 32, blurb: "A heavy fire fighter with big HP." },
-  { id: "excadrill", num: 530, name: "Excadrill", types: ["Ground", "Steel"], bs: [110, 135, 60, 50, 65, 88], moves: ["bulletpunch", "earthquake", "stoneedge", "swordsdance"], role: "brawler", size: 28, blurb: "Drills through anything at speed." },
+  { id: "excadrill", num: 530, name: "Excadrill", types: ["Ground", "Steel"], bs: [110, 135, 60, 50, 65, 88], moves: ["bulletpunch", "dig", "stoneedge", "swordsdance"], role: "brawler", size: 28, blurb: "Drills through anything at speed, even under the floor." },
   { id: "chandelure", num: 609, name: "Chandelure", types: ["Ghost", "Fire"], bs: [60, 55, 90, 145, 90, 80], moves: ["shadowball", "flamethrower", "fireblast", "calmmind"], role: "bomber", size: 26, blurb: "Ghost fire. Fragile, with a huge reach." },
   { id: "chesnaught", num: 652, name: "Chesnaught", types: ["Grass", "Fighting"], bs: [88, 107, 122, 74, 75, 64], moves: ["leafblade", "dynamicpunch", "kingsshield", "synthesis"], role: "brawler", size: 30, blurb: "A spiky wall that hits back." },
   { id: "delphox", num: 655, name: "Delphox", types: ["Fire", "Psychic"], bs: [75, 69, 72, 114, 100, 104], moves: ["flamethrower", "psybeam", "fireblast", "calmmind"], role: "shooter", size: 26, blurb: "Fire and mind, from a safe distance." },
@@ -338,3 +340,20 @@ export function gimmicksFor(id: string): GimmickKind[] {
   if (MEGAS[id]) out.splice(1, 0, "mega");
   return out;
 }
+
+/* ------------------------------------------------------- how each one moves */
+
+export type Loco = "walk" | "run" | "fly" | "float" | "surf" | "slither";
+const L = (loco: Loco, ids: string) => ids.split(" ").map((id) => [id, loco] as const);
+/** Flyers hover and cross pits; floaters drift and cross pits; runners gallop; surfers swim; slitherers coil. */
+export const LOCO: Record<string, Loco> = Object.fromEntries([
+  ...L("fly", "charizard dragonite salamence staraptor skarmory corviknight rayquaza hydreigon scizor"),
+  ...L("float", "mewtwo gengar alakazam gardevoir chandelure froslass darkrai chimecho magearna metagross starmie dragapult aegislash meowstic tatsugiri glimmora"),
+  ...L("run", "pikachu raichu jolteon arcanine zeraora lucario umbreon absol sceptile blaziken greninja hawlucha excadrill garchomp"),
+  ...L("surf", "lapras"),
+  ...L("slither", "gyarados"),
+]);
+export const locoOf = (sp: Species): Loco => LOCO[sp.id] ?? (sp.types.includes("Flying") ? "fly" : sp.types.includes("Ghost") ? "float" : "walk");
+/** The ones that burrow when they roll. */
+export const DIGGERS = new Set(["garchomp", "excadrill"]);
+export const isSwimmer = (sp: Species) => sp.types.includes("Water") || locoOf(sp) === "surf" || locoOf(sp) === "slither";
