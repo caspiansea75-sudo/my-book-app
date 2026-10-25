@@ -57,7 +57,7 @@ export class ArenaRenderer {
   private camX = ARENA.CX;
   private camY = ARENA.CY;
 
-  constructor(private canvas: HTMLCanvasElement, private sources: SpriteSource = defaultSources) {
+  constructor(readonly canvas: HTMLCanvasElement, private sources: SpriteSource = defaultSources) {
     this.ctx = canvas.getContext("2d")!;
   }
 
@@ -427,8 +427,11 @@ export class ArenaRenderer {
 
   /* -------------------------------------------------------------------- frame */
 
-  render(S: State, dtReal: number, you: Fighter | undefined) {
+  render(S: State, dtRaw: number, you: Fighter | undefined) {
     const g = this.ctx;
+    // Time only moves forward. (The first frame's timestamp can be a hair older than the moment the game
+    // started, which gave a negative step and made the water pools draw with a negative radius.)
+    const dtReal = Number.isFinite(dtRaw) && dtRaw > 0 ? dtRaw : 0;
     const dt = dtReal * (S.slow > 0 ? 0.4 : 1);
     this.t += dtReal;
     this.shakeT = Math.max(0, this.shakeT - dtReal);

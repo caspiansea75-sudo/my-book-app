@@ -53,6 +53,7 @@ type Runtime = {
   zoom: number;
   pointers: Map<number, { x: number; y: number }>;
   pinch: number;
+  drawFailed: boolean;
 };
 
 const coarse = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
@@ -80,7 +81,7 @@ export function ArenaBrawl() {
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0 });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false });
 
   useEffect(() => {
     setSave(loadSave());
@@ -203,6 +204,7 @@ export function ArenaBrawl() {
     r.queue = [false, false, false, false];
     r.held = [false, false, false, false];
     r.paused = false;
+    r.drawFailed = false;
     setPaused(false);
     setResult(null);
     setHud(null);
@@ -280,7 +282,8 @@ export function ArenaBrawl() {
     const r = rt.current;
     const cv = canvas.current;
     if (!cv || !r.S) return;
-    if (!r.R) r.R = new ArenaRenderer(cv);
+    // The canvas is a new element every time a game starts (the menu removes it), so the renderer must follow it.
+    if (!r.R || r.R.canvas !== cv) r.R = new ArenaRenderer(cv);
     r.R.setZoom(r.zoom);
     r.R.resize();
     r.last = performance.now();
@@ -303,7 +306,8 @@ export function ArenaBrawl() {
 
     const tick = (now: number) => {
       const S = r.S!;
-      const dt = Math.min(0.05, (now - r.last) / 1000);
+      // `now` (the frame's timestamp) can be slightly older than `last` on the very first frame: never step backwards.
+      const dt = Math.max(0, Math.min(0.05, (now - r.last) / 1000));
       r.last = now;
       if (!r.paused) {
         step(S, build(), dt);
@@ -313,7 +317,13 @@ export function ArenaBrawl() {
         }
       }
       const p = playerOf(S);
-      r.R!.render(S, r.paused ? 0 : dt, p);
+      try {
+        r.R!.render(S, r.paused ? 0 : dt, p);
+      } catch (err) {
+        // One bad frame must never freeze the whole game on a black screen: skip it and keep going.
+        if (!r.drawFailed) console.error("Arena Brawl: a frame failed to draw", err);
+        r.drawFailed = true;
+      }
 
       if (now - r.hudAt > 90) {
         r.hudAt = now;

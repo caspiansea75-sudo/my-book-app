@@ -225,7 +225,7 @@ export function drawPool(g: CanvasRenderingContext2D, p: Patch, t: number) {
   g.strokeStyle = "rgba(220,240,255,.35)";
   g.lineWidth = 1.5;
   for (let i = 0; i < 4; i++) {
-    const k = ((t * 0.25 + i / 4) % 1) * 0.95;
+    const k = Math.max(0, (((t * 0.25 + i / 4) % 1) + 1) % 1) * 0.95;
     g.beginPath();
     g.ellipse(p.x + Math.sin(t + i) * 6, p.y, p.rx * k, p.ry * k, 0, 0, Math.PI * 2);
     g.stroke();
