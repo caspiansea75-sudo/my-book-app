@@ -3,6 +3,7 @@ import { Link, createFileRoute, notFound, redirect, useNavigate, useRouter } fro
 import { ArrowDown, ArrowUp, ChevronLeft, GripVertical, ImagePlus, PenLine, Trash2 } from "lucide-react";
 import { SiteNav } from "@/components/book/site-nav";
 import { MultiUploader } from "@/components/media/multi-uploader";
+import { BulkImport } from "@/components/manga/bulk-import";
 import { PanelPicker } from "@/components/manga/panel-picker";
 import { loadVault } from "@/lib/media-folders-api";
 import { redirectGuest } from "@/lib/auth/guest";
@@ -267,6 +268,12 @@ function MangaEditPage() {
         {pickerOpen ? (
           <div className="mt-5 rounded-xl border border-border bg-surface p-4">
             <PanelPicker folders={vault.folders} items={vault.items} usedIds={usedIds} onAdd={handleAddMany} />
+            <details className="mt-6 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer font-sans text-sm text-muted">একসাথে পুরো অধ্যায় আনুন (ZIP ফাইল বা পেজের লিংক থেকে)</summary>
+              <div className="mt-3">
+                <BulkImport seriesSlug={seriesSlug} onImported={handleAddMany} />
+              </div>
+            </details>
             <details className="mt-6 rounded-lg border border-border p-3">
               <summary className="cursor-pointer font-sans text-sm text-muted">নতুন ছবি আপলোড করে সরাসরি যোগ করুন</summary>
               <div className="mt-3">
