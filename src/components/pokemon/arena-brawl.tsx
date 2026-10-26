@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
+import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { FIELDS, GIMMICKS, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
@@ -65,6 +66,7 @@ export function ArenaBrawl() {
   const [pick, setPick] = useState("charizard");
   const [gimmick, setGimmick] = useState<GimmickKind>("awaken");
   const [megaId, setMegaId] = useState("");
+  const [moves, setMoves] = useState<string[]>(() => [...speciesOf("charizard").moves]);
   const [teraType, setTeraType] = useState("Fire");
   const [save, setSave] = useState<Save>({ bestWave: 0, bestScore: 0, royaleWins: 0, royalePlays: 0 });
   const [hud, setHud] = useState<Hud | null>(null);
@@ -99,6 +101,7 @@ export function ArenaBrawl() {
     setGimmick((g) => (gimmicksFor(pick).includes(g) ? g : "awaken"));
     setMegaId((MEGAS[pick] ?? [])[0]?.id ?? "");
     setTeraType(speciesOf(pick).types[0] ?? "Normal");
+    setMoves(loadMoves(pick));
   }, [pick]);
   const inGame = screen !== "menu";
 
@@ -195,7 +198,7 @@ export function ArenaBrawl() {
 
   const start = useCallback(() => {
     sfx.unlock();
-    const S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType });
+    const S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves });
     begin(S);
     const r = rt.current;
     r.S = S;
@@ -209,7 +212,7 @@ export function ArenaBrawl() {
     setResult(null);
     setHud(null);
     setScreen("play");
-  }, [mode, pick, gimmick, megaId, teraType]);
+  }, [mode, pick, gimmick, megaId, teraType, moves]);
 
   /* ----------------------------------------------------------- the loop */
 
@@ -550,8 +553,9 @@ export function ArenaBrawl() {
             {isSwimmer(sp) && locoOf(sp) !== "surf" ? <> · <span>🌊</span> {t("পানিতে দ্রুত", "Fast in water")}</> : null}
             {sp.id === "garchomp" || sp.id === "excadrill" ? <> · <span>⛏️</span> {t("গড়ানোর সময় মাটির নিচে ঢোকে", "Burrows when it rolls")}</> : null}
           </div>
+          <MovePicker species={pick} moves={moves} onChange={(m) => { setMoves(m); saveMoves(pick, m); }} />
           <div className="ab-mvlist">
-            {sp.moves.map((id, i) => {
+            {moves.map((id, i) => {
               const mv = MOVES[id]!;
               return (
                 <div key={id}>
@@ -635,8 +639,8 @@ export function ArenaBrawl() {
   const fld = hud && hud.field !== "none" ? FIELDS[hud.field] : null;
   const padBtn = (i: number, cls: string) => {
     const cur = hud?.moves[i];
-    const id = cur?.id ?? sp.moves[i]!;
-    const mv = cur ? { name: cur.name, type: cur.type } : MOVES[sp.moves[i]!]!;
+    const id = cur?.id ?? moves[i]!;
+    const mv = cur ? { name: cur.name, type: cur.type } : MOVES[moves[i]!]!;
     const f = hud?.cds[i] ?? 0;
     return (
       <button

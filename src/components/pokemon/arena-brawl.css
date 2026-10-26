@@ -164,3 +164,25 @@
 .am-rank-row small { opacity: 0.7; }
 .am-stand { display: grid; gap: 4px; margin: 6px 0 10px; min-width: min(80vw, 320px); }
 .am-stand > b { font-size: 13px; }
+
+/* ----- move picker */
+.mp { display: grid; gap: 8px; }
+.mp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mp-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; }
+.mp-slot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; border: 1px solid color-mix(in oklab, var(--c, #fff) 50%, var(--book-border)); background: color-mix(in oklab, var(--c, #fff) 10%, var(--book-surface, #fff)); color: inherit; font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.mp-slot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-slot.on { outline: 2px solid var(--c, #fff); }
+.mp-back { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; padding: 12px; background: rgba(0, 0, 0, 0.6); }
+.mp-win { width: min(560px, 100%); max-height: min(88dvh, 720px); display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; gap: 8px; padding: 14px; border-radius: 16px; border: 1px solid var(--book-border); background: var(--book-bg, #0c1016); color: var(--book-fg, #e8eaf0); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+.mp-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.mp-hint { opacity: 0.75; }
+.mp-pool { display: grid; gap: 6px; overflow-y: auto; padding-right: 2px; -webkit-overflow-scrolling: touch; }
+.mp-move { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--book-border); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.mp-move.has { border-color: var(--c); background: color-mix(in oklab, var(--c) 14%, transparent); }
+.mp-move:hover { border-color: var(--c); }
+.mp-info { display: grid; gap: 1px; min-width: 0; }
+.mp-info b { font-size: 14px; }
+.mp-info em { font-style: normal; opacity: 0.8; }
+.mp-info small { opacity: 0.75; font-size: 12px; }
+.mp-desc { opacity: 0.6; }
+.mp-foot { display: flex; justify-content: flex-end; gap: 8px; }

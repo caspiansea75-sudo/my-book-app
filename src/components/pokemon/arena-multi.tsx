@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/members/avatar";
 import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
+import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
@@ -15,11 +16,11 @@ import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
 const PICK_KEY = "arena-multi-pick";
-const DEFAULT_PICK: ArenaPick = { species: "charizard", gimmick: "awaken", mega: "", tera: "Fire" };
+const DEFAULT_PICK: ArenaPick = { species: "charizard", gimmick: "awaken", mega: "", tera: "Fire", moves: [] };
 const loadPick = (): ArenaPick => {
   try {
     const raw = JSON.parse(localStorage.getItem(PICK_KEY) ?? "null") as Partial<ArenaPick> | null;
-    if (raw?.species && ROSTER.some((s) => s.id === raw.species && !s.unlock)) return { ...DEFAULT_PICK, ...raw } as ArenaPick;
+    if (raw?.species && ROSTER.some((s) => s.id === raw.species && !s.unlock)) return { ...DEFAULT_PICK, ...raw, moves: loadMoves(raw.species) } as ArenaPick;
   } catch {
     /* no saved pick */
   }
@@ -48,7 +49,7 @@ function PickPanel({ pick, onChange }: { pick: ArenaPick; onChange: (p: ArenaPic
     sfx.pick();
     const sp = speciesOf(id);
     const ok = gimmicksFor(id) as string[];
-    onChange({ species: id, gimmick: ok.includes(pick.gimmick) ? pick.gimmick : "awaken", mega: (MEGAS[id] ?? [])[0]?.id ?? "", tera: sp.types[0] ?? "Normal" });
+    onChange({ species: id, gimmick: ok.includes(pick.gimmick) ? pick.gimmick : "awaken", mega: (MEGAS[id] ?? [])[0]?.id ?? "", tera: sp.types[0] ?? "Normal", moves: loadMoves(id) });
   };
   return (
     <div className="am-pick">
@@ -61,6 +62,7 @@ function PickPanel({ pick, onChange }: { pick: ArenaPick; onChange: (p: ArenaPic
           </button>
         ))}
       </div>
+      <MovePicker species={pick.species} moves={pick.moves.length === 4 ? pick.moves : loadMoves(pick.species)} onChange={(m) => { saveMoves(pick.species, m); set({ moves: m }); }} />
       <div className="ab-gim">
         <b>{t("ব্যাটল জিমিক", "Battle gimmick")}</b>
         <div className="ab-gim-row">
@@ -510,7 +512,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         setStatus("empty");
         return false;
       }
-      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera })), coop ? "survival" : "royale");
+      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves })), coop ? "survival" : "royale");
       begin(G);
       // the host is always the first fighter
       G.fighters.sort((a, b) => (a.member === meId ? -1 : b.member === meId ? 1 : 0));
@@ -740,7 +742,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const padBtn = (i: number, cls: string) => {
     const cur = hud?.moves[i];
     const mine = speciesOf(seats.current.find((s) => s.memberId === init.you)?.species ?? "charizard");
-    const mv = cur ? { name: cur.name, type: cur.type } : MOVES[mine.moves[i]!]!;
+    const mv = cur ? { name: cur.name, type: cur.type } : MOVES[(seats.current.find((s) => s.memberId === init.you)?.moves ?? mine.moves)[i]!]!;
     const f = hud?.cds[i] ?? 0;
     return (
       <button

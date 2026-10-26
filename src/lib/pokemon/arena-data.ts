@@ -334,6 +334,31 @@ export const Z_SIGNATURE: Record<string, { name: string; bn: string; type: strin
   kommoo: { name: "Clangorous Soulblaze", bn: "ক্ল্যাঙ্গরাস সোলব্লেজ", type: "Dragon" },
 };
 
+/** Moves any Pokémon may learn as coverage, on top of its own types and the Normal moves. */
+const COVERAGE = ["shadowball", "icebeam", "thunderbolt", "flashcannon", "darkpulse", "earthquake", "stoneedge", "sludgebomb", "psychic", "surf", "flamethrower", "dragonpulse", "aurasphere", "airslash", "xscissor", "crunch", "closecombat"];
+
+/** Every move this Pokémon can choose from: its own default four first, then its types, Normal moves and some coverage. */
+export function movePool(id: string): string[] {
+  const sp = ROSTER.find((s) => s.id === id);
+  if (!sp) return [];
+  const out = new Set<string>(sp.moves);
+  const ids = Object.keys(MOVES);
+  for (const k of ids) if (sp.types.includes(MOVES[k]!.type)) out.add(k);
+  for (const k of ids) if (MOVES[k]!.type === "Normal") out.add(k);
+  for (const k of COVERAGE) if (MOVES[k]) out.add(k);
+  return [...out];
+}
+
+/** Four different moves from this Pokémon's pool; anything wrong or missing falls back to its default four. */
+export function cleanMoves(id: string, moves?: readonly string[] | null): [string, string, string, string] {
+  const sp = ROSTER.find((s) => s.id === id);
+  const def = (sp?.moves ?? ["quickattack", "protect", "recover", "swordsdance"]) as [string, string, string, string];
+  if (!moves || moves.length !== 4) return def;
+  const pool = new Set(movePool(id));
+  if (!moves.every((m) => pool.has(m)) || new Set(moves).size !== 4) return def;
+  return [moves[0]!, moves[1]!, moves[2]!, moves[3]!];
+}
+
 /** The most a Pokémon can do with each gimmick: which ones this species can use. */
 export function gimmicksFor(id: string): GimmickKind[] {
   const out: GimmickKind[] = ["awaken", "zmove", "dynamax", "tera"];

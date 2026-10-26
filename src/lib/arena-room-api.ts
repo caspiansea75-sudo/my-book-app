@@ -2,14 +2,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { getSql } from "@/lib/db";
 import { requireMember } from "@/lib/members-core";
-import { ROSTER, TERA_TYPES, gimmicksFor } from "@/lib/pokemon/arena-data";
+import { ROSTER, TERA_TYPES, cleanMoves, gimmicksFor } from "@/lib/pokemon/arena-data";
 
 /**
  * Arena Brawl multiplayer lobby: rooms for 2-5 members. The lobby lives in the database; once the host starts the
  * fight the members connect to each other directly (WebRTC, signaled through /api/rtc).
  */
 
-export type ArenaPick = { species: string; gimmick: string; mega: string; tera: string };
+export type ArenaPick = { species: string; gimmick: string; mega: string; tera: string; moves: string[] };
 export type ArenaSeat = ArenaPick & { memberId: number; name: string; avatarUrl: string | null; host: boolean; points: number; wins: number; kos: number };
 export type ArenaMode = "royale" | "coop";
 export type ArenaRoomView = {
@@ -39,13 +39,14 @@ const pickSchema = z.object({
   gimmick: z.string().max(12),
   mega: z.string().max(40).default(""),
   tera: z.string().max(12).default(""),
+  moves: z.array(z.string().max(30)).max(4).default([]),
 });
 
 function cleanPick(p: z.infer<typeof pickSchema>): ArenaPick {
   const sp = ROSTER.find((s) => s.id === p.species && !s.unlock) ?? ROSTER.find((s) => !s.unlock) ?? ROSTER[0]!;
   const allowed = gimmicksFor(sp.id) as string[];
   const gimmick = allowed.includes(p.gimmick) ? p.gimmick : "awaken";
-  return { species: sp.id, gimmick, mega: p.mega, tera: TERA_TYPES.includes(p.tera) ? p.tera : (sp.types[0] ?? "Normal") };
+  return { species: sp.id, gimmick, mega: p.mega, tera: TERA_TYPES.includes(p.tera) ? p.tera : (sp.types[0] ?? "Normal"), moves: [...cleanMoves(sp.id, p.moves)] };
 }
 
 async function sweep() {
@@ -60,8 +61,8 @@ type RoomRow = { id: number; host_id: number; max_players: number; status: "open
 
 async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
   const sql = await getSql();
-  const rows = await sql<{ member_id: number; species: string; gimmick: string; mega: string; tera: string; display_name: string; avatar_id: number | null; points: number; wins: number; kos: number }>`
-    select p.member_id, p.species, p.gimmick, p.mega, p.tera, p.points, p.wins, p.kos, m.display_name, m.avatar_id
+  const rows = await sql<{ member_id: number; species: string; gimmick: string; mega: string; tera: string; moves: string; display_name: string; avatar_id: number | null; points: number; wins: number; kos: number }>`
+    select p.member_id, p.species, p.gimmick, p.mega, p.tera, p.moves, p.points, p.wins, p.kos, m.display_name, m.avatar_id
     from arena_room_players p join members m on m.id = p.member_id
     where p.room_id = ${room.id} order by p.joined_at
   `;
@@ -86,6 +87,7 @@ async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
       gimmick: r.gimmick,
       mega: r.mega,
       tera: r.tera,
+      moves: [...cleanMoves(r.species, r.moves ? r.moves.split(",") : null)],
       points: r.points,
       wins: r.wins,
       kos: r.kos,
@@ -134,7 +136,7 @@ export const arenaCreate = createServerFn({ method: "POST" })
     `;
     const room = made[0]!;
     const p = cleanPick(data.pick);
-    await sql`insert into arena_room_players (room_id, member_id, species, gimmick, mega, tera) values (${room.id}, ${me.id}, ${p.species}, ${p.gimmick}, ${p.mega}, ${p.tera})`;
+    await sql`insert into arena_room_players (room_id, member_id, species, gimmick, mega, tera, moves) values (${room.id}, ${me.id}, ${p.species}, ${p.gimmick}, ${p.mega}, ${p.tera}, ${p.moves.join(",")})`;
     return viewOf(room, me.id);
   });
 
@@ -152,7 +154,7 @@ export const arenaJoin = createServerFn({ method: "POST" })
       if (seated.length >= room.max_players) throw new Error("রুম ভরে গেছে / The room is full");
       await sql`delete from arena_room_players where member_id = ${me.id}`;
       const p = cleanPick(data.pick);
-      await sql`insert into arena_room_players (room_id, member_id, species, gimmick, mega, tera) values (${room.id}, ${me.id}, ${p.species}, ${p.gimmick}, ${p.mega}, ${p.tera})`;
+      await sql`insert into arena_room_players (room_id, member_id, species, gimmick, mega, tera, moves) values (${room.id}, ${me.id}, ${p.species}, ${p.gimmick}, ${p.mega}, ${p.tera}, ${p.moves.join(",")})`;
       await sql`update arena_rooms set updated_at = now() where id = ${room.id}`;
     }
     return viewOf(room, me.id);
@@ -180,7 +182,7 @@ export const arenaPickSet = createServerFn({ method: "POST" })
     const room = await roomOf(data.id);
     if (room.status !== "open") return { ok: false };
     const p = cleanPick(data.pick);
-    await sql`update arena_room_players set species = ${p.species}, gimmick = ${p.gimmick}, mega = ${p.mega}, tera = ${p.tera} where room_id = ${data.id} and member_id = ${me.id}`;
+    await sql`update arena_room_players set species = ${p.species}, gimmick = ${p.gimmick}, mega = ${p.mega}, tera = ${p.tera}, moves = ${p.moves.join(",")} where room_id = ${data.id} and member_id = ${me.id}`;
     return { ok: true };
   });
 

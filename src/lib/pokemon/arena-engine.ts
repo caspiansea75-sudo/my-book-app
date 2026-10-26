@@ -3,7 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { DIGGERS, FIELDS, FOE_POOL, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { DIGGERS, FIELDS, FOE_POOL, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
 export const W = 960;
@@ -236,7 +236,7 @@ export type State = {
 };
 
 /** The move in a slot (Tera Blast takes over the fourth one for a while). */
-export const moveOf = (f: Fighter, slot: number): MoveDef => f.override[slot] ?? MOVES[f.sp.moves[slot]!]!;
+export const moveOf = (f: Fighter, slot: number): MoveDef => f.override[slot] ?? MOVES[(f.loadout ?? f.sp.moves)[slot]!]!;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -435,7 +435,7 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
   };
 }
 
-export type NewGameOptions = { auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string };
+export type NewGameOptions = { auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[] };
 
 export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}): State {
   const S: State = {
@@ -470,6 +470,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     easy: 1,
   };
   const player = makeFighter(S, speciesOf(speciesId), 0, true, mode === "royale" ? CX : 230, mode === "royale" ? CY + 150 : CY);
+  player.loadout = cleanMoves(speciesId, opts.moves);
   player.auto = !!opts.auto;
   player.cpuGimmick = !!opts.auto; // an auto-piloted player also uses its gimmick
   player.gimmick = opts.gimmick ?? "awaken";
@@ -502,7 +503,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   return S;
 }
 
-export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string };
+export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[] };
 
 /** A battle royale between 2-5 members: every fighter is steered by a person, nobody else is in the arena. */
 export function newMpGame(players: MpPlayer[], mode: Mode = "royale"): State {
@@ -524,6 +525,7 @@ export function newMpGame(players: MpPlayer[], mode: Mode = "royale"): State {
     f.megaForm = (MEGAS[pl.species] ?? []).find((m) => m.id === pl.mega) ?? MEGAS[pl.species]?.[0] ?? null;
     if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
     if (pl.tera && TERA_TYPES.includes(pl.tera)) f.teraType = pl.tera;
+    f.loadout = cleanMoves(pl.species, pl.moves);
     f.member = pl.member;
     f.name = pl.name;
     f.face = mode === "royale" ? Math.atan2(CY - f.y, CX - f.x) : 0;
