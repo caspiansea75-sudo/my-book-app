@@ -162,3 +162,5 @@
 .am-rank-row { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.08); font-size: 13px; text-align: left; }
 .am-rank-row.you { background: rgba(76, 217, 100, 0.22); }
 .am-rank-row small { opacity: 0.7; }
+.am-stand { display: grid; gap: 4px; margin: 6px 0 10px; min-width: min(80vw, 320px); }
+.am-stand > b { font-size: 13px; }

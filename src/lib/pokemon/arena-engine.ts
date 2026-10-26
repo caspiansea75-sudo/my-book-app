@@ -505,9 +505,9 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
 export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string };
 
 /** A battle royale between 2-5 members: every fighter is steered by a person, nobody else is in the arena. */
-export function newMpGame(players: MpPlayer[]): State {
+export function newMpGame(players: MpPlayer[], mode: Mode = "royale"): State {
   const first = players[0]!;
-  const S = newGame("royale", first.species, { gimmick: first.gimmick, mega: first.mega, tera: first.tera });
+  const S = newGame(mode, first.species, { gimmick: first.gimmick, mega: first.mega, tera: first.tera });
   // newGame made the first human and four computer fighters: keep only the humans
   S.fighters = [];
   S.nextId = 1;
@@ -515,14 +515,18 @@ export function newMpGame(players: MpPlayer[]): State {
   const n = players.length;
   players.forEach((pl, i) => {
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-    const f = makeFighter(S, speciesOf(pl.species), i, true, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200);
+    // royale: everybody on their own team around the ring. Co-op: one team in a line on the left.
+    const f =
+      mode === "royale"
+        ? makeFighter(S, speciesOf(pl.species), i, true, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200)
+        : makeFighter(S, speciesOf(pl.species), 0, true, 200, CY + (i - (n - 1) / 2) * 90);
     f.gimmick = pl.gimmick ?? "awaken";
     f.megaForm = (MEGAS[pl.species] ?? []).find((m) => m.id === pl.mega) ?? MEGAS[pl.species]?.[0] ?? null;
     if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
     if (pl.tera && TERA_TYPES.includes(pl.tera)) f.teraType = pl.tera;
     f.member = pl.member;
     f.name = pl.name;
-    f.face = Math.atan2(CY - f.y, CX - f.x);
+    f.face = mode === "royale" ? Math.atan2(CY - f.y, CX - f.x) : 0;
     S.fighters.push(f);
   });
   unstick(S);
@@ -539,9 +543,21 @@ function spawnWave(S: State) {
   const fields: FieldKind[] = ["sun", "rain", "sand", "hail"];
   S.field = w >= 2 && w % 2 === 0 ? fields[Math.floor(Math.random() * fields.length)]! : "none";
   S.events.push({ t: "field", kind: S.field });
-  const p = playerOf(S);
-  const scale = { hp: 0.8 + 0.12 * (w - 1), dmg: 0.62 + 0.07 * (w - 1) };
-  const count = boss ? 1 + (w >= 10 ? 1 : 0) : Math.min(5, 1 + Math.floor(w / 2));
+  // co-op: knocked-out teammates get back up (a little hurt) and the foes grow with the size of the team
+  const humans = S.fighters.filter((f) => f.isPlayer);
+  for (const f of humans) {
+    if (f.alive) continue;
+    f.alive = true;
+    f.hp = Math.max(f.hp, f.maxHp * 0.4);
+    f.ghost = f.hp;
+    f.koT = 0;
+    f.invuln = 2;
+    f.status = emptyStatus();
+  }
+  const team = S.mp ? Math.max(1, humans.length) : 1;
+  const p = humans[0] ?? playerOf(S);
+  const scale = { hp: (0.8 + 0.12 * (w - 1)) * (1 + 0.5 * (team - 1)), dmg: (0.62 + 0.07 * (w - 1)) * (1 + 0.08 * (team - 1)) };
+  const count = boss ? 1 + (w >= 10 || team >= 3 ? 1 : 0) : Math.min(5 + (team - 1), 1 + Math.floor(w / 2) + (team - 1));
   const spots: [number, number][] = [];
   for (let i = 0; i < count; i++) {
     let x = 0;
@@ -571,8 +587,8 @@ function spawnWave(S: State) {
   S.introT = 1.4;
 }
 
-export function choosePerk(S: State, id: string) {
-  const p = playerOf(S);
+/** Give one fighter a perk (the heal that comes with it included). */
+export function applyPerk(S: State, p: Fighter, id: string) {
   S.taken.push(id);
   switch (id) {
     case "power": p.dmgMul *= 1.18; break;
@@ -585,9 +601,18 @@ export function choosePerk(S: State, id: string) {
     case "guardian": p.takeMul *= 0.88; break;
   }
   p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.22);
+}
+
+/** Leave the perk screen and start the next wave. */
+export function nextWave(S: State) {
   S.phase = "intro";
   S.introT = 0.6;
   spawnWave(S);
+}
+
+export function choosePerk(S: State, id: string) {
+  applyPerk(S, playerOf(S), id);
+  nextWave(S);
 }
 
 /* ------------------------------------------------------------------- damage */
@@ -1654,6 +1679,26 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       }
       S.events.push({ t: "hazard", x: CX, y: CY });
     }
+  }
+
+  // ---- end of a co-op wave, or of the co-op run
+  if (S.mp && S.mode === "survival") {
+    const humans = S.fighters.filter((f) => f.isPlayer);
+    if (humans.every((f) => !f.alive)) {
+      S.phase = "over";
+      S.winner = false;
+      S.place = 0;
+      S.events.push({ t: "over", win: false });
+    } else if (!S.fighters.some((f) => f.alive && f.team !== 0)) {
+      S.fighters = humans;
+      S.projs = [];
+      S.zones = [];
+      S.perks = PERKS.map((x) => x.id).sort(() => Math.random() - 0.5).slice(0, 3);
+      S.phase = "perks";
+      S.score += 200 * S.wave;
+      S.events.push({ t: "perks" });
+    }
+    return;
   }
 
   // ---- end of a multiplayer fight: last one standing

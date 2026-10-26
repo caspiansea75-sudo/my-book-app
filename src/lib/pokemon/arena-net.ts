@@ -78,7 +78,7 @@ export type Snap = {
 };
 
 type Keyed = { id: number };
-const HEADER_KEYS = ["time", "phase", "introT", "wave", "score", "slow", "zPending", "storm", "field", "stage", "winnerId", "place"] as const;
+const HEADER_KEYS = ["time", "phase", "introT", "wave", "score", "slow", "zPending", "storm", "field", "stage", "winnerId", "place", "perks"] as const;
 
 function fighterWire(f: Fighter): J {
   const { sp, ...rest } = f;

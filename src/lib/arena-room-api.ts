@@ -10,19 +10,25 @@ import { ROSTER, TERA_TYPES, gimmicksFor } from "@/lib/pokemon/arena-data";
  */
 
 export type ArenaPick = { species: string; gimmick: string; mega: string; tera: string };
-export type ArenaSeat = ArenaPick & { memberId: number; name: string; avatarUrl: string | null; host: boolean };
+export type ArenaSeat = ArenaPick & { memberId: number; name: string; avatarUrl: string | null; host: boolean; points: number; wins: number; kos: number };
+export type ArenaMode = "royale" | "coop";
 export type ArenaRoomView = {
   id: number;
   hostId: number;
   max: number;
   status: "open" | "playing" | "done";
   round: number;
+  mode: ArenaMode;
+  /** A royale is a match of this many rounds (a co-op run has 1). */
+  rounds: number;
+  curRound: number;
+  reportedRound: number;
   seats: ArenaSeat[];
   /** The signaling room name to use while the fight runs. */
   rtcRoom: string;
   you: number;
 };
-export type ArenaRoomListItem = { id: number; host: string; max: number; count: number; names: string[] };
+export type ArenaRoomListItem = { id: number; host: string; max: number; count: number; names: string[]; mode: ArenaMode };
 export type ArenaLobby = { rooms: ArenaRoomListItem[]; mine: number | null };
 
 /** A seat that has not pinged for this long is empty (closed tab, lost connection). */
@@ -50,12 +56,12 @@ async function sweep() {
   await sql`delete from arena_rooms where updated_at < now() - interval '3 hours'`;
 }
 
-type RoomRow = { id: number; host_id: number; max_players: number; status: "open" | "playing" | "done"; round: number };
+type RoomRow = { id: number; host_id: number; max_players: number; status: "open" | "playing" | "done"; round: number; mode: ArenaMode; rounds: number; cur_round: number; reported_round: number };
 
 async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
   const sql = await getSql();
-  const rows = await sql<{ member_id: number; species: string; gimmick: string; mega: string; tera: string; display_name: string; avatar_id: number | null }>`
-    select p.member_id, p.species, p.gimmick, p.mega, p.tera, m.display_name, m.avatar_id
+  const rows = await sql<{ member_id: number; species: string; gimmick: string; mega: string; tera: string; display_name: string; avatar_id: number | null; points: number; wins: number; kos: number }>`
+    select p.member_id, p.species, p.gimmick, p.mega, p.tera, p.points, p.wins, p.kos, m.display_name, m.avatar_id
     from arena_room_players p join members m on m.id = p.member_id
     where p.room_id = ${room.id} order by p.joined_at
   `;
@@ -66,6 +72,10 @@ async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
     status: room.status,
     round: room.round,
     rtcRoom: `arena-${room.id}-${room.round}`,
+    mode: room.mode,
+    rounds: room.rounds,
+    curRound: room.cur_round,
+    reportedRound: room.reported_round,
     you: youId,
     seats: rows.map((r) => ({
       memberId: r.member_id,
@@ -76,13 +86,16 @@ async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
       gimmick: r.gimmick,
       mega: r.mega,
       tera: r.tera,
+      points: r.points,
+      wins: r.wins,
+      kos: r.kos,
     })),
   };
 }
 
 async function roomOf(id: number): Promise<RoomRow> {
   const sql = await getSql();
-  const rows = await sql<RoomRow>`select id, host_id, max_players, status, round from arena_rooms where id = ${id}`;
+  const rows = await sql<RoomRow>`select id, host_id, max_players, status, round, mode, rounds, cur_round, reported_round from arena_rooms where id = ${id}`;
   if (!rows[0]) throw new Error("এই রুমটি আর নেই / This room is gone");
   return rows[0];
 }
@@ -91,8 +104,8 @@ export const arenaLobby = createServerFn({ method: "GET" }).handler(async (): Pr
   const me = await requireMember();
   await sweep();
   const sql = await getSql();
-  const rooms = await sql<{ id: number; max_players: number; host: string; names: string[] | string | null }>`
-    select r.id, r.max_players, h.display_name as host,
+  const rooms = await sql<{ id: number; max_players: number; host: string; mode: ArenaMode; names: string[] | string | null }>`
+    select r.id, r.max_players, r.mode, h.display_name as host,
       (select array_agg(m.display_name order by p.joined_at) from arena_room_players p join members m on m.id = p.member_id where p.room_id = r.id) as names
     from arena_rooms r join members h on h.id = r.host_id
     where r.status = 'open'
@@ -102,13 +115,13 @@ export const arenaLobby = createServerFn({ method: "GET" }).handler(async (): Pr
   // some drivers hand an array column back as the text "{a,b}"
   const listOf = (v: string[] | string | null): string[] => (Array.isArray(v) ? v : typeof v === "string" ? v.replace(/^\{|\}$/g, "").split(",").map((x) => x.replace(/^"|"$/g, "")).filter(Boolean) : []);
   return {
-    rooms: rooms.map((r) => ({ id: r.id, host: r.host, max: r.max_players, count: listOf(r.names).length, names: listOf(r.names) })).filter((r) => r.count < r.max || mine[0]?.room_id === r.id),
+    rooms: rooms.map((r) => ({ id: r.id, host: r.host, mode: r.mode, max: r.max_players, count: listOf(r.names).length, names: listOf(r.names) })).filter((r) => r.count < r.max || mine[0]?.room_id === r.id),
     mine: mine[0]?.room_id ?? null,
   };
 });
 
 export const arenaCreate = createServerFn({ method: "POST" })
-  .validator(z.object({ max: z.number().int().min(2).max(5), pick: pickSchema }))
+  .validator(z.object({ max: z.number().int().min(2).max(5), mode: z.enum(["royale", "coop"]).default("royale"), pick: pickSchema }))
   .handler(async ({ data }): Promise<ArenaRoomView> => {
     const me = await requireMember();
     const sql = await getSql();
@@ -116,8 +129,8 @@ export const arenaCreate = createServerFn({ method: "POST" })
     await sql`delete from arena_room_players where member_id = ${me.id}`;
     await sql`delete from arena_rooms r where host_id = ${me.id}`;
     const made = await sql<RoomRow>`
-      insert into arena_rooms (host_id, max_players) values (${me.id}, ${data.max})
-      returning id, host_id, max_players, status, round
+      insert into arena_rooms (host_id, max_players, mode, rounds) values (${me.id}, ${data.max}, ${data.mode}, ${data.mode === "royale" ? 3 : 1})
+      returning id, host_id, max_players, status, round, mode, rounds, cur_round, reported_round
     `;
     const room = made[0]!;
     const p = cleanPick(data.pick);
@@ -153,7 +166,7 @@ export const arenaRoomGet = createServerFn({ method: "GET" })
     const sql = await getSql();
     await sql`update arena_room_players set seen_at = now() where room_id = ${data.id} and member_id = ${me.id}`;
     await sweep();
-    const rows = await sql<RoomRow>`select id, host_id, max_players, status, round from arena_rooms where id = ${data.id}`;
+    const rows = await sql<RoomRow>`select id, host_id, max_players, status, round, mode, rounds, cur_round, reported_round from arena_rooms where id = ${data.id}`;
     if (!rows[0]) return null;
     const v = await viewOf(rows[0], me.id);
     return v.seats.some((s) => s.memberId === me.id) ? v : null;
@@ -202,6 +215,49 @@ export const arenaRematch = createServerFn({ method: "POST" })
     const sql = await getSql();
     const room = await roomOf(data.id);
     if (room.host_id !== me.id) throw new Error("শুধু হোস্ট / Only the host can do this");
-    await sql`update arena_rooms set status = 'open', round = round + 1, updated_at = now() where id = ${room.id}`;
-    return viewOf({ ...room, status: "open", round: room.round + 1 }, me.id);
+    await sql`update arena_rooms set status = 'open', round = round + 1, cur_round = 1, reported_round = 0, updated_at = now() where id = ${room.id}`;
+    await sql`update arena_room_players set points = 0, wins = 0, kos = 0 where room_id = ${room.id}`;
+    return viewOf({ ...room, status: "open", round: room.round + 1, cur_round: 1, reported_round: 0 }, me.id);
+  });
+
+/** The host reports how a royale round ended: places become points (1st of 4 = 4 points ... last = 1). */
+export const arenaReport = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      id: z.number().int(),
+      round: z.number().int(),
+      results: z.array(z.object({ memberId: z.number().int(), place: z.number().int().min(1).max(5), kos: z.number().int().min(0).max(99) })).min(1).max(5),
+    }),
+  )
+  .handler(async ({ data }): Promise<ArenaRoomView> => {
+    const me = await requireMember();
+    const sql = await getSql();
+    const room = await roomOf(data.id);
+    if (room.host_id !== me.id) throw new Error("Only the host can report");
+    if (room.round === data.round && room.reported_round < data.round && room.mode === "royale") {
+      // claim the round first, so a double report cannot count twice
+      const claimed = await sql<{ id: number }>`update arena_rooms set reported_round = ${data.round} where id = ${room.id} and reported_round < ${data.round} returning id`;
+      if (claimed.length) {
+        const n = data.results.length;
+        for (const r of data.results) {
+          const pts = Math.max(0, n - r.place + 1);
+          await sql`update arena_room_players set points = points + ${pts}, wins = wins + ${r.place === 1 ? 1 : 0}, kos = kos + ${r.kos} where room_id = ${room.id} and member_id = ${r.memberId}`;
+        }
+      }
+    }
+    return viewOf((await roomOf(data.id)), me.id);
+  });
+
+/** Everybody into the next round of the match (a fresh connection room, the same seats). */
+export const arenaNextRound = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int() }))
+  .handler(async ({ data }): Promise<ArenaRoomView> => {
+    const me = await requireMember();
+    const sql = await getSql();
+    const room = await roomOf(data.id);
+    if (room.host_id !== me.id) throw new Error("Only the host can do this");
+    if (room.mode === "royale" && room.reported_round >= room.round && room.cur_round < room.rounds) {
+      await sql`update arena_rooms set cur_round = cur_round + 1, round = round + 1, updated_at = now() where id = ${room.id} and round = ${room.round}`;
+    }
+    return viewOf(await roomOf(data.id), me.id);
   });

@@ -4,9 +4,10 @@ import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
-import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaPickSet, arenaRematch, arenaRoomGet, arenaStart, type ArenaLobby, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
-import { GIMMICKS, MEGAS, MOVES, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
-import { ARENA, begin, moveOf, newMpGame, noInput, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
+import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
+import { PERK_BN } from "@/components/pokemon/arena-brawl";
+import { GIMMICKS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
+import { ARENA, applyPerk, begin, moveOf, newMpGame, nextWave, noInput, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
 import { InputReceiver, InputSender, SnapshotDecoder, SnapshotEncoder, type InputMsg, type Snap } from "@/lib/pokemon/arena-net";
 import { P2PRoom } from "@/lib/multiplayer";
 import { useMe } from "@/lib/use-me";
@@ -103,6 +104,7 @@ export function ArenaMulti() {
   const [room, setRoom] = useState<ArenaRoomView | null>(null);
   const [pick, setPickState] = useState<ArenaPick>(DEFAULT_PICK);
   const [max, setMax] = useState(4);
+  const [mode, setMode] = useState<ArenaMode>("royale");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const roomId = room?.id ?? null;
@@ -191,7 +193,17 @@ export function ArenaMulti() {
   }, [roomId]);
 
   if (room?.status === "playing") {
-    return <MpGame key={room.rtcRoom} init={room} onLeave={leave} onRematch={() => run(async () => setRoom(await arenaRematch({ data: { id: room.id } })))} />;
+    return (
+      <MpGame
+        key={room.rtcRoom}
+        init={room}
+        live={room}
+        onLeave={leave}
+        onRematch={() => run(async () => setRoom(await arenaRematch({ data: { id: room.id } })))}
+        onReport={(results) => void arenaReport({ data: { id: room.id, round: room.round, results } }).then(setRoom).catch(() => undefined)}
+        onNext={() => void arenaNextRound({ data: { id: room.id } }).then(setRoom).catch(() => undefined)}
+      />
+    );
   }
 
   if (room) {
@@ -200,7 +212,7 @@ export function ArenaMulti() {
     return (
       <div className="ab-menu am">
         <div className="am-head">
-          <h3>{t("অপেক্ষার ঘর", "Waiting room")} · {room.seats.length}/{room.max}</h3>
+          <h3>{t("অপেক্ষার ঘর", "Waiting room")} · {room.seats.length}/{room.max} · {room.mode === "coop" ? t("টিম সারভাইভাল", "Co-op Survival") : t("ব্যাটল রয়্যাল · ৩ রাউন্ড", "Battle Royale · 3 rounds")}</h3>
           <p>{isHost ? t("কমপক্ষে ২ জন হলে শুরু করুন। বন্ধুরা এই পাতার “অনলাইন” ট্যাব থেকে রুমটি দেখে ঢুকতে পারবে।", "Start when at least 2 are in. Friends find this room under the Online tab of this page.") : t("হোস্ট শুরু করলে লড়াই শুরু হবে।", "The fight starts when the host starts it.")}</p>
         </div>
         <div className="am-seats">
@@ -224,18 +236,28 @@ export function ArenaMulti() {
   return (
     <div className="ab-menu am">
       <div className="am-head">
-        <h3>{t("অনলাইন ব্যাটল রয়্যাল", "Online Battle Royale")}</h3>
-        <p>{t("২ থেকে ৫ জন সদস্য, এক মাঠ, সবাই সবার শত্রু। প্রতিটি পোকেমনের মাথার উপর সদস্যের নাম দেখা যায়।", "2 to 5 members, one arena, everyone against everyone. Each Pokémon wears its member's name above its head.")}</p>
+        <h3>{t("অনলাইন খেলা", "Play online")}</h3>
+        <p>{t("২ থেকে ৫ জন সদস্য। প্রতিটি পোকেমনের মাথার উপর সদস্যের নাম দেখা যায়।", "2 to 5 members. Each Pokémon wears its member's name above its head.")}</p>
       </div>
       <PickPanel pick={pick} onChange={setPick} />
       <div className="am-create">
         <b>{t("নতুন রুম", "New room")}</b>
+        <div className="ab-modes">
+          <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => setMode("royale")}>
+            <b>{t("ব্যাটল রয়্যাল", "Battle Royale")}</b>
+            <span>{t("৩ রাউন্ড, সবাই সবার শত্রু। স্থান অনুযায়ী পয়েন্ট; সবচেয়ে বেশি পয়েন্ট জেতে।", "3 rounds, everyone against everyone. Places earn points; most points wins the match.")}</span>
+          </button>
+          <button type="button" className={`ab-mode ${mode === "coop" ? "on" : ""}`} onClick={() => setMode("coop")}>
+            <b>{t("টিম সারভাইভাল", "Co-op Survival")}</b>
+            <span>{t("সবাই মিলে ওয়েভের বিরুদ্ধে। পড়ে গেলে পরের ওয়েভে সঙ্গীরা উঠে দাঁড়ায়। প্রতি ওয়েভের পর সবাই একটি পার্ক নেয়।", "Team up against the waves. Fallen teammates get back up next wave. Everyone picks a perk after each wave.")}</span>
+          </button>
+        </div>
         <div className="ab-chips">
           {[2, 3, 4, 5].map((n) => (
             <button key={n} type="button" className={`ab-chip ${max === n ? "on" : ""}`} onClick={() => setMax(n)}>{n} {t("জন", "players")}</button>
           ))}
         </div>
-        <button type="button" className="ab-btn" disabled={busy} onClick={() => run(async () => setRoom(await arenaCreate({ data: { max, pick } })))}>{t("রুম খুলুন", "Create room")}</button>
+        <button type="button" className="ab-btn" disabled={busy} onClick={() => run(async () => setRoom(await arenaCreate({ data: { max, mode, pick } })))}>{t("রুম খুলুন", "Create room")}</button>
       </div>
       {err ? <div className="am-err">{err}</div> : null}
       <div className="am-rooms">
@@ -245,7 +267,7 @@ export function ArenaMulti() {
             <div key={r.id} className="am-room">
               <div>
                 <b>{r.host}</b>
-                <small> · {r.count}/{r.max}</small>
+                <small> · {r.count}/{r.max} · {r.mode === "coop" ? t("টিম সারভাইভাল", "Co-op") : t("রয়্যাল ×৩", "Royale ×3")}</small>
                 <div className="am-names">{r.names.join(", ")}</div>
               </div>
               <button type="button" className="ab-btn" disabled={busy || r.count >= r.max} onClick={() => run(async () => setRoom(await arenaJoin({ data: { id: r.id, pick } })))}>{t("ঢুকুন", "Join")}</button>
@@ -279,25 +301,54 @@ function Seat({ seat, you }: { seat: ArenaSeat; you: boolean }) {
 /* the fight                                                                 */
 /* ======================================================================== */
 
-type Hud = { name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean };
-type Row = { id: number; name: string; species: string; place: number; kos: number; you: boolean };
+/** Match standings of a multi-round royale: points first, then round wins, then KOs. */
+function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; final: boolean }) {
+  const { t } = useT();
+  const order = [...live.seats].sort((a, b) => b.points - a.points || b.wins - a.wins || b.kos - a.kos);
+  return (
+    <div className="am-stand">
+      <b>{final && done ? `🏆 ${t("ম্যাচ চ্যাম্পিয়ন", "Match champion")}: ${order[0]?.name ?? "?"}` : t("পয়েন্ট", "Match points")}</b>
+      {done ? (
+        order.map((s, i) => (
+          <div key={s.memberId} className={`am-rank-row ${s.memberId === live.you ? "you" : ""}`}>
+            <b>{i + 1}</b>
+            <span>{s.name}</span>
+            <small>{s.points} {t("পয়েন্ট", "pts")} · {s.wins} {t("জয়", "wins")}</small>
+          </div>
+        ))
+      ) : (
+        <small>{t("পয়েন্ট গোনা হচ্ছে…", "Counting points…")}</small>
+      )}
+    </div>
+  );
+}
+
+type Hud = { phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean };
+type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean };
 
 type Wire = { k: string };
 
-export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLeave: () => void; onRematch: () => void }) {
+export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { init: ArenaRoomView; live: ArenaRoomView; onLeave: () => void; onRematch: () => void; onReport: (r: { memberId: number; place: number; kos: number }[]) => void; onNext: () => void }) {
   const { t } = useT();
   const me = useMe();
   const isHost = init.hostId === init.you;
+  const coop = init.mode === "coop";
+  const finalRound = coop || init.curRound >= init.rounds;
+  const [picked, setPicked] = useState(false);
+  const cb = useRef({ onReport, onNext });
+  cb.current = { onReport, onNext };
+  const reported = useRef(false);
   const [status, setStatus] = useState<"connecting" | "play" | "lost" | "empty">("connecting");
   const [hud, setHud] = useState<Hud | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [team, setTeam] = useState({ wave: 0, score: 0 });
   const [out, setOut] = useState<number | null>(null);
   const [fs, setFs] = useState(false);
   const [zoom, setZoomState] = useState(1);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, mouse: false, zoom: 1, R: null as ArenaRenderer | null });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -348,6 +399,18 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
     };
   }, [fs]);
 
+  // a new perk screen needs a new pick
+  useEffect(() => {
+    if (hud?.phase !== "perks") setPicked(false);
+  }, [hud?.phase]);
+
+  // royale match: after the results, the host starts the next round
+  useEffect(() => {
+    if (!rows || !isHost || coop || finalRound) return;
+    const id = setTimeout(() => cb.current.onNext(), 8000);
+    return () => clearTimeout(id);
+  }, [rows, isHost, coop, finalRound]);
+
   // ---- the fight itself
   useEffect(() => {
     const c = ctl.current;
@@ -382,6 +445,22 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
     let frameN = 0;
     const t0 = performance.now();
     const fidOfMember = new Map<number, number>();
+    const picks = new Set<number>();
+    let perkAt = 0;
+    let livePeers = new Set<string>();
+    const hostPick = (fid: number, id: string) => {
+      if (!S || S.phase !== "perks" || !S.perks.includes(id) || picks.has(fid)) return;
+      const f = S.fighters.find((x) => x.id === fid);
+      if (!f) return;
+      applyPerk(S, f, id);
+      picks.add(fid);
+    };
+    c.pickPerk = (id) => {
+      if (isHost) {
+        const fid = fidOfMember.get(meId);
+        if (fid !== undefined) hostPick(fid, id);
+      } else p2p.send({ k: "perk", id }, hostPeer);
+    };
 
     const p2p = new P2PRoom({
       room: init.rtcRoom,
@@ -394,6 +473,9 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
           if (d.k === "hello") {
             hellos.add(member);
             if (S && started) p2p.send(enc.keyframe(S), from);
+          } else if (d.k === "perk") {
+            const fid = fidOfMember.get(member);
+            if (fid !== undefined) hostPick(fid, (d as unknown as { id: string }).id);
           } else if (d.k === "in") {
             const fid = fidOfMember.get(member);
             if (fid !== undefined) recv.put(fid, d as InputMsg);
@@ -428,7 +510,7 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
         setStatus("empty");
         return false;
       }
-      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera })));
+      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera })), coop ? "survival" : "royale");
       begin(G);
       // the host is always the first fighter
       G.fighters.sort((a, b) => (a.member === meId ? -1 : b.member === meId ? 1 : 0));
@@ -487,6 +569,7 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
           // somebody whose connection is gone for good is knocked out
           if (frameN % 30 === 0) {
             const live = new Set(p2p.peerList().filter((p) => p.connectionState === "connected").map((p) => p.id));
+            livePeers = live;
             for (const f of S.fighters) {
               if (f.member === meId || !f.alive) continue;
               if (live.has(`m${f.member}`)) lastSeen.set(f.member!, now);
@@ -495,6 +578,20 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
                 f.hp = 0;
                 f.ghost = 0;
               }
+            }
+          }
+          // co-op: everybody picks a perk between waves; whoever is slow gets a random one
+          if (S.phase === "perks") {
+            if (!perkAt) {
+              perkAt = now;
+              picks.clear();
+            }
+            const here = S.fighters.filter((f) => f.member === meId || livePeers.has(`m${f.member}`));
+            if (here.every((f) => picks.has(f.id)) || now - perkAt > 15000) {
+              for (const f of S.fighters) if (!picks.has(f.id)) applyPerk(S, f, S.perks[Math.floor(Math.random() * S.perks.length)]!);
+              picks.clear();
+              perkAt = 0;
+              nextWave(S);
             }
           }
           const others = new Map<number, Input>();
@@ -547,8 +644,13 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
           hudAt = now;
           const ids = mine.sp.moves;
           const alive = V.fighters.filter((f) => f.alive).length;
-          setOut(mine.alive ? null : mine.place ?? alive + 1);
+          setOut(mine.alive ? null : coop ? 0 : mine.place ?? alive + 1);
           setHud({
+            phase: V.phase,
+            perks: V.perks,
+            wave: V.wave,
+            score: V.score,
+            foes: V.fighters.filter((f) => f.alive && f.team !== 0).length,
             name: mine.form?.name ?? mine.sp.name,
             hp: mine.hp,
             ghost: mine.ghost,
@@ -572,12 +674,18 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
         if (V.phase === "over") {
           overT += dt;
           if (overT > 2) {
-            const list = [...V.fighters].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
-            setRows(list.map((f, i) => ({ id: f.id, name: f.name ?? "?", species: f.sp.name, place: f.place ?? i + 1, kos: f.kos, you: f.member === meId })));
+            const list = coop ? [...V.fighters].sort((a, b) => b.kos - a.kos) : [...V.fighters].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
             if (!rowsShown.current) {
               rowsShown.current = true;
-              if (V.winnerId && mine?.id === V.winnerId) sfx.win();
+              setRows(list.map((f, i) => ({ id: f.id, member: f.member ?? 0, name: f.name ?? "?", species: f.sp.name, place: coop ? i + 1 : f.place ?? i + 1, kos: f.kos, you: f.member === meId })));
+              setTeam({ wave: V.wave, score: V.score });
+              if (!coop && V.winnerId && mine?.id === V.winnerId) sfx.win();
               else sfx.lose();
+              // the host writes the round into the match standings
+              if (isHost && !coop && !reported.current) {
+                reported.current = true;
+                cb.current.onReport(list.map((f, i) => ({ memberId: f.member ?? 0, place: Math.min(5, f.place ?? i + 1), kos: Math.min(99, f.kos) })));
+              }
             }
           }
         }
@@ -691,8 +799,9 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
               {hud.gimmickT > 0 ? <div className="ab-awk">{GIMMICKS[hud.gimmick].icon} {t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].short)} {hud.gimmickT.toFixed(1)}s</div> : null}
             </div>
             <div className="ab-top">
-              {t("অনলাইন রয়্যাল", "Online Royale")}
-              <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>
+              {coop ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("রাউন্ড", "Round")} {init.curRound}/{init.rounds}</>}
+              {coop ? <span>{t("শত্রু", "Foes")} {hud.foes}</span> : <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>}
+              {coop ? <span className="sc">★ {hud.score}</span> : null}
               {hud.storm ? <span>🌀</span> : null}
             </div>
             <div className="ab-tools">
@@ -736,25 +845,72 @@ export function MpGame({ init, onLeave, onRematch }: { init: ArenaRoomView; onLe
           <div className="ab-ov"><div><h2>{t("হোস্টের সংযোগ কেটে গেছে", "Lost the host")}</h2><button type="button" className="ab-btn" onClick={onLeave}>{t("ফিরে যান", "Back")}</button></div></div>
         ) : null}
 
-        {out !== null && !rows ? (
-          <div className="am-out">{t(`আপনি আউট! স্থান #${out}: দেখতে থাকুন`, `You are out! Place #${out}: keep watching`)}</div>
+        {out !== null && !rows && hud?.phase !== "perks" ? (
+          <div className="am-out">
+            {coop
+              ? t("আপনি পড়ে গেছেন: পরের ওয়েভে সঙ্গীরা আপনাকে তুলবে", "You are down: you get back up next wave")
+              : t(`আপনি আউট! স্থান #${out}: দেখতে থাকুন`, `You are out! Place #${out}: keep watching`)}
+          </div>
+        ) : null}
+
+        {hud?.phase === "perks" && !rows ? (
+          <div className="ab-ov">
+            <div>
+              <h2>{t("ওয়েভ সাফ!", "Wave cleared!")}</h2>
+              {picked ? (
+                <p>{t("অন্যদের জন্য অপেক্ষা…", "Waiting for the others…")}</p>
+              ) : (
+                <>
+                  <p>{t("আপনার পার্ক বেছে নিন", "Pick your perk")}</p>
+                  <div className="ab-perks">
+                    {hud.perks.map((id) => {
+                      const pk = PERKS.find((x) => x.id === id);
+                      if (!pk) return null;
+                      return (
+                        <button key={id} type="button" className="ab-perk" onClick={() => { sfx.pick(); setPicked(true); ctl.current.pickPerk?.(id); }}>
+                          <div className="em">{pk.icon}</div>
+                          <b>{t(PERK_BN[id]?.[0] ?? pk.name, pk.name)}</b>
+                          <span>{t(PERK_BN[id]?.[1] ?? pk.desc, pk.desc)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         ) : null}
 
         {rows ? (
           <div className="ab-ov">
             <div>
-              <h2 style={{ color: rows[0]?.you ? "#ffd54a" : "#fff" }}>{rows[0]?.you ? t("চ্যাম্পিয়ন!", "Champion!") : `${rows[0]?.name ?? "?"} ${t("জিতেছে", "wins")}`}</h2>
+              {coop ? (
+                <>
+                  <h2 style={{ color: "#ffb4a8" }}>{t("টিম হেরে গেছে", "The team has fallen")}</h2>
+                  <p>{t("পৌঁছেছেন", "Reached")} {t("ওয়েভ", "wave")} <b>{team.wave}</b> · ★ <b>{team.score}</b></p>
+                </>
+              ) : (
+                <h2 style={{ color: rows[0]?.you ? "#ffd54a" : "#fff" }}>
+                  {init.rounds > 1 ? `${t("রাউন্ড", "Round")} ${init.curRound}/${init.rounds}: ` : ""}
+                  {rows[0]?.you ? t("আপনি জিতেছেন!", "You won!") : `${rows[0]?.name ?? "?"} ${t("জিতেছে", "wins")}`}
+                </h2>
+              )}
               <div className="am-rank">
                 {rows.map((r) => (
                   <div key={r.id} className={`am-rank-row ${r.you ? "you" : ""}`}>
-                    <b>#{r.place}</b>
+                    <b>{coop ? "" : `#${r.place}`}</b>
                     <span>{r.name}{r.you ? ` (${t("আপনি", "you")})` : ""}</span>
                     <small>{r.species} · {r.kos} KO</small>
                   </div>
                 ))}
               </div>
+              {!coop && init.rounds > 1 ? <Standings live={live} done={live.reportedRound >= init.round} final={finalRound} /> : null}
               <div className="ab-row">
-                {isHost ? <button type="button" className="ab-btn" onClick={onRematch}>{t("আবার খেলুন", "Rematch")}</button> : <small>{t("হোস্ট আবার শুরু করলে ঘরে ফিরবেন", "You go back to the room when the host starts a rematch")}</small>}
+                {finalRound ? (
+                  isHost ? <button type="button" className="ab-btn" onClick={onRematch}>{t("আবার খেলুন", "Rematch")}</button> : <small>{t("হোস্ট আবার শুরু করলে ঘরে ফিরবেন", "You go back to the room when the host starts a rematch")}</small>
+                ) : (
+                  <small>{t("পরের রাউন্ড শুরু হচ্ছে…", "Next round starting…")}</small>
+                )}
                 <button type="button" className="ab-btn ghost" onClick={onLeave}>{t("বেরিয়ে যান", "Leave")}</button>
               </div>
             </div>

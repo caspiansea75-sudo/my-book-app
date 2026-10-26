@@ -811,7 +811,7 @@ const LOCO_LABEL: Record<Loco, { icon: string; bn: string; en: string }> = {
 };
 
 /** Bangla names for the perks (the English ones live with the perk data). */
-const PERK_BN: Record<string, [string, string]> = {
+export const PERK_BN: Record<string, [string, string]> = {
   power: ["শক্তি বাড়ান", "+১৮% ড্যামেজ"],
   swift: ["দ্রুত পা", "+১৪% চলার গতি"],
   haste: ["দ্রুত রিচার্জ", "চাল ১৫% দ্রুত তৈরি হয়"],
