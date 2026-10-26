@@ -3,6 +3,8 @@
  * the screens draw from it.
  */
 
+import { LEARNSETS } from "@/lib/pokemon/arena-learnsets";
+
 export type MoveKind =
   | "proj" //   one shot flying in a line
   | "spread" // a fan of shots
@@ -334,19 +336,24 @@ export const Z_SIGNATURE: Record<string, { name: string; bn: string; type: strin
   kommoo: { name: "Clangorous Soulblaze", bn: "ক্ল্যাঙ্গরাস সোলব্লেজ", type: "Dragon" },
 };
 
-/** Moves any Pokémon may learn as coverage, on top of its own types and the Normal moves. */
-const COVERAGE = ["shadowball", "icebeam", "thunderbolt", "flashcannon", "darkpulse", "earthquake", "stoneedge", "sludgebomb", "psychic", "surf", "flamethrower", "dragonpulse", "aurasphere", "airslash", "xscissor", "crunch", "closecombat"];
-
-/** Every move this Pokémon can choose from: its own default four first, then its types, Normal moves and some coverage. */
+/**
+ * Every move this Pokémon can choose from: the ones it can really learn (see arena-learnsets), its own types' moves
+ * first. Anything not in the table (a new Pokémon) gets its types' moves, the Normal moves and a little coverage.
+ */
 export function movePool(id: string): string[] {
   const sp = ROSTER.find((s) => s.id === id);
   if (!sp) return [];
-  const out = new Set<string>(sp.moves);
-  const ids = Object.keys(MOVES);
-  for (const k of ids) if (sp.types.includes(MOVES[k]!.type)) out.add(k);
-  for (const k of ids) if (MOVES[k]!.type === "Normal") out.add(k);
-  for (const k of COVERAGE) if (MOVES[k]) out.add(k);
-  return [...out];
+  const known = LEARNSETS[id];
+  let list: string[];
+  if (known) list = known.filter((m) => MOVES[m]);
+  else {
+    const set = new Set<string>(sp.moves);
+    for (const k of Object.keys(MOVES)) if (sp.types.includes(MOVES[k]!.type) || MOVES[k]!.type === "Normal") set.add(k);
+    for (const k of ["shadowball", "icebeam", "thunderbolt", "flashcannon", "earthquake", "stoneedge", "psychic", "surf", "flamethrower"]) if (MOVES[k]) set.add(k);
+    list = [...set];
+  }
+  const rank = (m: string) => (sp.types.includes(MOVES[m]!.type) ? 0 : MOVES[m]!.type === "Normal" ? 2 : 1);
+  return list.map((m, i) => [m, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
 }
 
 /** Four different moves from this Pokémon's pool; anything wrong or missing falls back to its default four. */
