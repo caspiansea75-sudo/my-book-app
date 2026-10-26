@@ -34,6 +34,9 @@ const defaultSources: SpriteSource = (id, num) => {
   return [chain[1], chain[0], ...chain.slice(2)].filter(Boolean) as string[];
 };
 
+/** One colour per seat in a multiplayer fight, so every name can be told apart. */
+const NAME_COLORS = ["#ff8a8a", "#74c0fc", "#ffe066", "#d0bfff", "#69dbb2"];
+
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
   private parts: Parti[] = [];
@@ -1397,6 +1400,27 @@ export class ArenaRenderer {
           g.textAlign = "center";
           g.fillText(f.sp.name.toUpperCase(), f.x, y - 5);
         }
+      }
+      // a member's name above their Pokémon (multiplayer): their own one is marked with an arrow
+      if (f.name) {
+        const base = f.y - f.r * 2.5 - (isYou ? 4 : 10);
+        const label = isYou ? `▼ ${f.name}` : f.name;
+        g.save();
+        g.font = "800 12px system-ui, sans-serif";
+        g.textAlign = "center";
+        g.textBaseline = "alphabetic";
+        const w = Math.min(160, g.measureText(label).width) + 12;
+        g.fillStyle = "rgba(8,10,20,.62)";
+        g.beginPath();
+        g.roundRect?.(f.x - w / 2, base - 14, w, 17, 8);
+        if (!g.roundRect) g.rect(f.x - w / 2, base - 14, w, 17);
+        g.fill();
+        g.lineWidth = 3;
+        g.strokeStyle = "rgba(0,0,0,.75)";
+        g.strokeText(label, f.x, base - 1, 150);
+        g.fillStyle = isYou ? "#8dffb0" : (NAME_COLORS[f.team % NAME_COLORS.length] ?? "#fff");
+        g.fillText(label, f.x, base - 1, 150);
+        g.restore();
       }
     }
     void S;

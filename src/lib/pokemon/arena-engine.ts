@@ -229,6 +229,10 @@ export type State = {
   perfects: number;
   /** Mean time the player has to dodge: higher is easier. */
   easy: number;
+  /** Multiplayer royale (2-5 members, no computer fighters). */
+  mp?: boolean;
+  /** Multiplayer: the fighter id of the champion once the fight is over (0 = nobody, a draw). */
+  winnerId?: number;
 };
 
 /** The move in a slot (Tera Blast takes over the fourth one for a while). */
@@ -495,6 +499,33 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     const kinds: FieldKind[] = ["none", "sun", "rain", "sand", "hail"];
     S.field = kinds[Math.floor(Math.random() * kinds.length)]!;
   }
+  return S;
+}
+
+export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string };
+
+/** A battle royale between 2-5 members: every fighter is steered by a person, nobody else is in the arena. */
+export function newMpGame(players: MpPlayer[]): State {
+  const first = players[0]!;
+  const S = newGame("royale", first.species, { gimmick: first.gimmick, mega: first.mega, tera: first.tera });
+  // newGame made the first human and four computer fighters: keep only the humans
+  S.fighters = [];
+  S.nextId = 1;
+  S.mp = true;
+  const n = players.length;
+  players.forEach((pl, i) => {
+    const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+    const f = makeFighter(S, speciesOf(pl.species), i, true, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200);
+    f.gimmick = pl.gimmick ?? "awaken";
+    f.megaForm = (MEGAS[pl.species] ?? []).find((m) => m.id === pl.mega) ?? MEGAS[pl.species]?.[0] ?? null;
+    if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
+    if (pl.tera && TERA_TYPES.includes(pl.tera)) f.teraType = pl.tera;
+    f.member = pl.member;
+    f.name = pl.name;
+    f.face = Math.atan2(CY - f.y, CX - f.x);
+    S.fighters.push(f);
+  });
+  unstick(S);
   return S;
 }
 
@@ -1241,8 +1272,17 @@ function moveFighter(S: State, f: Fighter, dt: number) {
   if (len(sx, sy) > 20 && !f.cast && !f.channel) f.face = Math.atan2(sy, sx);
 }
 
-export function step(S: State, input: Input, realDt: number) {
+/**
+ * Advance the fight. `input` steers the first fighter; in a multiplayer fight `others` holds the input of every other
+ * human, by fighter id.
+ */
+export function step(S: State, input: Input, realDt: number, others?: Map<number, Input>) {
   const dt0 = Math.min(realDt, 0.05);
+  // Nobody may freeze or slow down the others in a multiplayer fight
+  if (S.mp) {
+    S.freeze = 0;
+    S.slow = 0;
+  }
   if (S.freeze > 0) {
     S.freeze -= dt0;
     return;
@@ -1262,28 +1302,32 @@ export function step(S: State, input: Input, realDt: number) {
     return;
   }
 
-  // ---- the player
-  if (p.alive && !p.auto) {
-    const [mx, my] = len(input.mx, input.my) > 1 ? norm(input.mx, input.my) : [input.mx, input.my];
-    p.vx = mx * p.speed;
-    p.vy = my * p.speed;
-    if (input.dodge) startDodge(S, p, len(mx, my) > 0.1 ? mx : Math.cos(p.face), len(mx, my) > 0.1 ? my : Math.sin(p.face));
-    for (let i = 0; i < 4; i++) if (input.cast[i]) tryCast(S, p, i, input);
-    if (input.ult) activateGimmick(S, p);
+  // ---- the people (one in a normal run, 2-5 in a multiplayer royale)
+  for (const h of S.fighters) {
+    if (!h.isPlayer || !h.alive) continue;
+    if (h.auto) {
+      aiStep(S, h, dt);
+      continue;
+    }
+    const inp = h === p ? input : others?.get(h.id) ?? noInput();
+    const [mx, my] = len(inp.mx, inp.my) > 1 ? norm(inp.mx, inp.my) : [inp.mx, inp.my];
+    h.vx = mx * h.speed;
+    h.vy = my * h.speed;
+    if (inp.dodge) startDodge(S, h, len(mx, my) > 0.1 ? mx : Math.cos(h.face), len(mx, my) > 0.1 ? my : Math.sin(h.face));
+    for (let i = 0; i < 4; i++) if (inp.cast[i]) tryCast(S, h, i, inp);
+    if (inp.ult) activateGimmick(S, h);
     // a held beam follows the aim
-    if (p.channel) {
-      const a = aimOf(S, p, input);
-      p.channel.dx = a.dx;
-      p.channel.dy = a.dy;
-      p.face = Math.atan2(a.dy, a.dx);
+    if (h.channel) {
+      const a = aimOf(S, h, inp);
+      h.channel.dx = a.dx;
+      h.channel.dy = a.dy;
+      h.face = Math.atan2(a.dy, a.dx);
     }
     // face the aim
-    if (!p.cast && !p.channel && len(mx, my) < 0.1) {
-      const a = aimOf(S, p, input);
-      p.face = Math.atan2(a.dy, a.dx);
+    if (!h.cast && !h.channel && len(mx, my) < 0.1) {
+      const a = aimOf(S, h, inp);
+      h.face = Math.atan2(a.dy, a.dx);
     }
-  } else if (p.alive && p.auto) {
-    aiStep(S, p, dt);
   }
 
   // ---- everyone else
@@ -1610,6 +1654,19 @@ export function step(S: State, input: Input, realDt: number) {
       }
       S.events.push({ t: "hazard", x: CX, y: CY });
     }
+  }
+
+  // ---- end of a multiplayer fight: last one standing
+  if (S.mp) {
+    const alive = S.fighters.filter((f) => f.alive);
+    for (const f of S.fighters) if (!f.alive && !f.place) f.place = alive.length + 1;
+    if (alive.length <= 1) {
+      S.phase = "over";
+      S.winnerId = alive[0]?.id ?? 0;
+      if (alive[0]) alive[0].place = 1;
+      S.events.push({ t: "over", win: false });
+    }
+    return;
   }
 
   // ---- end of a wave or of the fight
