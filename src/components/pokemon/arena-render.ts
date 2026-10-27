@@ -180,12 +180,14 @@ export class ArenaRenderer {
     if (hit === "fail" && performance.now() - (this.failAt.get(key) ?? 0) > 6000) this.anims.delete(key);
     else if (hit) return null;
     this.anims.set(key, "loading");
-    const url = spriteChain({ id }, { back })[0];
+    const direct = spriteChain({ id }, { back })[0];
+    // first through this site (works in every browser), then straight from the picture server
+    const url = `/api/sprite?k=${back ? "ani-back" : "ani"}&id=${encodeURIComponent(id)}`;
     const fail = () => {
       this.anims.set(key, "fail");
       this.failAt.set(key, performance.now());
     };
-    if (!url) {
+    if (!direct) {
       fail();
       return null;
     }
@@ -194,12 +196,13 @@ export class ArenaRenderer {
       const im = new Image();
       im.onload = () => this.anims.set(key, im);
       im.onerror = fail;
-      im.src = url;
+      im.src = direct ?? url;
     };
+    const get = (u: string) => fetch(u).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))));
     if (typeof fetch !== "function") viaImg();
     else
-      fetch(url)
-        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))))
+      get(url)
+        .catch(() => get(direct!))
         .then((b) => this.anims.set(key, decodeGif(b)))
         .catch(viaImg);
     return null;
