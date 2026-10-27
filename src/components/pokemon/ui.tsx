@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Swords } from "lucide-react";
 import { FxAurora } from "@/components/media/fx";
@@ -65,42 +65,8 @@ export function PokePage({ children }: { children: ReactNode }) {
   );
 }
 
-type SpriteProps = {
-  info: SpriteInfo | null | undefined;
-  back?: boolean;
-  shiny?: boolean;
-  still?: boolean;
-  className?: string;
-  alt?: string;
-  style?: CSSProperties;
-};
-
-/**
- * A Pokémon picture. Shows the small still picture straight away, and swaps to the animated one once that has arrived
- * (the animated files are much bigger, so waiting for them first left an empty box).
- */
-export function Sprite(props: SpriteProps) {
-  const { info, back, shiny, still } = props;
-  const wantAnim = !still && !back;
-  const [anim, setAnim] = useState(false);
-  const animUrl = wantAnim ? spriteChain(info, { back, shiny })[0] : undefined;
-  useEffect(() => {
-    setAnim(false);
-    if (!animUrl || !/\.gif$/.test(animUrl)) return;
-    let live = true;
-    const im = new Image();
-    im.onload = () => live && setAnim(true);
-    im.src = animUrl;
-    return () => {
-      live = false;
-    };
-  }, [animUrl]);
-  const asStill = still || (wantAnim && !anim);
-  // a new key starts the picture afresh whenever what it shows changes
-  return <SpriteImg key={`${info?.id}|${info?.num}|${back}|${shiny}|${asStill}`} {...props} still={asStill} />;
-}
-
-function SpriteImg({
+/** A Pokémon picture. Tries the animated sprite, then still sprites, then official art, then a Poké Ball. */
+export function Sprite({
   info,
   back,
   shiny,
@@ -117,34 +83,10 @@ function SpriteImg({
   alt?: string;
   style?: CSSProperties;
 }) {
-  const chain = useMemo(
-    () => spriteChain(info, { back, shiny, still }),
-    [info?.id, info?.num, back, shiny, still], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  const chain = useMemo(() => spriteChain(info, { back, shiny, still }), [info, back, shiny, still]);
   const key = chain.join("|");
   const [i, setI] = useState(0);
-  const [ok, setOk] = useState(false);
-  const [win, setWin] = useState("");
-  const [bad, setBad] = useState(0);
-  const [seen, setSeen] = useState(false);
-  const holder = useRef<HTMLSpanElement>(null);
-  useEffect(() => setBad(0), [i]);
-  useEffect(() => warmUp(), []);
-  // pictures are only asked for once their card is near the screen
-  useEffect(() => {
-    const el = holder.current;
-    if (!el || seen) return;
-    if (typeof IntersectionObserver === "undefined") return setSeen(true);
-    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "700px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [seen]);
-  // an address that gives no answer for a while is given up on
-  useEffect(() => {
-    if (ok || !seen || i >= chain.length) return;
-    const id = window.setTimeout(() => setI((n) => n + 1), 4000);
-    return () => window.clearTimeout(id);
-  }, [ok, seen, i, chain.length, key]);
+  useEffect(() => setI(0), [key]);
   if (!chain.length || i >= chain.length) {
     return (
       <span className={className} style={style} aria-hidden="true">
@@ -152,65 +94,7 @@ function SpriteImg({
       </span>
     );
   }
-  // the first address is asked two ways at once, straight from the picture server and through this site (which keeps a copy);
-  // whichever answers first is shown
-  const urls = candidates(chain[i]!, i === 0);
-  return (
-    <>
-      {ok ? null : (
-        <span ref={holder} className={className} style={{ ...style, display: "inline-flex", alignItems: "center", justifyContent: "center" }} aria-hidden="true">
-          <span className="pk-ball" style={{ width: "1.6em", height: "1.6em", opacity: 0.45 }} />
-        </span>
-      )}
-      {seen
-        ? urls.map((u) => {
-            const shown = ok && win === u;
-            if (ok && !shown) return null;
-            return (
-              <img
-                key={u}
-                src={u}
-                alt={shown ? alt : ""}
-                decoding="async"
-                draggable={false}
-                onLoad={() => {
-                  if (!ok) {
-                    setOk(true);
-                    setWin(u);
-                  }
-                }}
-                onError={() => {
-                  if (bad + 1 >= urls.length) setI((n) => n + 1);
-                  setBad((n) => n + 1);
-                }}
-                className={className}
-                style={shown ? style : { ...style, position: "absolute", opacity: 0, pointerEvents: "none" }}
-              />
-            );
-          })
-        : null}
-    </>
-  );
-}
-
-/** The same picture asked for through this site as well, for the Showdown ones. */
-function candidates(u: string, race: boolean): string[] {
-  const m = /sprites\/(ani|ani-back|dex|gen5)\/([a-z0-9-]+)\.(?:gif|png)$/.exec(u);
-  return race && m ? [u, `/api/sprite?k=${m[1]}&id=${m[2]}`] : [u];
-}
-
-let warmed = false;
-/** Opens the connection to the picture server early, so the first pictures do not wait for it. */
-function warmUp() {
-  if (warmed || typeof document === "undefined") return;
-  warmed = true;
-  for (const rel of ["preconnect", "dns-prefetch"]) {
-    const l = document.createElement("link");
-    l.rel = rel;
-    l.href = "https://play.pokemonshowdown.com";
-    if (rel === "preconnect") l.crossOrigin = "";
-    document.head.appendChild(l);
-  }
+  return <img src={chain[i]} alt={alt} loading="lazy" draggable={false} onError={() => setI((n) => n + 1)} className={className} style={style} />;
 }
 
 export function TypeBadge({ type, small }: { type: string; small?: boolean }) {
