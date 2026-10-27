@@ -54,7 +54,7 @@ export class ArenaRenderer {
   private imgs = new Map<string, HTMLImageElement | "fail" | "loading">();
   private tints = new WeakMap<object, Map<string, HTMLCanvasElement>>();
   /** Animated (limb-moving) sprites, front and back views, and how far each fighter's animation has played. */
-  private anims = new Map<string, GifFrames | "loading" | "fail">();
+  private anims = new Map<string, GifFrames | HTMLImageElement | "loading" | "fail">();
   private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number }>();
   private dtr = 0;
   private failAt = new Map<string, number>();
@@ -144,26 +144,52 @@ export class ArenaRenderer {
   }
 
   /** The animated sprite (the one that really moves its legs, wings and tail), loaded once; null until it is ready. */
-  private loadAnim(id: string, back: boolean): GifFrames | null {
+  private loadAnim(id: string, back: boolean): GifFrames | HTMLImageElement | null {
     const key = `${id}|${back ? "b" : "f"}`;
     const hit = this.anims.get(key);
     if (hit && typeof hit === "object") return hit;
-    if (hit) return null;
+    if (hit === "fail" && performance.now() - (this.failAt.get(key) ?? 0) > 6000) this.anims.delete(key);
+    else if (hit) return null;
     this.anims.set(key, "loading");
     const url = spriteChain({ id }, { back })[0];
-    if (!url || typeof fetch !== "function") {
+    const fail = () => {
       this.anims.set(key, "fail");
+      this.failAt.set(key, performance.now());
+    };
+    if (!url) {
+      fail();
       return null;
     }
-    fetch(url)
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))))
-      .then((b) => this.anims.set(key, decodeGif(b)))
-      .catch(() => this.anims.set(key, "fail"));
+    // the browser's own animated picture: needs no permission from the picture server, and plays by itself
+    const viaImg = () => {
+      const im = new Image();
+      im.onload = () => this.anims.set(key, im);
+      im.onerror = fail;
+      im.src = url;
+    };
+    if (typeof fetch !== "function") viaImg();
+    else
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))))
+        .then((b) => this.anims.set(key, decodeGif(b)))
+        .catch(viaImg);
     return null;
   }
 
   /** A solid-colour copy of a sprite (for the white hit flash and the freeze tint), made once. */
   private tinted(_id: string, im: Pic, color: string): HTMLCanvasElement {
+    if (im instanceof HTMLImageElement && /\.gif/.test(im.src)) {
+      // a picture the browser animates itself changes every moment, so it is tinted fresh each time
+      const c = document.createElement("canvas");
+      c.width = picW(im);
+      c.height = picH(im);
+      const g = c.getContext("2d")!;
+      g.drawImage(im, 0, 0);
+      g.globalCompositeOperation = "source-in";
+      g.fillStyle = color;
+      g.fillRect(0, 0, c.width, c.height);
+      return c;
+    }
     let m = this.tints.get(im);
     if (!m) this.tints.set(im, (m = new Map()));
     let c = m.get(color);
@@ -1226,7 +1252,7 @@ export class ArenaRenderer {
     const wantBack = Math.sin(f.face) < -0.6;
     const gif = this.loadAnim(usedId, wantBack) ?? (wantBack ? this.loadAnim(usedId, false) : null);
     const animated = !!gif && !formMissing;
-    if (gif && animated) im = frameAt(gif, ps.clock).el;
+    if (gif && animated) im = gif instanceof HTMLImageElement ? gif : frameAt(gif, ps.clock).el;
     // a transformation starts small (or normal) and grows into its new size
     let grow = 1;
     if (morph && (morph.kind === "dyna" || morph.kind === "mega")) {
