@@ -1239,7 +1239,7 @@ export class ArenaRenderer {
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
-  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1) {
+  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }) {
     g.save();
     g.globalAlpha *= alpha;
     g.translate(x, y);
@@ -1249,7 +1249,26 @@ export class ArenaRenderer {
     const w = picW(im) * k;
     const h = picH(im) * k;
     g.imageSmoothingEnabled = false;
-    g.drawImage(tint ? this.tinted(id, im, tint) : im, -w / 2, -h / 2 - size * 0.05, w, h);
+    const src = tint ? this.tinted(id, im, tint) : im;
+    const x0 = -w / 2;
+    const y0 = -h / 2 - size * 0.05;
+    if (wk) {
+      // a walking puppet: the body bobs, and the lower part is cut into a left and a right foot that step in turn
+      const sw = picW(im);
+      const sh = picH(im);
+      const cut = 0.6;
+      const a = wk.a * size;
+      const bob = -Math.abs(Math.sin(wk.p)) * a * 0.5;
+      g.drawImage(src, 0, 0, sw, sh * cut, x0, y0 + bob, w, h * cut);
+      for (const side of [0, 1]) {
+        const sn = Math.sin(wk.p + side * Math.PI);
+        const lift = Math.max(0, sn) * a * 1.4;
+        const swing = sn * a * 0.5;
+        const sx0 = side * (sw / 2) - (side ? 1 : 0);
+        const sww = sw / 2 + 1;
+        g.drawImage(src, sx0, sh * cut - 1, sww, sh * (1 - cut) + 1, x0 + side * (w / 2) - (side ? w / sw : 0) + swing, y0 + h * cut - lift + bob * 0.4 - 1, sww * (w / sw), h * (1 - cut) + 1);
+      }
+    } else g.drawImage(src, x0, y0, w, h);
     g.restore();
   }
 
@@ -1581,10 +1600,11 @@ export class ArenaRenderer {
     if (under) {
       // nothing above ground
     } else if (im) {
-      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin);
-      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9));
-      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55);
-      else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08);
+      const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
+      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, undefined, 1, wk);
+      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk);
+      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk);
+      else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk);
       // a form whose picture is not there: the plain body, outlined and shimmering so the change still shows
       if (formMissing && !morph) {
         const pulse = 0.55 + Math.sin(t * 5) * 0.25;
