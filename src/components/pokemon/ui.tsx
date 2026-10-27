@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Swords } from "lucide-react";
 import { FxAurora } from "@/components/media/fx";
@@ -86,7 +86,28 @@ export function Sprite({
   const chain = useMemo(() => spriteChain(info, { back, shiny, still }), [info, back, shiny, still]);
   const key = chain.join("|");
   const [i, setI] = useState(0);
-  useEffect(() => setI(0), [key]);
+  const [ok, setOk] = useState(false);
+  useEffect(() => {
+    setI(0);
+    setOk(false);
+  }, [key]);
+  // a picture that never answers (a busy picture server) is given up on after a while, and the next address is tried
+  // (only once the card is on screen, because pictures further down the list are not asked for yet)
+  const holder = useRef<HTMLSpanElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = holder.current;
+    if (!el || seen) return;
+    if (typeof IntersectionObserver === "undefined") return setSeen(true);
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "200px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen, ok, i]);
+  useEffect(() => {
+    if (ok || !seen || !chain.length || i >= chain.length) return;
+    const id = window.setTimeout(() => setI((n) => n + 1), 7000);
+    return () => window.clearTimeout(id);
+  }, [ok, seen, i, chain.length, key]);
   if (!chain.length || i >= chain.length) {
     return (
       <span className={className} style={style} aria-hidden="true">
@@ -94,7 +115,27 @@ export function Sprite({
       </span>
     );
   }
-  return <img src={chain[i]} alt={alt} loading="lazy" draggable={false} onError={() => setI((n) => n + 1)} className={className} style={style} />;
+  return (
+    <>
+      {ok ? null : (
+        <span ref={holder} className={className} style={{ ...style, display: "inline-flex", alignItems: "center", justifyContent: "center" }} aria-hidden="true">
+          <span className="pk-ball" style={{ width: "1.6em", height: "1.6em", opacity: 0.45 }} />
+        </span>
+      )}
+      <img
+        key={chain[i]}
+        src={chain[i]}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onLoad={() => setOk(true)}
+        onError={() => setI((n) => n + 1)}
+        className={className}
+        style={ok ? style : { ...style, position: "absolute", opacity: 0, pointerEvents: "none" }}
+      />
+    </>
+  );
 }
 
 export function TypeBadge({ type, small }: { type: string; small?: boolean }) {
