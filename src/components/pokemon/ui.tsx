@@ -65,8 +65,42 @@ export function PokePage({ children }: { children: ReactNode }) {
   );
 }
 
-/** A Pokémon picture. Tries the animated sprite, then still sprites, then official art, then a Poké Ball. */
-export function Sprite({
+type SpriteProps = {
+  info: SpriteInfo | null | undefined;
+  back?: boolean;
+  shiny?: boolean;
+  still?: boolean;
+  className?: string;
+  alt?: string;
+  style?: CSSProperties;
+};
+
+/**
+ * A Pokémon picture. Shows the small still picture straight away, and swaps to the animated one once that has arrived
+ * (the animated files are much bigger, so waiting for them first left an empty box).
+ */
+export function Sprite(props: SpriteProps) {
+  const { info, back, shiny, still } = props;
+  const wantAnim = !still && !back;
+  const [anim, setAnim] = useState(false);
+  const animUrl = wantAnim ? spriteChain(info, { back, shiny })[0] : undefined;
+  useEffect(() => {
+    setAnim(false);
+    if (!animUrl || !/\.gif$/.test(animUrl)) return;
+    let live = true;
+    const im = new Image();
+    im.onload = () => live && setAnim(true);
+    im.src = animUrl;
+    return () => {
+      live = false;
+    };
+  }, [animUrl]);
+  const asStill = still || (wantAnim && !anim);
+  // a new key starts the picture afresh whenever what it shows changes
+  return <SpriteImg key={`${info?.id}|${info?.num}|${back}|${shiny}|${asStill}`} {...props} still={asStill} />;
+}
+
+function SpriteImg({
   info,
   back,
   shiny,
@@ -94,12 +128,6 @@ export function Sprite({
   const [bad, setBad] = useState(0);
   const [seen, setSeen] = useState(false);
   const holder = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    setI(0);
-    setOk(false);
-    setWin("");
-    setBad(0);
-  }, [key]);
   useEffect(() => setBad(0), [i]);
   useEffect(() => warmUp(), []);
   // pictures are only asked for once their card is near the screen
