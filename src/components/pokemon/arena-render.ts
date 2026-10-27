@@ -128,18 +128,47 @@ export class ArenaRenderer {
     else if (hit) return null;
     this.imgs.set(id, "loading");
     const urls = this.sources(id, num);
-    const next = (i: number) => {
-      if (i >= urls.length) {
-        this.imgs.set(id, "fail");
-        this.failAt.set(id, performance.now());
-        return;
+    // every address is tried at the same time; the best one that works wins, so one slow or missing file does not hold the rest up
+    const got: (HTMLImageElement | null | undefined)[] = urls.map(() => undefined);
+    let done = false;
+    const settle = () => {
+      if (done) return;
+      for (let k = 0; k < got.length; k++) {
+        if (got[k] === undefined) return; // a better one may still arrive
+        if (got[k]) {
+          done = true;
+          this.imgs.set(id, got[k]!);
+          return;
+        }
       }
-      const im = new Image();
-      im.onload = () => this.imgs.set(id, im);
-      im.onerror = () => next(i + 1);
-      im.src = urls[i]!;
+      done = true;
+      this.imgs.set(id, "fail");
+      this.failAt.set(id, performance.now());
+      console.warn("[arena] no picture could be loaded for", id, urls);
     };
-    next(0);
+    urls.forEach((u, k) => {
+      const im = new Image();
+      im.onload = () => {
+        got[k] = im;
+        // do not wait for the better ones forever: after a moment, take what has arrived
+        if (!done) {
+          setTimeout(() => {
+            if (done) return;
+            const first = got.findIndex((x) => x);
+            if (first >= 0) {
+              done = true;
+              this.imgs.set(id, got[first]!);
+            }
+          }, 900);
+        }
+        settle();
+      };
+      im.onerror = () => {
+        got[k] = null;
+        settle();
+      };
+      im.src = u;
+    });
     return null;
   }
 
@@ -1243,6 +1272,13 @@ export class ArenaRenderer {
       usedId = f.sp.id;
       im = this.load(f.sp.id, f.sp.num);
     }
+    // load the forms ahead of time, so a Mega or Gigantamax change does not wait for its picture
+    if (f.megaForm) {
+      this.load(f.megaForm.sprite, f.sp.num);
+      this.loadAnim(f.megaForm.sprite, false);
+    }
+    if (f.gmax) this.load(`${f.sp.id}-gmax`, f.sp.num);
+    this.loadAnim(f.sp.id, true);
     // the moving picture: a Showdown animation, front or back view by where it faces; the still one stays as the fallback
     const ps = this.poses.get(f.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
     this.poses.set(f.id, ps);
@@ -1324,6 +1360,18 @@ export class ArenaRenderer {
       sx = 1 + (sx - 1) * 0.35;
       sy = 1 + (sy - 1) * 0.35;
       if (f.loco === "run") lift *= 0.55;
+    } else if (moving) {
+      // no moving picture: make the stand-in read as steps and wingbeats, not a slide
+      if (f.loco === "run" || f.loco === "walk") {
+        lift *= 2;
+        sx = 1 + (sx - 1) * 1.8;
+        sy = 1 + (sy - 1) * 1.8;
+        rot += Math.sin(phase) * 0.2; // weight shifting from foot to foot
+      } else if (f.loco === "fly") {
+        sy *= 1 + Math.sin(t * 16 + f.id) * 0.07;
+        sx *= 1 - Math.sin(t * 16 + f.id) * 0.05;
+        lift += Math.sin(t * 8 + f.id) * 4;
+      } else if (f.loco === "slither") rot += Math.sin(phase * 0.9) * 0.1;
     }
     // attack lunge (leans and darts toward the target, then settles) and hit recoil (knocked back, tilted)
     let ox = 0;
