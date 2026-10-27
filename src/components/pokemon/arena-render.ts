@@ -36,7 +36,8 @@ const defaultSources: SpriteSource = (id, num) => {
   }
   const chain = spriteChain({ id, num }, { still: true });
   // pixel sprites first (they match the arena), then the larger pictures
-  return [chain[1], chain[0], ...chain.slice(2)].filter(Boolean) as string[];
+  const ani = chain[0]!.replace("/dex/", "/ani/").replace(".png", ".gif");
+  return [chain[1], chain[0], ...chain.slice(2), ani].filter(Boolean) as string[];
 };
 
 /** One colour per seat in a multiplayer fight, so every name can be told apart. */
@@ -56,6 +57,7 @@ export class ArenaRenderer {
   private anims = new Map<string, GifFrames | "loading" | "fail">();
   private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number }>();
   private dtr = 0;
+  private failAt = new Map<string, number>();
   private t = 0;
   private scale = 1;
   private banner: { text: string; t: number; color: string } | null = null;
@@ -122,12 +124,14 @@ export class ArenaRenderer {
   private load(id: string, num: number): HTMLImageElement | null {
     const hit = this.imgs.get(id);
     if (hit instanceof HTMLImageElement) return hit;
-    if (hit) return null;
+    if (hit === "fail" && performance.now() - (this.failAt.get(id) ?? 0) > 4000) this.imgs.delete(id); // try again now and then
+    else if (hit) return null;
     this.imgs.set(id, "loading");
     const urls = this.sources(id, num);
     const next = (i: number) => {
       if (i >= urls.length) {
         this.imgs.set(id, "fail");
+        this.failAt.set(id, performance.now());
         return;
       }
       const im = new Image();
