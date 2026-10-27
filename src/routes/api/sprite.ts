@@ -24,7 +24,7 @@ export const Route = createFileRoute("/api/sprite")({
           hit = { body: await r.arrayBuffer(), type: ext === "gif" ? "image/gif" : "image/png" };
           if (cache.size < 600) cache.set(key, hit);
         }
-        return new Response(hit.body, { headers: { "content-type": hit.type, "cache-control": "public, max-age=604800, immutable" } });
+        return new Response(hit.body, { headers: { "content-type": hit.type, "cache-control": "public, max-age=604800, s-maxage=2592000, immutable" } });
       },
     },
   },
