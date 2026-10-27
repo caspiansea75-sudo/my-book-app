@@ -83,13 +83,8 @@ export function Sprite({
   alt?: string;
   style?: CSSProperties;
 }) {
-  // each picture is asked for through this site first (cached, one connection), then straight from the picture server
   const chain = useMemo(
-    () =>
-      spriteChain(info, { back, shiny, still }).flatMap((u) => {
-        const m = /sprites\/(ani|ani-back|dex|gen5)\/([a-z0-9-]+)\.(?:gif|png)$/.exec(u);
-        return m ? [`/api/sprite?k=${m[1]}&id=${m[2]}`, u] : [u];
-      }),
+    () => spriteChain(info, { back, shiny, still }),
     [info?.id, info?.num, back, shiny, still], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const key = chain.join("|");
@@ -108,7 +103,7 @@ export function Sprite({
     const el = holder.current;
     if (!el || seen) return;
     if (typeof IntersectionObserver === "undefined") return setSeen(true);
-    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "300px" });
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "700px" });
     io.observe(el);
     return () => io.disconnect();
   }, [seen]);
