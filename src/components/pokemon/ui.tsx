@@ -83,31 +83,52 @@ export function Sprite({
   alt?: string;
   style?: CSSProperties;
 }) {
-  const chain = useMemo(() => spriteChain(info, { back, shiny, still }), [info, back, shiny, still]);
+  // each picture is asked for through this site first (cached, one connection), then straight from the picture server
+  const chain = useMemo(
+    () =>
+      spriteChain(info, { back, shiny, still }).flatMap((u) => {
+        const m = /sprites\/(ani|ani-back|dex|gen5)\/([a-z0-9-]+)\.(?:gif|png)$/.exec(u);
+        return m ? [`/api/sprite?k=${m[1]}&id=${m[2]}`, u] : [u];
+      }),
+    [info?.id, info?.num, back, shiny, still], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const key = chain.join("|");
   const [i, setI] = useState(0);
   const [ok, setOk] = useState(false);
+  const [seen, setSeen] = useState(false);
+  const holder = useRef<HTMLSpanElement>(null);
+  const retried = useRef(false);
   useEffect(() => {
     setI(0);
     setOk(false);
+    retried.current = false;
   }, [key]);
-  // a picture that never answers (a busy picture server) is given up on after a while, and the next address is tried
-  // (only once the card is on screen, because pictures further down the list are not asked for yet)
-  const holder = useRef<HTMLSpanElement>(null);
-  const [seen, setSeen] = useState(false);
+  // pictures are only asked for once their card is near the screen
   useEffect(() => {
     const el = holder.current;
     if (!el || seen) return;
     if (typeof IntersectionObserver === "undefined") return setSeen(true);
-    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "200px" });
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setSeen(true), { rootMargin: "300px" });
     io.observe(el);
     return () => io.disconnect();
-  }, [seen, ok, i]);
+  }, [seen]);
+  // an address that gives no answer for a while is given up on
   useEffect(() => {
-    if (ok || !seen || !chain.length || i >= chain.length) return;
-    const id = window.setTimeout(() => setI((n) => n + 1), 7000);
+    if (ok || !seen || i >= chain.length) return;
+    const id = window.setTimeout(() => setI((n) => n + 1), 6000);
     return () => window.clearTimeout(id);
   }, [ok, seen, i, chain.length, key]);
+  const fail = () => {
+    // one more try at the same address (a dropped connection), then on to the next
+    if (!retried.current) {
+      retried.current = true;
+      setRetry((r) => r + 1);
+      return;
+    }
+    retried.current = false;
+    setI((n) => n + 1);
+  };
+  const [retry, setRetry] = useState(0);
   if (!chain.length || i >= chain.length) {
     return (
       <span className={className} style={style} aria-hidden="true">
@@ -122,18 +143,19 @@ export function Sprite({
           <span className="pk-ball" style={{ width: "1.6em", height: "1.6em", opacity: 0.45 }} />
         </span>
       )}
-      <img
-        key={chain[i]}
-        src={chain[i]}
-        alt={alt}
-        loading="lazy"
-        decoding="async"
-        draggable={false}
-        onLoad={() => setOk(true)}
-        onError={() => setI((n) => n + 1)}
-        className={className}
-        style={ok ? style : { ...style, position: "absolute", opacity: 0, pointerEvents: "none" }}
-      />
+      {seen ? (
+        <img
+          key={`${chain[i]}#${retry}`}
+          src={chain[i]}
+          alt={alt}
+          decoding="async"
+          draggable={false}
+          onLoad={() => setOk(true)}
+          onError={fail}
+          className={className}
+          style={ok ? style : { ...style, position: "absolute", opacity: 0, pointerEvents: "none" }}
+        />
+      ) : null}
     </>
   );
 }
