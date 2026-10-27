@@ -4,7 +4,7 @@
  */
 import { ARENA, type Ev, type Fighter, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
-import { FIELDS, ITEMS, MOVES } from "@/lib/pokemon/arena-data";
+import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
 type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
@@ -50,6 +50,11 @@ export class ArenaRenderer {
   private t = 0;
   private scale = 1;
   private banner: { text: string; t: number; color: string } | null = null;
+  /** The "ULTIMATE ATTACK" band that sweeps across the screen. */
+  private ultBanner: { sub: string; t: number; color: string } | null = null;
+  /** The aim line or circle shown while a move is being aimed, and the reticle under the mouse. */
+  private aimShow: { from: Fighter; mv: MoveDef; x: number; y: number } | null = null;
+  private reticle: { x: number; y: number } | null = null;
   private zoom = 1;
   /** The Z-Move cinematic playing right now. */
   private z: { t: number; name: string; type: string; x: number; y: number } | null = null;
@@ -143,6 +148,16 @@ export class ArenaRenderer {
   }
 
   /* ------------------------------------------------------------------- events */
+
+  /** What the player is aiming right now (null for nothing). The picture is drawn with the next frame. */
+  setAim(show: { from: Fighter; mv: MoveDef; x: number; y: number } | null, reticle: { x: number; y: number } | null = null) {
+    this.aimShow = show;
+    this.reticle = reticle;
+  }
+
+  ultimate(sub: string, color = "#ffd54a") {
+    this.ultBanner = { sub, t: 1.7, color };
+  }
 
   say(text: string, color = "#ffffff") {
     this.banner = { text, t: 1.6, color };
@@ -265,6 +280,7 @@ export class ArenaRenderer {
           if (mine) this.pop(mine.x, mine.y - 38, e.finish ? "COMBO FINISH!" : `COMBO ×${e.n}`, e.finish ? "#ffd54a" : "#ffffff", e.finish ? 20 : 16, 900);
           break;
         case "awaken":
+          if (mine?.id === e.id) this.ultimate("Awakening", "#ffe08a");
           this.morphs.set(e.id, { kind: "awaken", t: 0, max: 0.6, swap: 0.2, color: "#ffe08a" });
           this.ring(e.x, e.y, "#fff2a8", 260, 0.7);
           this.ring(e.x, e.y, "#ffcf4d", 190, 0.9);
@@ -285,6 +301,7 @@ export class ArenaRenderer {
           if (e.kind !== "none") this.say(`${FIELDS[e.kind].icon} ${FIELDS[e.kind].name}`, "#ffffff");
           break;
         case "mega": {
+          if (mine?.id === e.id) this.ultimate(e.name, e.z ? "#ffd54a" : "#ff9be6");
           const c = col(e.type);
           this.morphs.set(e.id, { kind: "mega", t: 0, max: 1.4, swap: 0.62, color: e.z ? "#ffd54a" : "#ff9be6", z: e.z });
           this.ring(e.x, e.y, "#ffffff", 280, 0.7);
@@ -303,7 +320,16 @@ export class ArenaRenderer {
         }
         case "zstart":
           this.z = { t: 0, name: e.name, type: e.type, x: e.x, y: e.y };
+          if (mine && Math.hypot(e.x - mine.x, e.y - mine.y) < 10) this.ultimate(e.name, "#ffd54a");
           break;
+        case "clash": {
+          // two beams met: a white burst and a plume of steam
+          this.ring(e.x, e.y, "#ffffff", 70, 0.35);
+          this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: 20, grow: 120, color: "#ffffff" });
+          for (let i = 0; i < 5; i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-10, 10), y: e.y + rnd(-6, 6), vx: rnd(-40, 40), vy: rnd(-110, -50), g: 0, life: rnd(0.7, 1.1), max: 1.1, size: rnd(9, 14), grow: 30, color: "#e8f1ff" });
+          this.burst(e.x, e.y, "#ffffff", 5, 220, "streak");
+          break;
+        }
         case "zhit": {
           const c = col(e.type);
           this.ring(e.x, e.y, "#ffffff", 220, 0.6);
@@ -316,6 +342,7 @@ export class ArenaRenderer {
           break;
         }
         case "dynamax":
+          if (mine?.id === e.id) this.ultimate(e.gmax ? "Gigantamax" : "Dynamax", "#ff4d73");
           this.morphs.set(e.id, { kind: "dyna", t: 0, max: 1.5, swap: 0.5, color: "#ff3b5c", gmax: e.gmax });
           this.ring(e.x, e.y, "#ff3b5c", 300, 0.8);
           this.ring(e.x, e.y, "#ffffff", 200, 0.6);
@@ -327,6 +354,7 @@ export class ArenaRenderer {
           this.say(e.gmax ? "GIGANTAMAX!" : "DYNAMAX!", "#ff6a86");
           break;
         case "tera": {
+          if (mine?.id === e.id) this.ultimate(`Terastallize: ${e.type}`, "#8fe3ff");
           const c = col(e.type);
           this.morphs.set(e.id, { kind: "tera", t: 0, max: 1.3, swap: 0.5, color: c });
           this.ring(e.x, e.y, c, 260, 0.8);
@@ -449,6 +477,10 @@ export class ArenaRenderer {
       this.banner.t -= dtReal;
       if (this.banner.t <= 0) this.banner = null;
     }
+    if (this.ultBanner) {
+      this.ultBanner.t -= dtReal;
+      if (this.ultBanner.t <= 0) this.ultBanner = null;
+    }
 
     for (const [id, m] of this.morphs) {
       m.t += dtReal;
@@ -519,6 +551,7 @@ export class ArenaRenderer {
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
     this.drawProjs(g, S);
+    this.drawAim(g);
 
     // particles
     for (const p of this.parts) {
@@ -636,6 +669,39 @@ export class ArenaRenderer {
       gr.addColorStop(1, `rgba(255,40,40,${0.18 + pulse * 0.16})`);
       g.fillStyle = gr;
       g.fillRect(0, 0, ARENA.W, ARENA.H);
+    }
+    if (this.ultBanner) {
+      const u = this.ultBanner;
+      const age = 1.7 - u.t;
+      const slide = Math.min(1, age * 5);
+      const out = Math.min(1, u.t * 4);
+      g.save();
+      g.globalAlpha = out;
+      const bh = 74;
+      const by = ARENA.CY - 120;
+      const grad = g.createLinearGradient(0, 0, ARENA.W, 0);
+      grad.addColorStop(0, "rgba(6,10,22,0)");
+      grad.addColorStop(0.15, "rgba(6,10,22,.86)");
+      grad.addColorStop(0.85, "rgba(6,10,22,.86)");
+      grad.addColorStop(1, "rgba(6,10,22,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, by, ARENA.W, bh);
+      g.fillStyle = u.color;
+      g.fillRect(0, by, ARENA.W, 2);
+      g.fillRect(0, by + bh - 2, ARENA.W, 2);
+      g.textAlign = "center";
+      g.textBaseline = "alphabetic";
+      const x = ARENA.CX + (1 - slide) * -260;
+      g.font = "900 34px system-ui, sans-serif";
+      g.lineWidth = 6;
+      g.strokeStyle = "rgba(0,0,0,.6)";
+      g.strokeText("ULTIMATE ATTACK", x, by + 38);
+      g.fillStyle = u.color;
+      g.fillText("ULTIMATE ATTACK", x, by + 38);
+      g.font = "700 17px system-ui, sans-serif";
+      g.fillStyle = "#ffffff";
+      g.fillText(u.sub, ARENA.CX + (1 - slide) * 260, by + 62);
+      g.restore();
     }
     if (this.banner) {
       const a = Math.min(1, this.banner.t * 2.5, (1.6 - this.banner.t) * 6);
@@ -898,6 +964,112 @@ export class ArenaRenderer {
         g.restore();
       }
     }
+  }
+
+  /** The line, fan or circle that shows where the move being aimed will go. */
+  private drawAim(g: CanvasRenderingContext2D) {
+    const rt = this.reticle;
+    if (rt) {
+      g.save();
+      g.strokeStyle = "rgba(255,255,255,.55)";
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.arc(rt.x, rt.y, 9, 0, Math.PI * 2);
+      g.moveTo(rt.x - 14, rt.y);
+      g.lineTo(rt.x - 5, rt.y);
+      g.moveTo(rt.x + 5, rt.y);
+      g.lineTo(rt.x + 14, rt.y);
+      g.moveTo(rt.x, rt.y - 14);
+      g.lineTo(rt.x, rt.y - 5);
+      g.moveTo(rt.x, rt.y + 5);
+      g.lineTo(rt.x, rt.y + 14);
+      g.stroke();
+      g.restore();
+    }
+    const a = this.aimShow;
+    if (!a || !a.from.alive) return;
+    const { from: f, mv } = a;
+    const reach = moveReach(mv);
+    const dx = a.x - f.x;
+    const dy = a.y - f.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d;
+    const uy = dy / d;
+    const c = TYPE_COLOR[mv.type] ?? "#ffffff";
+    const pulse = 0.55 + Math.sin(this.t * 10) * 0.2;
+    g.save();
+    g.lineCap = "round";
+    const line = (ang: number, len: number, w: number, alpha: number) => {
+      const cs = Math.cos(ang);
+      const sn = Math.sin(ang);
+      const ex = f.x + (ux * cs - uy * sn) * len;
+      const ey = f.y + (ux * sn + uy * cs) * len;
+      g.strokeStyle = c;
+      g.globalAlpha = alpha * pulse;
+      g.lineWidth = w;
+      g.setLineDash([10, 8]);
+      g.beginPath();
+      g.moveTo(f.x + (ux * cs - uy * sn) * f.r, f.y + (ux * sn + uy * cs) * f.r);
+      g.lineTo(ex, ey);
+      g.stroke();
+      g.setLineDash([]);
+      return [ex, ey] as const;
+    };
+    switch (mv.kind) {
+      case "nova":
+        g.globalAlpha = 0.18 * pulse;
+        g.fillStyle = c;
+        g.beginPath();
+        g.arc(f.x, f.y, reach, 0, Math.PI * 2);
+        g.fill();
+        g.globalAlpha = 0.8 * pulse;
+        g.strokeStyle = c;
+        g.lineWidth = 2;
+        g.setLineDash([8, 6]);
+        g.stroke();
+        break;
+      case "lob": {
+        const dist = Math.min(d, reach);
+        const tx = f.x + ux * dist;
+        const ty = f.y + uy * dist;
+        line(0, dist, 2, 0.6);
+        g.globalAlpha = 0.2 * pulse;
+        g.fillStyle = c;
+        g.beginPath();
+        g.arc(tx, ty, 66, 0, Math.PI * 2);
+        g.fill();
+        g.globalAlpha = 0.9 * pulse;
+        g.strokeStyle = c;
+        g.lineWidth = 2.5;
+        g.setLineDash([8, 6]);
+        g.stroke();
+        break;
+      }
+      case "spread":
+        for (const off of [-0.42, -0.21, 0, 0.21, 0.42]) line(off, reach, off === 0 ? 3 : 2, off === 0 ? 0.8 : 0.45);
+        break;
+      case "beam":
+      case "bolt":
+        line(0, reach, 7, 0.28);
+        line(0, reach, 2, 0.9);
+        break;
+      case "guard":
+      case "heal":
+      case "buff":
+        break;
+      default: {
+        const [ex, ey] = line(0, reach, 3, 0.85);
+        g.globalAlpha = 0.9 * pulse;
+        g.fillStyle = c;
+        g.beginPath();
+        g.moveTo(ex, ey);
+        g.lineTo(ex - ux * 14 + uy * 7, ey - uy * 14 - ux * 7);
+        g.lineTo(ex - ux * 14 - uy * 7, ey - uy * 14 + ux * 7);
+        g.closePath();
+        g.fill();
+      }
+    }
+    g.restore();
   }
 
   /** What a foe is about to do, drawn on the floor so it can be dodged. */
@@ -1400,6 +1572,20 @@ export class ArenaRenderer {
           g.textAlign = "center";
           g.fillText(f.sp.name.toUpperCase(), f.x, y - 5);
         }
+      }
+      // your running combo floats over your own head
+      if (isYou && f.combo.n > 1) {
+        g.save();
+        g.font = "900 15px system-ui, sans-serif";
+        g.textAlign = "center";
+        g.lineWidth = 4;
+        g.strokeStyle = "rgba(0,0,0,.7)";
+        const label = `Combo ×${f.combo.n}`;
+        const y = f.y - f.r * 2.5 - (f.name ? 22 : 8);
+        g.strokeText(label, f.x, y);
+        g.fillStyle = "#ffd54a";
+        g.fillText(label, f.x, y);
+        g.restore();
       }
       // a member's name above their Pokémon (multiplayer): their own one is marked with an arrow
       if (f.name) {

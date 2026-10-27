@@ -183,6 +183,7 @@ export type Ev =
   | { t: "item"; x: number; y: number; kind: ItemKind; byPlayer: boolean }
   | { t: "field"; kind: FieldKind }
   | { t: "hazard"; x: number; y: number }
+  | { t: "clash"; x: number; y: number }
   | { t: "over"; win: boolean };
 
 export type Input = {
@@ -233,6 +234,8 @@ export type State = {
   mp?: boolean;
   /** Multiplayer: the fighter id of the champion once the fight is over (0 = nobody, a draw). */
   winnerId?: number;
+  /** When two beams last met (so the steam is not spawned every frame). */
+  clashT?: number;
 };
 
 /** The move in a slot (Tera Blast takes over the fourth one for a while). */
@@ -1559,6 +1562,23 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
           break;
         }
       }
+    }
+  }
+  // beams from different sides that meet cancel each other out, with a burst of steam where they clash
+  const beams = S.projs.filter((p2) => p2.beam && p2.life > 0);
+  for (let i = 0; i < beams.length; i++) {
+    const a = beams[i]!;
+    if (a.life <= 0) continue;
+    for (let j = i + 1; j < beams.length; j++) {
+      const b = beams[j]!;
+      if (b.life <= 0 || a.team === b.team || len(a.x - b.x, a.y - b.y) > a.r + b.r) continue;
+      a.life = 0;
+      b.life = 0;
+      if (S.time - (S.clashT ?? -9) > 0.07) {
+        S.clashT = S.time;
+        S.events.push({ t: "clash", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      }
+      break;
     }
   }
   S.projs = S.projs.filter((p2) => p2.life > 0);

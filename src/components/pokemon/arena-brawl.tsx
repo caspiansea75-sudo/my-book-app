@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
+import { aimHandlers, currentAim, type AimCtl } from "@/components/pokemon/aim-pad";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
@@ -31,7 +32,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string };
+type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string };
 const KEYS = ["1", "2", "3", "4"];
 
 type Runtime = {
@@ -55,7 +56,7 @@ type Runtime = {
   pointers: Map<number, { x: number; y: number }>;
   pinch: number;
   drawFailed: boolean;
-};
+} & AimCtl;
 
 const coarse = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 
@@ -83,7 +84,7 @@ export function ArenaBrawl() {
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
 
   useEffect(() => {
     setSave(loadSave());
@@ -300,7 +301,7 @@ export function ArenaBrawl() {
         my = r.joy.y;
       }
       const cast: [boolean, boolean, boolean, boolean] = [r.queue[0] || r.held[0] || r.mouse, r.queue[1] || r.held[1], r.queue[2] || r.held[2], r.queue[3] || r.held[3]];
-      const inp: Input = { mx, my, aim: r.aim, cast, dodge: r.dodge, ult: r.ult };
+      const inp: Input = { mx, my, aim: currentAim(r, r.aim), cast, dodge: r.dodge, ult: r.ult };
       r.queue = [false, false, false, false];
       r.dodge = false;
       r.ult = false;
@@ -320,6 +321,8 @@ export function ArenaBrawl() {
         }
       }
       const p = playerOf(S);
+      r.me = p;
+      r.R!.setAim(r.preview ? { from: p, mv: moveOf(p, r.preview.slot), x: r.preview.x, y: r.preview.y } : null, r.aim);
       try {
         r.R!.render(S, r.paused ? 0 : dt, p);
       } catch (err) {
@@ -337,7 +340,10 @@ export function ArenaBrawl() {
           return { id: mv.id, name: mv.name, type: mv.type };
         });
         const left = Math.max(p.awaken, p.mega, p.dyna, p.tera?.t ?? 0);
+        const finishing = S.fighters.some((f) => f.alive && f.team !== p.team && f.hp / f.maxHp < 0.2 && Math.hypot(f.x - p.x, f.y - p.y) < 420);
+        const pill: Hud["pill"] = !p.alive ? null : p.cast || p.channel ? "prep" : p.ult >= 100 && left <= 0 ? "ult" : finishing ? "finish" : p.cd.every((c) => c > 0.05) ? "recharge" : null;
         setHud({
+          pill,
           gimmick: p.gimmick,
           gimmickT: left,
           formName: p.form?.name ?? null,
@@ -649,15 +655,7 @@ export function ArenaBrawl() {
         className={`ab-pb ${cls} ${f <= 0 ? "ready" : ""}`}
         style={{ ["--c" as string]: TYPE_COLOR[mv.type] ?? "#fff", ["--f" as string]: Math.min(1, f) }}
         aria-label={mv.name}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-          rt.current.queue[i] = true;
-          rt.current.held[i] = true;
-        }}
-        onPointerUp={() => (rt.current.held[i] = false)}
-        onPointerCancel={() => (rt.current.held[i] = false)}
-        onLostPointerCapture={() => (rt.current.held[i] = false)}
+        {...aimHandlers(rt.current, i)}
       >
         <span className="pb-ic"><TypeIcon type={mv.type} size={26} /></span>
         <span className="pb-nm">{mv.name}</span>
@@ -685,6 +683,7 @@ export function ArenaBrawl() {
               </div>
               {hud.gimmickT > 0 ? <div className="ab-awk">{GIMMICKS[hud.gimmick].icon} {t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].short)} {hud.gimmickT.toFixed(1)}s</div> : null}
             </div>
+            {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
               {rt.current.mode === "survival" ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("ব্যাটল রয়্যাল", "Battle Royale")}</>}
               <span>{t("শত্রু", "Foes")} {hud.foes}</span>

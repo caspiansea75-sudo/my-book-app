@@ -186,3 +186,11 @@
 .mp-info small { opacity: 0.75; font-size: 12px; }
 .mp-desc { opacity: 0.6; }
 .mp-foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ----- status pill under the top bar (Preparing attack / Recharging / Finishing blow!) */
+.ab-pill { position: absolute; left: 50%; top: calc(10px + clamp(26px, 5.4vw, 34px)); transform: translateX(-50%); padding: 3px 12px; border-radius: 99px; background: rgba(8, 12, 22, 0.78); border: 1px solid rgba(255, 255, 255, 0.16); color: #fff; font-size: clamp(9px, 2vw, 12px); font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; pointer-events: none; }
+.ab-pill.prep { border-color: #ffb454; color: #ffd9a0; }
+.ab-pill.finish { border-color: #ff6b6b; color: #ffb4b4; animation: ab-pill-pulse 0.5s ease-in-out infinite alternate; }
+.ab-pill.ult { border-color: #ffd54a; color: #ffe27a; animation: ab-pill-pulse 0.6s ease-in-out infinite alternate; }
+.ab-pill.recharge { opacity: 0.8; }
+@keyframes ab-pill-pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.07); } }

@@ -356,6 +356,13 @@ export function movePool(id: string): string[] {
   return list.map((m, i) => [m, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
 }
 
+/** How far a move reaches (px): used to show where it will land while aiming. */
+export function moveReach(mv: MoveDef): number {
+  if (mv.kind === "nova") return mv.range ?? 120;
+  const r = mv.range ?? (mv.speed ? mv.speed * 0.8 : 300);
+  return Math.max(110, Math.min(440, r));
+}
+
 /** Four different moves from this Pokémon's pool; anything wrong or missing falls back to its default four. */
 export function cleanMoves(id: string, moves?: readonly string[] | null): [string, string, string, string] {
   const sp = ROSTER.find((s) => s.id === id);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/members/avatar";
 import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
+import { aimHandlers, currentAim } from "@/components/pokemon/aim-pad";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
@@ -325,7 +326,7 @@ function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; 
   );
 }
 
-type Hud = { phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean };
+type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean };
 type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean };
 
 type Wire = { k: string };
@@ -350,7 +351,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -499,7 +500,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         my = c.joy.y;
       }
       const cast: [boolean, boolean, boolean, boolean] = [c.queue[0] || c.held[0] || c.mouse, c.queue[1] || c.held[1], c.queue[2] || c.held[2], c.queue[3] || c.held[3]];
-      const inp: Input = { mx, my, aim: c.aim, cast, dodge: c.dodge, ult: c.ult };
+      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult };
       c.queue = [false, false, false, false];
       c.dodge = false;
       c.ult = false;
@@ -637,6 +638,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       if (V) {
         const mine = V.fighters.find((f) => f.member === meId);
         for (const z of V.zones) z.player = !!mine && z.owner === mine.id;
+        c.me = mine;
+        R.setAim(mine && c.preview ? { from: mine, mv: moveOf(mine, c.preview.slot), x: c.preview.x, y: c.preview.y } : null, c.aim);
         try {
           R.render(V, dt, mine?.alive ? mine : undefined);
         } catch (err) {
@@ -647,7 +650,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           const ids = mine.sp.moves;
           const alive = V.fighters.filter((f) => f.alive).length;
           setOut(mine.alive ? null : coop ? 0 : mine.place ?? alive + 1);
+          const finishing = V.fighters.some((f) => f.alive && f.team !== mine.team && f.hp / f.maxHp < 0.2 && Math.hypot(f.x - mine.x, f.y - mine.y) < 420);
+          const gl = Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0);
           setHud({
+            pill: !mine.alive ? null : mine.cast || mine.channel ? "prep" : mine.ult >= 100 && gl <= 0 ? "ult" : finishing ? "finish" : mine.cd.every((cd) => cd > 0.05) ? "recharge" : null,
             phase: V.phase,
             perks: V.perks,
             wave: V.wave,
@@ -751,15 +757,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         className={`ab-pb ${cls} ${f <= 0 ? "ready" : ""}`}
         style={{ ["--c" as string]: TYPE_COLOR[mv.type] ?? "#fff", ["--f" as string]: Math.min(1, f) }}
         aria-label={mv.name}
-        onPointerDown={(e) => {
-          e.preventDefault();
-          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-          ctl.current.queue[i] = true;
-          ctl.current.held[i] = true;
-        }}
-        onPointerUp={() => (ctl.current.held[i] = false)}
-        onPointerCancel={() => (ctl.current.held[i] = false)}
-        onLostPointerCapture={() => (ctl.current.held[i] = false)}
+        {...aimHandlers(ctl.current, i)}
       >
         <span className="pb-ic"><TypeIcon type={mv.type} size={26} /></span>
         <span className="pb-nm">{mv.name}</span>
@@ -800,6 +798,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               </div>
               {hud.gimmickT > 0 ? <div className="ab-awk">{GIMMICKS[hud.gimmick].icon} {t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].short)} {hud.gimmickT.toFixed(1)}s</div> : null}
             </div>
+            {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
               {coop ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("রাউন্ড", "Round")} {init.curRound}/{init.rounds}</>}
               {coop ? <span>{t("শত্রু", "Foes")} {hud.foes}</span> : <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>}
