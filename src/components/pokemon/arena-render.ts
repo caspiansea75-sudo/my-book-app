@@ -2,6 +2,7 @@
  * Draws an Arena Brawl fight on a canvas. It reads the engine's state and turns the engine's events into the
  * extras that make it feel good: sparks, rings, floating numbers, screen shake, a slow-motion tint.
  */
+import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { ARENA, type Ev, type Fighter, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
@@ -17,6 +18,10 @@ const smooth = (a: number, b: number, x: number) => {
   return k * k * (3 - 2 * k);
 };
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+
+type Pic = HTMLImageElement | HTMLCanvasElement;
+const picW = (p: Pic) => (p instanceof HTMLImageElement ? p.naturalWidth : p.width) || 96;
+const picH = (p: Pic) => (p instanceof HTMLImageElement ? p.naturalHeight : p.height) || 96;
 
 export type SpriteSource = (id: string, num: number) => string[];
 const probe = spriteChain({ id: "pikachu", num: 25 }, { still: true });
@@ -46,7 +51,11 @@ export class ArenaRenderer {
   private flashT = 0;
   private perfectT = 0;
   private imgs = new Map<string, HTMLImageElement | "fail" | "loading">();
-  private tints = new Map<string, HTMLCanvasElement>();
+  private tints = new WeakMap<object, Map<string, HTMLCanvasElement>>();
+  /** Animated (limb-moving) sprites, front and back views, and how far each fighter's animation has played. */
+  private anims = new Map<string, GifFrames | "loading" | "fail">();
+  private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number }>();
+  private dtr = 0;
   private t = 0;
   private scale = 1;
   private banner: { text: string; t: number; color: string } | null = null;
@@ -130,20 +139,40 @@ export class ArenaRenderer {
     return null;
   }
 
+  /** The animated sprite (the one that really moves its legs, wings and tail), loaded once; null until it is ready. */
+  private loadAnim(id: string, back: boolean): GifFrames | null {
+    const key = `${id}|${back ? "b" : "f"}`;
+    const hit = this.anims.get(key);
+    if (hit && typeof hit === "object") return hit;
+    if (hit) return null;
+    this.anims.set(key, "loading");
+    const url = spriteChain({ id }, { back })[0];
+    if (!url || typeof fetch !== "function") {
+      this.anims.set(key, "fail");
+      return null;
+    }
+    fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))))
+      .then((b) => this.anims.set(key, decodeGif(b)))
+      .catch(() => this.anims.set(key, "fail"));
+    return null;
+  }
+
   /** A solid-colour copy of a sprite (for the white hit flash and the freeze tint), made once. */
-  private tinted(id: string, im: HTMLImageElement, color: string): HTMLCanvasElement {
-    const key = `${id}|${color}`;
-    let c = this.tints.get(key);
+  private tinted(_id: string, im: Pic, color: string): HTMLCanvasElement {
+    let m = this.tints.get(im);
+    if (!m) this.tints.set(im, (m = new Map()));
+    let c = m.get(color);
     if (c) return c;
     c = document.createElement("canvas");
-    c.width = im.naturalWidth || 96;
-    c.height = im.naturalHeight || 96;
+    c.width = picW(im);
+    c.height = picH(im);
     const g = c.getContext("2d")!;
     g.drawImage(im, 0, 0);
     g.globalCompositeOperation = "source-in";
     g.fillStyle = color;
     g.fillRect(0, 0, c.width, c.height);
-    this.tints.set(key, c);
+    m.set(color, c);
     return c;
   }
 
@@ -182,12 +211,24 @@ export class ArenaRenderer {
   feed(events: Ev[], mine: Fighter | undefined) {
     for (const e of events) {
       switch (e.t) {
-        case "cast":
+        case "cast": {
+          const ps = this.poses.get(e.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
+          ps.atk = 0.32;
+          ps.atkDir = e.dir;
+          this.poses.set(e.id, ps);
+        }
           this.ring(e.x, e.y, col(e.type), 44, 0.35);
           this.burst(e.x, e.y, col(e.type), 6, 120);
           break;
         case "hit": {
           const c = col(e.type);
+          if (e.dmg > 0) {
+            const ps = this.poses.get(e.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
+            ps.hurt = 0.26;
+            ps.hx = e.dx;
+            ps.hy = e.dy;
+            this.poses.set(e.id, ps);
+          }
           this.burst(e.x, e.y, c, e.heavy ? 18 : 9, e.heavy ? 280 : 190);
           for (let i = 0; i < (e.heavy ? 8 : 3); i++) {
             const a = Math.atan2(e.dy, e.dx) + rnd(-0.6, 0.6);
@@ -465,6 +506,7 @@ export class ArenaRenderer {
     const dtReal = Number.isFinite(dtRaw) && dtRaw > 0 ? dtRaw : 0;
     const dt = dtReal * (S.slow > 0 ? 0.4 : 1);
     this.t += dtReal;
+    this.dtr = dtReal;
     this.shakeT = Math.max(0, this.shakeT - dtReal);
     this.zoomPulse = Math.max(0, this.zoomPulse - dtReal * 3);
     this.flashT = Math.max(0, this.flashT - dtReal);
@@ -1135,15 +1177,15 @@ export class ArenaRenderer {
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
-  private body(g: CanvasRenderingContext2D, im: HTMLImageElement, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1) {
+  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1) {
     g.save();
     g.globalAlpha *= alpha;
     g.translate(x, y);
     g.rotate(rot);
     g.scale((faceLeft ? 1 : -1) * sx, sy);
-    const k = size / Math.max(im.naturalWidth || 96, im.naturalHeight || 96, 1);
-    const w = (im.naturalWidth || 96) * k;
-    const h = (im.naturalHeight || 96) * k;
+    const k = size / Math.max(picW(im), picH(im), 1);
+    const w = picW(im) * k;
+    const h = picH(im) * k;
     g.imageSmoothingEnabled = false;
     g.drawImage(tint ? this.tinted(id, im, tint) : im, -w / 2, -h / 2 - size * 0.05, w, h);
     g.restore();
@@ -1165,12 +1207,22 @@ export class ArenaRenderer {
     let formId = f.dyna > 0 && f.gmax ? `${f.sp.id}-gmax` : f.form ? f.form.sprite : f.sp.id;
     if (morph && morph.kind !== "awaken" && mt < morph.swap) formId = f.sp.id; // the old body, until the change happens
     let usedId = formId;
-    let im = this.load(formId, f.sp.num);
+    let im: Pic | null = this.load(formId, f.sp.num);
     const formMissing = !im && formId !== f.sp.id;
     if (formMissing) {
       usedId = f.sp.id;
       im = this.load(f.sp.id, f.sp.num);
     }
+    // the moving picture: a Showdown animation, front or back view by where it faces; the still one stays as the fallback
+    const ps = this.poses.get(f.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
+    this.poses.set(f.id, ps);
+    ps.clock += this.dtr * (moving ? 1 + Math.min(1.3, speed / 240) : 0.85);
+    ps.atk = Math.max(0, ps.atk - this.dtr);
+    ps.hurt = Math.max(0, ps.hurt - this.dtr);
+    const wantBack = Math.sin(f.face) < -0.6;
+    const gif = this.loadAnim(usedId, wantBack) ?? (wantBack ? this.loadAnim(usedId, false) : null);
+    const animated = !!gif && !formMissing;
+    if (gif && animated) im = frameAt(gif, ps.clock).el;
     // a transformation starts small (or normal) and grows into its new size
     let grow = 1;
     if (morph && (morph.kind === "dyna" || morph.kind === "mega")) {
@@ -1236,6 +1288,31 @@ export class ArenaRenderer {
           sx = 1 + idle;
           sy = 1 - idle;
         }
+    }
+    if (animated) {
+      // the real legs and wings are moving now, so the stand-in bounce and squash are turned down
+      sx = 1 + (sx - 1) * 0.35;
+      sy = 1 + (sy - 1) * 0.35;
+      if (f.loco === "run") lift *= 0.55;
+    }
+    // attack lunge (leans and darts toward the target, then settles) and hit recoil (knocked back, tilted)
+    let ox = 0;
+    let oy = 0;
+    if (ps.atk > 0) {
+      const k = Math.sin((1 - ps.atk / 0.32) * Math.PI);
+      ox += Math.cos(ps.atkDir) * f.r * 0.85 * k;
+      oy += Math.sin(ps.atkDir) * f.r * 0.5 * k;
+      sx *= 1 + 0.12 * k;
+      sy *= 1 - 0.09 * k;
+      rot += (Math.cos(ps.atkDir) < 0 ? -1 : 1) * 0.2 * k;
+    }
+    if (ps.hurt > 0) {
+      const k = Math.sin((1 - ps.hurt / 0.26) * Math.PI);
+      ox += ps.hx * f.r * 0.55 * k;
+      oy += ps.hy * f.r * 0.35 * k;
+      rot += (ps.hx >= 0 ? 1 : -1) * 0.25 * k;
+      sx *= 1 - 0.1 * k;
+      sy *= 1 + 0.08 * k;
     }
     // the roll: flyers spin, floaters blink, burrowers sink, the rest tuck and tumble
     const rolling = f.dodge.t > 0;
@@ -1416,8 +1493,8 @@ export class ArenaRenderer {
       g.rect(f.x - 300, f.y - 500, 600, cutY - (f.y - 500));
       g.clip();
     }
-    const px = f.x;
-    const py = f.y - f.r * 0.6 - lift;
+    const px = f.x + ox;
+    const py = f.y - f.r * 0.6 - lift + oy;
     const sxx = sx * stretch;
     const syy = sy / (stretch * 0.95 + 0.05);
     if (under) {

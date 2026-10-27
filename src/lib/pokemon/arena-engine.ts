@@ -155,8 +155,8 @@ export type Zone = {
 };
 
 export type Ev =
-  | { t: "cast"; x: number; y: number; type: string; kind: string; byPlayer: boolean }
-  | { t: "hit"; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean }
+  | { t: "cast"; id: number; dir: number; x: number; y: number; type: string; kind: string; byPlayer: boolean }
+  | { t: "hit"; id: number; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean }
   | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string }
   | { t: "crate"; x: number; y: number }
   | { t: "fall"; x: number; y: number; id: number; player: boolean }
@@ -715,7 +715,7 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   }
   if (heavy) S.freeze = Math.max(S.freeze, src.isPlayer || dst.isPlayer ? 0.07 : 0.03);
   if (o.status && Math.random() < o.status.chance) applyStatus(S, dst, o.status.kind);
-  S.events.push({ t: "hit", x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy });
+  S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy });
   if (src.isPlayer) S.score += Math.round(dmg * 0.5);
   if (dst.hp <= 0) kill(S, src, dst);
   return dmg;
@@ -789,8 +789,8 @@ function spawnProj(S: State, f: Fighter, mv: MoveDef, dx: number, dy: number, o:
 
 function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: number, ty: number) {
   const mv = moveOf(f, slot);
-  S.events.push({ t: "cast", x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
   f.face = Math.atan2(dy, dx);
+  S.events.push({ t: "cast", id: f.id, dir: f.face, x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
   // Dynamax: moves become Max Moves that change the weather, and Gigantamax adds a blast where you aim
   if (f.dyna > 0) {
     const w: Record<string, FieldKind> = { Fire: "sun", Water: "rain", Ice: "hail", Rock: "sand" };
@@ -1621,7 +1621,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
             const d = Math.max(1, Math.round(o.maxHp * 0.14));
             o.hp -= d;
             o.flash = 0.12;
-            S.events.push({ t: "hit", x: o.x, y: o.y, dmg: d, crit: false, eff: 1, type: "Electric", toPlayer: o.isPlayer, byPlayer: false, dx: 0, dy: -1, heavy: true });
+            S.events.push({ t: "hit", id: o.id, x: o.x, y: o.y, dmg: d, crit: false, eff: 1, type: "Electric", toPlayer: o.isPlayer, byPlayer: false, dx: 0, dy: -1, heavy: true });
             if (o.hp <= 0) kill(S, null, o);
           }
         }
