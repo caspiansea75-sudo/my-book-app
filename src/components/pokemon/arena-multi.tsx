@@ -722,24 +722,44 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const b = cv.getBoundingClientRect();
     ctl.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * ARENA.W, ((e.clientY - b.top) / b.height) * ARENA.H);
   }
-  const joyMove = (e: React.PointerEvent) => {
+  /** The stick is floating: it appears under the thumb anywhere in the wide area, and steers by how far the thumb moves from there. */
+  const joyOrigin = useRef<{ x: number; y: number } | null>(null);
+  const joyMove = (e: React.PointerEvent, start = false) => {
     const el = joyEl.current;
     if (!el) return;
-    const b = el.getBoundingClientRect();
-    let x = (e.clientX - (b.left + b.width / 2)) / (b.width / 2);
-    let y = (e.clientY - (b.top + b.height / 2)) / (b.height / 2);
+    if (start) {
+      el.style.transform = "";
+      const b0 = el.getBoundingClientRect();
+      const zone = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      // keep the whole stick inside the area
+      const cx = Math.min(zone.right - b0.width / 2, Math.max(zone.left + b0.width / 2, e.clientX));
+      const cy = Math.min(zone.bottom - b0.height / 2, Math.max(zone.top + b0.height / 2, e.clientY));
+      joyOrigin.current = { x: cx, y: cy };
+      el.style.transform = `translate(${cx - (b0.left + b0.width / 2)}px, ${cy - (b0.top + b0.height / 2)}px)`;
+      el.classList.add("on");
+    }
+    const o = joyOrigin.current;
+    if (!o) return;
+    const r = el.offsetWidth / 2;
+    let x = (e.clientX - o.x) / r;
+    let y = (e.clientY - o.y) / r;
     const l = Math.hypot(x, y);
     if (l > 1) {
       x /= l;
       y /= l;
     }
-    ctl.current.joy = { x: Math.abs(x) < 0.15 ? 0 : x, y: Math.abs(y) < 0.15 ? 0 : y };
+    rt.current.joy = { x: Math.abs(x) < 0.15 ? 0 : x, y: Math.abs(y) < 0.15 ? 0 : y };
     const knob = el.firstElementChild as HTMLElement | null;
     if (knob) knob.style.transform = `translate(${x * 34}px, ${y * 34}px)`;
   };
   const joyEnd = () => {
-    ctl.current.joy = { x: 0, y: 0 };
-    const knob = joyEl.current?.firstElementChild as HTMLElement | null;
+    rt.current.joy = { x: 0, y: 0 };
+    joyOrigin.current = null;
+    const el = joyEl.current;
+    if (!el) return;
+    el.style.transform = "";
+    el.classList.remove("on");
+    const knob = el.firstElementChild as HTMLElement | null;
     if (knob) knob.style.transform = "";
   };
 
@@ -812,9 +832,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               <button type="button" className="ab-ic" onClick={() => { const v = !sfx.isMuted(); sfx.setMuted(v); }} aria-label="Sound">🔊</button>
             </div>
             <div className="ab-ctl">
-              <div ref={joyEl} className="ab-joy" onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); joyMove(e); }} onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture?.(e.pointerId)) joyMove(e); }} onPointerUp={joyEnd} onPointerCancel={joyEnd}>
-                <i />
-              </div>
+              <div className="ab-joyzone" onPointerDown={(e) => { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); joyMove(e, true); }} onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture?.(e.pointerId)) joyMove(e); }} onPointerUp={joyEnd} onPointerCancel={joyEnd} />
+            <div ref={joyEl} className="ab-joy">
+              <i />
+            </div>
               <div className="ab-pad">
                 {padBtn(0, "m1")}
                 {padBtn(1, "m2")}

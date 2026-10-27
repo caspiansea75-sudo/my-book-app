@@ -194,3 +194,25 @@
 .ab-pill.ult { border-color: #ffd54a; color: #ffe27a; animation: ab-pill-pulse 0.6s ease-in-out infinite alternate; }
 .ab-pill.recharge { opacity: 0.8; }
 @keyframes ab-pill-pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.07); } }
+
+
+/* ----- wide thumb area for the stick (the stick itself looks the same, and now follows the thumb) */
+.ab-joyzone { position: absolute; left: 0; bottom: 0; width: 48%; height: 78%; pointer-events: auto; touch-action: none; display: none; }
+@media (pointer: coarse) { .ab-joyzone { display: block; } }
+.ab-joy { pointer-events: none; }
+.ab-joy.on { background: rgba(255, 255, 255, 0.1); }
+
+/* ----- phones and tablets: a lighter top so the arena can be seen */
+@media (pointer: coarse), (max-height: 520px) {
+  .ab-me { left: calc(8px + env(safe-area-inset-left)); top: 6px; width: min(26%, 190px); padding: 3px 8px 4px; border-radius: 9px; background: rgba(8, 12, 22, 0.42); backdrop-filter: none; border-color: rgba(255, 255, 255, 0.08); }
+  .ab-me b { font-size: 11px; }
+  .ab-me small { font-size: 9px; margin-left: 4px; }
+  .ab-bar { height: 6px; margin-top: 3px; }
+  .ab-top { left: 50%; right: auto; top: 6px; transform: translateX(-50%); padding: 2px 9px; gap: 6px; font-size: 10px; background: rgba(8, 12, 22, 0.42); border-color: rgba(255, 255, 255, 0.08); }
+  .ab-top .sc, .ab-top .wx { display: none; }
+  .ab-tools { top: 6px; right: calc(6px + env(safe-area-inset-right)); gap: 3px; }
+  .ab-ic { width: 26px; height: 26px; border-radius: 8px; font-size: 11px; background: rgba(8, 12, 22, 0.42); border-color: rgba(255, 255, 255, 0.08); }
+  .ab-ic svg { width: 13px; height: 13px; }
+  .ab-ic.wide { display: none; }
+  .ab-combo { top: 42px; left: calc(10px + env(safe-area-inset-left)); font-size: 14px; }
+}
