@@ -55,7 +55,7 @@ export class ArenaRenderer {
   private tints = new WeakMap<object, Map<string, HTMLCanvasElement>>();
   /** Animated (limb-moving) sprites, front and back views, and how far each fighter's animation has played. */
   private anims = new Map<string, GifFrames | HTMLImageElement | "loading" | "fail">();
-  private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number }>();
+  private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number } }>();
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
@@ -291,6 +291,7 @@ export class ArenaRenderer {
           if (e.dmg > 0) {
             const ps = this.poses.get(e.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
             ps.hurt = 0.26;
+            if (e.type === "Psychic" || e.type === "Ghost" || e.type === "Fairy") ps.aura = { c: e.type === "Ghost" ? "#b58cff" : "#ff8be4", t: 0.7 };
             ps.hx = e.dx;
             ps.hy = e.dy;
             this.poses.set(e.id, ps);
@@ -515,6 +516,8 @@ export class ArenaRenderer {
           this.parts.push({ kind: "puff", x: x + Math.cos(a) * 8, y: y + Math.sin(a) * 8, vx: Math.cos(a) * r * 2.4, vy: Math.sin(a) * r * 2.4, g: 0, life: 0.65, max: 0.65, size: 9, grow: 8, color: "#ff9a2e", edge: "#b8360d", seed: i });
         }
         this.parts.push({ kind: "puff", x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: r * 0.5, grow: 40, color: "#ffd84d", edge: "#ff8a1f", seed: 4 });
+        // a column of red fireballs piling upward
+        for (let i = 0; i < 5; i++) this.parts.push({ kind: "puff", x: x + rnd(-10, 10), y: y - i * 12, vx: rnd(-14, 14), vy: -70 - i * 18, g: 0, life: 0.8, max: 0.8, size: 14 + i * 3, grow: 14, color: i % 2 ? "#e63a1e" : "#ff6a2a", edge: "#7a1408", seed: 10 + i });
         break;
       case "thunder":
         this.parts.push({ kind: "bolt", x: x + rnd(-50, 50), y: -60, vx: 0, vy: 0, g: 0, life: 0.32, max: 0.32, size: 1, grow: 0, color: "#ffe14d", x2: x, y2: y, seed: Math.floor(x) });
@@ -1674,6 +1677,31 @@ export class ArenaRenderer {
           g.arc(z.x, z.y, z.r, 0, Math.PI * 2);
           g.fill();
           g.stroke();
+          if (z.mv.id === "fireblast") {
+            // the big blast comes down as a burning "大" of five flames, as in the video
+            const sy = z.y - (1 - prog) * 320 - 20;
+            const sz = z.r * (0.6 + prog * 0.5);
+            g.save();
+            g.translate(z.x, sy);
+            g.rotate(Math.sin(this.t * 6) * 0.06);
+            g.lineCap = "round";
+            for (const [w, col2] of [[sz * 0.42, "rgba(255,90,20,.55)"], [sz * 0.24, "#ff8a1f"], [sz * 0.1, "#ffe08a"]] as const) {
+              g.strokeStyle = col2;
+              g.lineWidth = w;
+              g.beginPath();
+              g.moveTo(-sz, -sz * 0.18);
+              g.lineTo(sz, -sz * 0.18);
+              g.moveTo(0, -sz * 0.95);
+              g.lineTo(0, sz * 0.2);
+              g.moveTo(-sz * 0.05, -sz * 0.05);
+              g.lineTo(-sz * 0.85, sz * 0.9);
+              g.moveTo(sz * 0.05, -sz * 0.05);
+              g.lineTo(sz * 0.85, sz * 0.9);
+              g.stroke();
+            }
+            g.restore();
+            if (Math.random() < 0.6) this.parts.push({ kind: "dot", x: z.x + rnd(-sz, sz), y: sy + rnd(-sz, sz), vx: rnd(-30, 30), vy: rnd(-60, 20), g: -40, life: 0.45, max: 0.45, size: rnd(2, 4.5), grow: 0, color: Math.random() < 0.5 ? "#ffd84d" : "#ff7a2a" });
+          }
           // meteors, boulders and lightning fall toward the circle before they land
           if (z.mv.id === "dracometeor" || z.mv.id === "rockslide") {
             for (let i = 0; i < 5; i++) {
@@ -1728,6 +1756,18 @@ export class ArenaRenderer {
           g.beginPath();
           g.arc(z.x, z.y, z.r * 1.2, 0, Math.PI * 2);
           g.fill();
+          if (z.mv.id === "fireblast") {
+            // flames spiking out of the ground in a star
+            g.fillStyle = "#ff8a1f";
+            g.beginPath();
+            for (let i = 0; i < 24; i++) {
+              const rr = i % 2 ? z.r * 0.7 : z.r * (1.25 + 0.2 * Math.sin(i * 3 + this.t * 30));
+              const aa = (i / 24) * Math.PI * 2;
+              g.lineTo(z.x + Math.cos(aa) * rr, z.y + Math.sin(aa) * rr * 0.7);
+            }
+            g.closePath();
+            g.fill();
+          }
         } else if (z.type === "Electric") {
           drawLightning(g, z.x, z.y, z.x2, z.y2, "#ffe14d", a, z.id + Math.floor(this.t * 20), 5);
         } else {
@@ -1744,6 +1784,19 @@ export class ArenaRenderer {
           g.fillStyle = c;
           g.globalAlpha = a * 0.6;
           g.fillRect(0, -z.r, L, z.r * 2);
+          if (z.mv.id === "hyperbeam" || z.type === "Psychic") {
+            // bright core and rings travelling along the beam
+            g.globalAlpha = a;
+            g.fillStyle = "#ffffff";
+            g.fillRect(0, -z.r * 0.38, L, z.r * 0.76);
+            g.strokeStyle = "#ffffff";
+            g.lineWidth = 2.5;
+            for (let d = (this.t * 420) % 64; d < L; d += 64) {
+              g.beginPath();
+              g.ellipse(d, 0, z.r * 0.22, z.r * 1.15, 0, 0, Math.PI * 2);
+              g.stroke();
+            }
+          }
         }
         g.restore();
       }
@@ -2141,6 +2194,10 @@ export class ArenaRenderer {
     ps.clock += this.dtr * (moving ? 1 + Math.min(1.3, speed / 240) : 0.85);
     ps.atk = Math.max(0, ps.atk - this.dtr);
     ps.hurt = Math.max(0, ps.hurt - this.dtr);
+    if (ps.aura) {
+      ps.aura.t -= this.dtr;
+      if (ps.aura.t <= 0) ps.aura = undefined;
+    }
     const wantBack = Math.sin(f.face) < -0.6;
     const gif = this.loadAnim(usedId, wantBack) ?? (wantBack ? this.loadAnim(usedId, false) : null);
     const animated = !!gif && !formMissing;
@@ -2439,6 +2496,11 @@ export class ArenaRenderer {
       if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk);
       else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk);
       else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk);
+      // held by a mind attack: a glowing outline all round
+      if (ps.aura) {
+        const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);
+        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, py + dy, size, faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
+      }
       // a form whose picture is not there: the plain body, outlined and shimmering so the change still shows
       if (formMissing && !morph) {
         const pulse = 0.55 + Math.sin(t * 5) * 0.25;
