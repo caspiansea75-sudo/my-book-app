@@ -3,7 +3,7 @@
  * extras that make it feel good: sparks, rings, floating numbers, screen shake, a slow-motion tint.
  */
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
-import { ARENA, type Ev, type Fighter, type State } from "@/lib/pokemon/arena-engine";
+import { ARENA, type Ev, type Fighter, type Proj, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
@@ -57,6 +57,8 @@ export class ArenaRenderer {
   private anims = new Map<string, GifFrames | HTMLImageElement | "loading" | "fail">();
   private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number }>();
   private dtr = 0;
+  /** Scorch marks left on the floor by blasts; they fade slowly. */
+  private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
   private failAt = new Map<string, number>();
   private t = 0;
@@ -324,6 +326,13 @@ export class ArenaRenderer {
             this.shakeT = 0.3;
           }
           this.moveFx(e);
+          if (e.r >= 55) {
+            // dust, rubble and a dark scorch mark, as in the video
+            for (let i = 0; i < Math.round(3 + e.r / 28); i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-e.r * 0.4, e.r * 0.4), y: e.y + rnd(-e.r * 0.25, e.r * 0.25), vx: rnd(-40, 40), vy: rnd(-70, -20), g: 0, life: rnd(0.7, 1.2), max: 1.2, size: rnd(9, 16), grow: 30, color: i % 2 ? "#cfc2aa" : "#9a8f80" });
+            for (let i = 0; i < Math.round(e.r / 22); i++) this.parts.push({ kind: "plank", x: e.x, y: e.y, vx: rnd(-220, 220), vy: rnd(-380, -120), g: 900, life: rnd(0.5, 0.9), max: 0.9, size: rnd(2.5, 5), grow: 0, color: i % 2 ? "#6b5b4a" : "#8c7b66", rot: rnd(0, 6), vr: rnd(-14, 14) });
+            this.scorch.push({ x: e.x, y: e.y, r: e.r * 0.62, seed: Math.random() * 100, t: 9, max: 9, type: e.type });
+            if (this.scorch.length > 28) this.scorch.shift();
+          }
           break;
         }
         case "crate": {
@@ -604,6 +613,8 @@ export class ArenaRenderer {
       if (h.length > 20) h.pop();
       this.hist.set(f.id, h);
     }
+    for (const sc of this.scorch) sc.t -= dtReal;
+    this.scorch = this.scorch.filter((sc) => sc.t > 0);
     for (const d of this.debris) d.t -= dtReal;
     this.debris = this.debris.filter((d) => d.t > 0);
     this.followCamera(you, dtReal);
@@ -619,6 +630,31 @@ export class ArenaRenderer {
     g.drawImage(stageBackground(S.stage), 0, 0);
     for (const pool of S.pools) drawPool(g, pool, this.t);
     for (const hole of S.holes) drawHole(g, hole, this.t);
+    // blast marks: a dark patch with a glowing rim that cools
+    for (const sc of this.scorch) {
+      const k = sc.t / sc.max;
+      g.save();
+      g.translate(sc.x, sc.y);
+      g.scale(1, 0.72);
+      g.globalAlpha = Math.min(1, k * 1.6) * 0.5;
+      g.fillStyle = "#14100e";
+      g.beginPath();
+      for (let i = 0; i <= 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const rr = sc.r * (0.78 + 0.28 * Math.sin(sc.seed + i * 2.3) * Math.cos(sc.seed * 0.7 + i));
+        if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      g.closePath();
+      g.fill();
+      if (k > 0.7 && (sc.type === "Fire" || sc.type === "Electric")) {
+        g.globalAlpha = (k - 0.7) * 2.2 * 0.5;
+        g.strokeStyle = sc.type === "Fire" ? "#ff7a2a" : "#ffe14d";
+        g.lineWidth = 2.5;
+        g.stroke();
+      }
+      g.restore();
+    }
     // the remains of broken crates stay on the floor for a while
     for (const d of this.debris) {
       g.save();
@@ -1871,7 +1907,15 @@ export class ArenaRenderer {
   }
 
   private drawProjs(g: CanvasRenderingContext2D, S: State) {
+    // streams (Hydro Pump, Flamethrower, Ice Beam...) are drawn as one continuous jet from the mouth, not as separate dots
+    const streams = new Map<number, Proj[]>();
     for (const p of S.projs) {
+      if (p.beam) {
+        const l = streams.get(p.owner) ?? [];
+        l.push(p);
+        streams.set(p.owner, l);
+        continue;
+      }
       const c = col(p.type);
       drawShot(g, p, S.time - p.born, this.t);
       // a trail of the shot's own colour: embers for fire, droplets for water, sparks for the rest
@@ -1880,6 +1924,152 @@ export class ArenaRenderer {
         this.parts.push({ kind: "dot", x: p.x + rnd(-3, 3), y: p.y + rnd(-3, 3), vx: -p.vx * 0.08 + rnd(-24, 24), vy: -p.vy * 0.08 + rnd(ember ? -50 : -20, 20), g: ember ? -60 : 0, life: ember ? 0.5 : 0.3, max: ember ? 0.5 : 0.3, size: rnd(2, ember ? 5 : 4), grow: 0, color: ember && Math.random() < 0.5 ? "#ffd84d" : c });
       }
     }
+    for (const [owner, list] of streams) {
+      const f = S.fighters.find((x) => x.id === owner);
+      if (f) this.drawStream(g, f, list);
+    }
+  }
+
+  /** One continuous jet from the attacker's mouth to the front-most drop, in the look of its type. */
+  private drawStream(g: CanvasRenderingContext2D, f: Fighter, list: Proj[]) {
+    const type = list[0]!.type;
+    const c = col(type);
+    // the line the jet follows: from the mouth through the drops, nearest first
+    const sorted = list.map((p) => ({ x: p.x, y: p.y, d: Math.hypot(p.x - f.x, p.y - f.y), p })).sort((a, b) => a.d - b.d);
+    const first = sorted[0]!;
+    const last = sorted[sorted.length - 1]!;
+    const ux = (last.x - f.x) / (last.d || 1);
+    const uy = (last.y - f.y) / (last.d || 1);
+    const mx = f.x + ux * f.r * 0.9;
+    const my = f.y - f.r * 0.45 + uy * f.r * 0.5;
+    const len = Math.hypot(last.x - mx, last.y - my);
+    if (len < 6) return;
+    const nx = -uy;
+    const ny = ux;
+    const t = this.t;
+    void first;
+    g.save();
+    if (type === "Water") {
+      // two thin streams twisting round each other, a bright core, spray at the tip
+      g.globalCompositeOperation = "lighter";
+      g.lineCap = "round";
+      g.strokeStyle = "rgba(60,150,255,.3)";
+      g.lineWidth = 16;
+      g.beginPath();
+      g.moveTo(mx, my);
+      g.lineTo(last.x, last.y);
+      g.stroke();
+      for (const ph of [0, Math.PI]) {
+        g.strokeStyle = ph ? "#9ddcff" : "#4aa8ff";
+        g.lineWidth = 5;
+        g.beginPath();
+        for (let d = 0; d <= len; d += 8) {
+          const w = Math.sin(d * 0.07 - t * 22 + ph) * (4 + Math.min(1, d / 120) * 5);
+          const x = mx + ux * d + nx * w;
+          const y = my + uy * d + ny * w;
+          if (d === 0) g.moveTo(x, y);
+          else g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+      g.strokeStyle = "#ffffff";
+      g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(mx, my);
+      g.lineTo(last.x, last.y);
+      g.stroke();
+    } else if (type === "Fire") {
+      // a rolling tube of flame: stacked blobs, wider toward the end
+      for (let d = 0; d <= len; d += 11) {
+        const k = d / Math.max(1, len);
+        const r = 7 + k * 17;
+        const wob = Math.sin(d * 0.09 - t * 16) * 4;
+        const x = mx + ux * d + nx * wob;
+        const y = my + uy * d + ny * wob;
+        blob(g, x, y, r, Math.floor(d / 11) + Math.floor(t * 10), "#ff6a1a", "#a82a08");
+      }
+      for (let d = 0; d <= len; d += 14) {
+        const k = d / Math.max(1, len);
+        const x = mx + ux * d + nx * Math.sin(d * 0.11 - t * 20) * 3;
+        const y = my + uy * d + ny * Math.sin(d * 0.11 - t * 20) * 3;
+        blob(g, x, y, 4 + k * 10, Math.floor(d / 14) + 40 + Math.floor(t * 12), "#ffd84d", "#ff9a2e");
+      }
+      g.globalCompositeOperation = "lighter";
+      const gl = g.createRadialGradient(last.x, last.y, 0, last.x, last.y, 40);
+      gl.addColorStop(0, "rgba(255,200,80,.8)");
+      gl.addColorStop(1, "rgba(255,80,0,0)");
+      g.fillStyle = gl;
+      g.beginPath();
+      g.arc(last.x, last.y, 40, 0, Math.PI * 2);
+      g.fill();
+    } else if (type === "Ice") {
+      g.globalCompositeOperation = "lighter";
+      g.lineCap = "round";
+      g.strokeStyle = "rgba(120,210,255,.35)";
+      g.lineWidth = 18;
+      g.beginPath();
+      g.moveTo(mx, my);
+      g.lineTo(last.x, last.y);
+      g.stroke();
+      g.strokeStyle = "#bff0ff";
+      g.lineWidth = 7;
+      g.beginPath();
+      g.moveTo(mx, my);
+      g.lineTo(last.x, last.y);
+      g.stroke();
+      g.strokeStyle = "#ffffff";
+      g.lineWidth = 3;
+      g.beginPath();
+      g.moveTo(mx, my);
+      g.lineTo(last.x, last.y);
+      g.stroke();
+      g.globalCompositeOperation = "source-over";
+      for (let d = 14; d < len; d += 26) {
+        const sx = mx + ux * d + nx * Math.sin(d + t * 4) * 9;
+        const sy = my + uy * d + ny * Math.sin(d + t * 4) * 9;
+        g.fillStyle = "#e8fbff";
+        g.beginPath();
+        g.moveTo(sx, sy - 6);
+        g.lineTo(sx + 3.5, sy);
+        g.lineTo(sx, sy + 6);
+        g.lineTo(sx - 3.5, sy);
+        g.closePath();
+        g.fill();
+      }
+    } else {
+      g.globalCompositeOperation = "lighter";
+      g.lineCap = "round";
+      for (const [w, col2, a] of [[18, c, 0.28], [9, c, 0.7], [3.5, "#ffffff", 0.95]] as const) {
+        g.strokeStyle = col2;
+        g.globalAlpha = a * (0.85 + Math.sin(t * 30) * 0.15);
+        g.lineWidth = w;
+        g.beginPath();
+        g.moveTo(mx, my);
+        g.lineTo(last.x, last.y);
+        g.stroke();
+      }
+    }
+    g.restore();
+    // a flare at the mouth and the glow where it ends
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    for (const [x, y, r] of [[mx, my, 16], [last.x, last.y, 22]] as const) {
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, "#ffffff");
+      gr.addColorStop(0.4, c);
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+    // steam rises where water, fire and ice end (the white plume in the video); sparks for the rest
+    if (Math.random() < 0.55) {
+      if (type === "Water" || type === "Fire" || type === "Ice") this.parts.push({ kind: "smoke", x: last.x + rnd(-8, 8), y: last.y + rnd(-6, 6), vx: rnd(-18, 18), vy: rnd(-110, -60), g: 0, life: rnd(0.8, 1.2), max: 1.2, size: rnd(9, 15), grow: 26, color: type === "Fire" ? "#ffe9c8" : "#f2f8ff" });
+      else this.parts.push({ kind: "dot", x: last.x, y: last.y, vx: rnd(-160, 160), vy: rnd(-160, 160), g: 0, life: 0.3, max: 0.3, size: rnd(2, 4), grow: 0, color: c });
+    }
+    if (type === "Water" && Math.random() < 0.5) this.parts.push({ kind: "dot", x: mx + ux * rnd(0, len), y: my + uy * rnd(0, len), vx: nx * rnd(-80, 80), vy: ny * rnd(-80, 80) - 20, g: 200, life: 0.35, max: 0.35, size: rnd(1.5, 3), grow: 0, color: "#e8f7ff" });
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
