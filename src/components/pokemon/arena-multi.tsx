@@ -346,7 +346,65 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const [rows, setRows] = useState<Row[] | null>(null);
   const [team, setTeam] = useState({ wave: 0, score: 0 });
   const [out, setOut] = useState<number | null>(null);
-  const [fs, setFs] = useState(false);
+  const [fs, setFs] = useState(true);
+  const shell = useRef<HTMLDivElement>(null);
+  const nativeFs = useRef(false);
+  /** Real full screen needs a tap; the screen-filling layout is on from the start and the first touch upgrades it. */
+  const goNative = useCallback(async () => {
+    const el = shell.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }) | null;
+    try {
+      if (el && !document.fullscreenElement && (el.requestFullscreen || el.webkitRequestFullscreen)) {
+        await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen!());
+        nativeFs.current = true;
+      }
+    } catch {
+      /* not allowed without a tap */
+    }
+    try {
+      await (window.screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock?.("landscape");
+    } catch {
+      /* not allowed here */
+    }
+  }, []);
+  const leaveFs = useCallback(() => {
+    setFs(false);
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen();
+      window.screen.orientation?.unlock?.();
+    } catch {
+      /* already out */
+    }
+    nativeFs.current = false;
+  }, []);
+  useEffect(() => {
+    void goNative();
+    let done = false;
+    const once = () => {
+      if (done) return;
+      done = true;
+      void goNative();
+    };
+    window.addEventListener("pointerdown", once, { once: true });
+    window.addEventListener("keydown", once, { once: true });
+    const onChange = () => {
+      if (!document.fullscreenElement && nativeFs.current) {
+        nativeFs.current = false;
+        setFs(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      window.removeEventListener("pointerdown", once);
+      window.removeEventListener("keydown", once);
+      document.removeEventListener("fullscreenchange", onChange);
+      try {
+        if (document.fullscreenElement) void document.exitFullscreen();
+        window.screen.orientation?.unlock?.();
+      } catch {
+        /* already out */
+      }
+    };
+  }, [goNative]);
   const [zoom, setZoomState] = useState(1);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -462,7 +520,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       if (isHost) {
         const fid = fidOfMember.get(meId);
         if (fid !== undefined) hostPick(fid, id);
-      } else p2p.send({ k: "perk", id }, hostPeer);
+      } else {
+        // sent a few times: the host ignores repeats, and a dropped message must not leave everyone waiting
+        for (const d of [0, 600, 1500]) setTimeout(() => p2p.send({ k: "perk", id }, hostPeer), d);
+      }
     };
 
     const p2p = new P2PRoom({
@@ -590,7 +651,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               picks.clear();
             }
             const here = S.fighters.filter((f) => f.member === meId || livePeers.has(`m${f.member}`));
-            if (here.every((f) => picks.has(f.id)) || now - perkAt > 15000) {
+            if (here.every((f) => picks.has(f.id)) || now - perkAt > 12000) {
               for (const f of S.fighters) if (!picks.has(f.id)) applyPerk(S, f, S.perks[Math.floor(Math.random() * S.perks.length)]!);
               picks.clear();
               perkAt = 0;
@@ -748,12 +809,12 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       x /= l;
       y /= l;
     }
-    rt.current.joy = { x: Math.abs(x) < 0.15 ? 0 : x, y: Math.abs(y) < 0.15 ? 0 : y };
+    ctl.current.joy = { x: Math.abs(x) < 0.15 ? 0 : x, y: Math.abs(y) < 0.15 ? 0 : y };
     const knob = el.firstElementChild as HTMLElement | null;
     if (knob) knob.style.transform = `translate(${x * 34}px, ${y * 34}px)`;
   };
   const joyEnd = () => {
-    rt.current.joy = { x: 0, y: 0 };
+    ctl.current.joy = { x: 0, y: 0 };
     joyOrigin.current = null;
     const el = joyEl.current;
     if (!el) return;
@@ -789,7 +850,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
 
   return (
     <div className="ab">
-      <div className={`ab-shell ${fs ? "fs" : ""}`} onContextMenu={(e) => e.preventDefault()}>
+      <div ref={shell} className={`ab-shell ${fs ? "fs" : ""}`} onContextMenu={(e) => e.preventDefault()}>
         <div
           ref={stage}
           className="ab-stage"
@@ -828,7 +889,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             <div className="ab-tools">
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label="Zoom in">+</button>
-              <button type="button" className="ab-ic" onClick={() => setFs(!fs)} aria-label="Full screen">⛶</button>
+              <button type="button" className="ab-ic" onClick={() => { if (fs) leaveFs(); else { setFs(true); void goNative(); } }} aria-label="Full screen">⛶</button>
               <button type="button" className="ab-ic" onClick={() => { const v = !sfx.isMuted(); sfx.setMuted(v); }} aria-label="Sound">🔊</button>
             </div>
             <div className="ab-ctl">

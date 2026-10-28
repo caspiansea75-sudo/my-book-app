@@ -199,6 +199,7 @@ export function ArenaBrawl() {
 
   const start = useCallback(() => {
     sfx.unlock();
+    void enterFs(true);
     const S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves });
     begin(S);
     const r = rt.current;
@@ -213,7 +214,7 @@ export function ArenaBrawl() {
     setResult(null);
     setHud(null);
     setScreen("play");
-  }, [mode, pick, gimmick, megaId, teraType, moves]);
+  }, [mode, pick, gimmick, megaId, teraType, moves, enterFs]);
 
   /* ----------------------------------------------------------- the loop */
 

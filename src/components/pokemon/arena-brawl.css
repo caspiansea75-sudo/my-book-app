@@ -66,7 +66,7 @@
 }
 
 /* ----- overlays */
-.ab-ov { position: absolute; inset: 0; display: grid; place-items: center; padding: 14px; background: rgba(4, 7, 14, 0.74); backdrop-filter: blur(3px); color: #f3f6ff; text-align: center; font-family: var(--font-sans); overflow: auto; }
+.ab-ov { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 14px; background: rgba(4, 7, 14, 0.74); backdrop-filter: blur(3px); color: #f3f6ff; text-align: center; font-family: var(--font-sans); overflow: auto; }
 .ab-ov h2 { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 5vw, 38px); }
 .ab-ov p { margin: 6px 0 0; opacity: 0.8; font-size: clamp(11px, 2.3vw, 14px); }
 .ab-perks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; width: min(100%, 640px); }
@@ -215,4 +215,16 @@
   .ab-ic svg { width: 13px; height: 13px; }
   .ab-ic.wide { display: none; }
   .ab-combo { top: 42px; left: calc(10px + env(safe-area-inset-left)); font-size: 14px; }
+}
+
+/* overlays stay reachable: content taller than the screen scrolls instead of being cut off at the top */
+.ab-ov > div { margin: auto; max-width: 100%; }
+@media (max-height: 520px) {
+  .ab-ov { padding: 6px 10px; }
+  .ab-ov h2 { font-size: 20px; }
+  .ab-perks { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+  .ab-perk { padding: 6px 4px; }
+  .ab-perk .em { font-size: 22px; }
+  .ab-perk b { font-size: 12px; }
+  .ab-perk span { font-size: 10px; line-height: 1.25; }
 }
