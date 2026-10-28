@@ -155,7 +155,7 @@ export type Zone = {
 };
 
 export type Ev =
-  | { t: "cast"; id: number; dir: number; x: number; y: number; type: string; kind: string; byPlayer: boolean }
+  | { t: "cast"; id: number; dir: number; mv: string; tx: number; ty: number; x: number; y: number; type: string; kind: string; byPlayer: boolean }
   | { t: "hit"; id: number; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean }
   | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string }
   | { t: "crate"; x: number; y: number }
@@ -790,7 +790,7 @@ function spawnProj(S: State, f: Fighter, mv: MoveDef, dx: number, dy: number, o:
 function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: number, ty: number) {
   const mv = moveOf(f, slot);
   f.face = Math.atan2(dy, dx);
-  S.events.push({ t: "cast", id: f.id, dir: f.face, x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
+  S.events.push({ t: "cast", id: f.id, dir: f.face, mv: mv.id, tx, ty, x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
   // Dynamax: moves become Max Moves that change the weather, and Gigantamax adds a blast where you aim
   if (f.dyna > 0) {
     const w: Record<string, FieldKind> = { Fire: "sun", Water: "rain", Ice: "hail", Rock: "sand" };
@@ -853,7 +853,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       const k = d > range ? range / d : 1;
       const x = clamp(f.x + (tx - f.x) * k, MARGIN, W - MARGIN);
       const y = clamp(f.y + (ty - f.y) * k, MARGIN, H - MARGIN);
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: 0.35, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 260, struck: false, mv, player: f.isPlayer });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id === "gmaxblast" ? 108 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: 0.35, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 260, struck: false, mv, player: f.isPlayer });
       break;
     }
     case "bolt": {
@@ -949,6 +949,9 @@ function doMega(S: State, f: Fighter) {
   f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.25);
   f.invuln = Math.max(f.invuln, 0.5);
   const type = f.types[0] ?? "Normal";
+  // the Mega form's own special move: a huge burst of its type all around it
+  f.override[3] = { id: "megaburst", name: `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: "An explosion of Mega energy all around you." };
+  f.cd[3] = 0;
   S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type });
   boom(S, f.x, f.y, 190, type);
   S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
@@ -957,6 +960,7 @@ function doMega(S: State, f: Fighter) {
 function endMega(S: State, f: Fighter) {
   f.mega = 0;
   f.form = null;
+  delete f.override[3];
   f.types = [...f.sp.types];
   f.megaP = f.megaD = f.megaS = 1;
   f.r = f.baseR;
@@ -1005,6 +1009,11 @@ function doDynamax(S: State, f: Fighter) {
   f.invuln = Math.max(f.invuln, 0.5);
   f.status.brn = f.status.psn = f.status.par = f.status.frz = 0;
   const type = f.types[0] ?? "Normal";
+  // its own special move: a giant strike that lands where you aim
+  f.override[3] = f.gmax
+    ? { id: "gmaxblast", name: `G-Max ${type}`, type, kind: "lob", power: 3.2, cd: 4.6, range: 400, windup: 0.5, desc: "A Gigantamax finisher that lands where you aim." }
+    : { id: "maxstrike", name: `Max ${type}`, type, kind: "lob", power: 2.8, cd: 4.2, range: 380, windup: 0.5, desc: "A Max Move strike where you aim." };
+  f.cd[3] = 0;
   S.events.push({ t: "dynamax", x: f.x, y: f.y, id: f.id, gmax: f.gmax });
   boom(S, f.x, f.y, 210, type);
   S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
@@ -1012,6 +1021,7 @@ function doDynamax(S: State, f: Fighter) {
 }
 function endDynamax(S: State, f: Fighter) {
   f.dyna = 0;
+  delete f.override[3];
   f.r = f.baseR;
   f.maxHp = Math.max(1, Math.round(f.maxHp / 1.5));
   f.hp = Math.max(1, Math.min(f.maxHp, Math.round(f.hp / 1.5)));
