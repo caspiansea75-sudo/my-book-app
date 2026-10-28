@@ -158,7 +158,7 @@ export type Ev =
   | { t: "cast"; id: number; dir: number; mv: string; tx: number; ty: number; x: number; y: number; type: string; kind: string; byPlayer: boolean }
   | { t: "hit"; id: number; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean }
   | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string }
-  | { t: "crate"; x: number; y: number }
+  | { t: "crate"; x: number; y: number; kind?: string }
   | { t: "fall"; x: number; y: number; id: number; player: boolean }
   | { t: "dig"; x: number; y: number; id: number; phase: "down" | "up"; type: string }
   | { t: "stage"; kind: StageKind }
@@ -258,7 +258,19 @@ const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, roc
 /** An explosion, which also splinters any crates it reaches. */
 function boom(S: State, x: number, y: number, r: number, type: string, fx?: string) {
   S.events.push({ t: "explode", x, y, r, type, fx });
-  for (const o of S.obs) if (o.kind === "crate" && o.hp > 0 && len(o.x - x, o.y - y) <= r + o.r * 0.6) breakCrate(S, o);
+  for (const o of S.obs) {
+    if (o.hp <= 0 || len(o.x - x, o.y - y) > r + o.r * 0.6) continue;
+    if (o.kind === "crate") breakCrate(S, o);
+    else if (r >= 85) {
+      // big blasts wear down rocks, pillars and crystals until they crumble
+      o.hp -= 30 + r * 0.25;
+      o.hit = 0.25;
+      if (o.hp <= 0) {
+        o.hp = 0;
+        S.events.push({ t: "crate", x: o.x, y: o.y, kind: o.kind });
+      }
+    }
+  }
 }
 
 function breakCrate(S: State, o: Obstacle) {

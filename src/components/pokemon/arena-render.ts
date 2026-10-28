@@ -8,7 +8,7 @@ import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageB
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -337,6 +337,21 @@ export class ArenaRenderer {
           break;
         }
         case "crate": {
+          if (e.kind && e.kind !== "crate") {
+            // a rock, pillar or crystal crumbles: a heavy cloud of dust, chunks, and rubble that stays
+            const chunk = e.kind === "crystal" ? "#a98bff" : "#8a8f99";
+            for (let i = 0; i < 16; i++) {
+              const a = rnd(0, Math.PI * 2);
+              const v = rnd(120, 360);
+              this.parts.push({ kind: "plank", x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 140, g: 700, life: rnd(0.7, 1.3), max: 1.3, size: rnd(4, 8), grow: 0, color: i % 3 ? chunk : "#5b606b", rot: rnd(0, 6), vr: rnd(-12, 12) });
+            }
+            for (let i = 0; i < 11; i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-16, 16), y: e.y + rnd(-10, 10), vx: rnd(-50, 50), vy: rnd(-80, -20), g: 0, life: rnd(0.9, 1.5), max: 1.5, size: rnd(12, 22), grow: 34, color: i % 2 ? "#cfc2aa" : "#9a8f80" });
+            this.debris.push({ x: e.x, y: e.y, seed: Math.random() * 5, t: 20 });
+            this.scorch.push({ x: e.x, y: e.y, r: 34, seed: Math.random() * 100, t: 14, max: 14, type: "Rock" });
+            this.shake = Math.max(this.shake, 7);
+            this.shakeT = 0.3;
+            break;
+          }
           for (let i = 0; i < 11; i++) {
             const a = rnd(0, Math.PI * 2);
             const v = rnd(90, 300);
@@ -524,7 +539,12 @@ export class ArenaRenderer {
         this.flashT = Math.max(this.flashT, 0.12);
         break;
       case "surf":
-        // a wave of foam rolling out
+        // curved blades of water spinning outward, then a wave of foam rolling out
+        for (let i = 0; i < 4; i++) {
+          const a0 = (i / 4) * Math.PI * 2;
+          const rad = r * 0.35;
+          this.parts.push({ kind: "arc", x: x + Math.cos(a0) * rad, y: y + Math.sin(a0) * rad, vx: Math.cos(a0) * r * 1.5, vy: Math.sin(a0) * r * 1.5, g: 0, life: 0.65, max: 0.65, size: 9 + r * 0.04, grow: 0, color: i % 2 ? "#3da0ff" : "#8fd3ff", rot: a0, vr: 5 });
+        }
         this.ring(x, y, "#e8f6ff", r * 1.2, 0.7);
         for (let i = 0; i < 34; i++) {
           const a = (i / 34) * Math.PI * 2;
@@ -795,6 +815,21 @@ export class ArenaRenderer {
         g.closePath();
         g.fill();
         g.stroke();
+        g.restore();
+      } else if (p.kind === "arc") {
+        // a curved blade of water
+        p.rot = (p.rot ?? 0) + (p.vr ?? 0) * dt;
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(p.rot);
+        g.lineCap = "round";
+        for (const [w, cc] of [[p.size * 0.5, p.color], [p.size * 0.18, "#ffffff"]] as const) {
+          g.strokeStyle = cc;
+          g.lineWidth = w;
+          g.beginPath();
+          g.arc(0, 0, p.size * 5, -0.7, 0.7);
+          g.stroke();
+        }
         g.restore();
       } else if (p.kind === "star") {
         p.rot = (p.rot ?? 0) + (p.vr ?? 0) * dt;
@@ -1702,6 +1737,32 @@ export class ArenaRenderer {
             g.restore();
             if (Math.random() < 0.6) this.parts.push({ kind: "dot", x: z.x + rnd(-sz, sz), y: sy + rnd(-sz, sz), vx: rnd(-30, 30), vy: rnd(-60, 20), g: -40, life: 0.45, max: 0.45, size: rnd(2, 4.5), grow: 0, color: Math.random() < 0.5 ? "#ffd84d" : "#ff7a2a" });
           }
+          if (z.type === "Dark" && z.mv.kind === "lob") {
+            // a void opens: a black sphere with a violet rim and cracks running out of it
+            const rr = z.r * (0.35 + prog * 0.65);
+            g.save();
+            g.translate(z.x, z.y - rr * 0.35);
+            const gr = g.createRadialGradient(0, 0, rr * 0.2, 0, 0, rr * 1.35);
+            gr.addColorStop(0, "#07010f");
+            gr.addColorStop(0.7, "#1a0630");
+            gr.addColorStop(0.86, "rgba(140,70,255,.95)");
+            gr.addColorStop(1, "rgba(140,70,255,0)");
+            g.fillStyle = gr;
+            g.beginPath();
+            g.arc(0, 0, rr * 1.35, 0, Math.PI * 2);
+            g.fill();
+            g.strokeStyle = "rgba(200,150,255,.8)";
+            g.lineWidth = 1.5;
+            for (let i = 0; i < 9; i++) {
+              const a0 = (i / 9) * 6.28 + z.id;
+              g.beginPath();
+              g.moveTo(Math.cos(a0) * rr * 0.9, Math.sin(a0) * rr * 0.9);
+              g.lineTo(Math.cos(a0 + 0.1) * rr * 1.5, Math.sin(a0 + 0.1) * rr * 1.3);
+              g.lineTo(Math.cos(a0 - 0.05) * rr * 1.9, Math.sin(a0 - 0.05) * rr * 1.6);
+              g.stroke();
+            }
+            g.restore();
+          }
           // meteors, boulders and lightning fall toward the circle before they land
           if (z.mv.id === "dracometeor" || z.mv.id === "rockslide") {
             for (let i = 0; i < 5; i++) {
@@ -2293,9 +2354,10 @@ export class ArenaRenderer {
       const k = Math.sin((1 - ps.atk / 0.32) * Math.PI);
       ox += Math.cos(ps.atkDir) * f.r * 0.85 * k;
       oy += Math.sin(ps.atkDir) * f.r * 0.5 * k;
-      sx *= 1 + 0.12 * k;
-      sy *= 1 - 0.09 * k;
-      rot += (Math.cos(ps.atkDir) < 0 ? -1 : 1) * 0.2 * k;
+      // stretches out along the attack, nose toward the target, as in the video
+      sx *= 1 + 0.34 * k;
+      sy *= 1 - 0.2 * k;
+      rot += (faceLeft ? 1 : -1) * -Math.sin(ps.atkDir) * 0.65 * k;
     }
     if (ps.hurt > 0) {
       const k = Math.sin((1 - ps.hurt / 0.26) * Math.PI);
@@ -2330,6 +2392,64 @@ export class ArenaRenderer {
     }
     const stretch = f.dash && !under ? 1.18 : 1;
 
+    // riding the water: a wake behind, and for Ice types a sheet of ice that grows along its path
+    if (f.loco === "surf" && !under) {
+      const hh = this.hist.get(f.id) ?? [];
+      const n = Math.min(hh.length, moving ? 15 : 5);
+      g.save();
+      if (f.types.includes("Ice") && n > 2) {
+        g.lineCap = "round";
+        g.lineJoin = "round";
+        const path = () => {
+          g.beginPath();
+          g.moveTo(f.x, f.y + f.r * 0.45);
+          for (let i = 0; i < n; i += 2) g.lineTo(hh[i]!.x, hh[i]!.y + f.r * 0.45);
+          g.stroke();
+        };
+        g.strokeStyle = "rgba(170,215,255,.9)";
+        g.lineWidth = f.r * 2.1;
+        path();
+        g.strokeStyle = "rgba(232,247,255,.96)";
+        g.lineWidth = f.r * 1.7;
+        path();
+        g.strokeStyle = "rgba(255,255,255,.7)";
+        g.lineWidth = 1.5;
+        for (let i = 1; i < n; i += 3) {
+          const h = hh[i]!;
+          g.beginPath();
+          g.moveTo(h.x - f.r * 0.6, h.y + f.r * 0.35);
+          g.lineTo(h.x + f.r * 0.1, h.y + f.r * 0.6);
+          g.lineTo(h.x + f.r * 0.7, h.y + f.r * 0.4);
+          g.stroke();
+        }
+      }
+      // ripple rings and quick white dashes on the water
+      g.strokeStyle = "rgba(255,255,255,.55)";
+      g.lineWidth = 2;
+      for (let i = 0; i < 2; i++) {
+        const k = (t * 1.1 + i * 0.5) % 1;
+        g.globalAlpha = 1 - k;
+        g.beginPath();
+        g.ellipse(f.x, f.y + f.r * 0.6, f.r * (1.1 + k * 1.2), f.r * (0.4 + k * 0.5), 0, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.globalAlpha = 0.7;
+      if (moving) {
+        const dx = -f.mvx / (speed || 1);
+        const dy = -f.mvy / (speed || 1);
+        for (let i = 0; i < 6; i++) {
+          const off = ((t * 3 + i * 0.37) % 1) * f.r * 3.2 + f.r;
+          const sidew = (i - 2.5) * f.r * 0.45;
+          const bx = f.x + dx * off - dy * sidew;
+          const by = f.y + f.r * 0.5 + dy * off + dx * sidew;
+          g.beginPath();
+          g.moveTo(bx, by);
+          g.lineTo(bx + dx * f.r * 0.8, by + dy * f.r * 0.8);
+          g.stroke();
+        }
+      }
+      g.restore();
+    }
     // shadow (smaller and fainter the higher it flies, gone over a pit) and the ring that tells you whose side they are on
     const overPit = f.canFly && S.holes.some((h) => ((f.x - h.x) / h.rx) ** 2 + ((f.y - h.y) / h.ry) ** 2 < 1);
     g.save();

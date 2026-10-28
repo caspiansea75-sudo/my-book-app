@@ -64,6 +64,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "shadowsneak", name: "Shadow Sneak", type: "Ghost", kind: "dash", power: 0.9, cd: 2.4, range: 220, desc: "Slip forward through foes." }),
     m({ id: "sludgebomb", name: "Sludge Bomb", type: "Poison", kind: "lob", power: 1.8, cd: 4.6, range: 320, windup: 0.5, status: { kind: "psn", chance: 0.5 }, desc: "Toxic sludge lobbed at the spot." }),
     m({ id: "darkpulse", name: "Dark Pulse", type: "Dark", kind: "spread", power: 0.7, cd: 2.0, n: 3, speed: 440, desc: "Waves of dark energy." }),
+    m({ id: "darkvoid", name: "Dark Void", type: "Dark", kind: "lob", power: 2.0, cd: 5.0, range: 330, windup: 0.6, desc: "A black void opens where you aim and swallows what is inside." }),
     m({ id: "crunch", name: "Crunch", type: "Dark", kind: "dash", power: 1.3, cd: 3.0, range: 200, desc: "Lunge and bite." }),
     m({ id: "aurasphere", name: "Aura Sphere", type: "Fighting", kind: "homing", power: 1.25, cd: 2.2, speed: 440, desc: "A sphere that never misses for long." }),
     m({ id: "bulletpunch", name: "Bullet Punch", type: "Steel", kind: "dash", power: 0.95, cd: 1.9, range: 200, desc: "A very fast punch." }),
