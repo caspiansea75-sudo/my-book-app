@@ -152,6 +152,8 @@ export type Zone = {
   struck: boolean;
   mv: MoveDef;
   player: boolean;
+  /** Lingering zones (whirls) hurt again every so often. */
+  tick?: number;
 };
 
 export type Ev =
@@ -169,7 +171,7 @@ export type Ev =
   | { t: "heal"; x: number; y: number; amt: number }
   | { t: "status"; x: number; y: number; kind: StatusKind }
   | { t: "shield"; x: number; y: number }
-  | { t: "buff"; x: number; y: number }
+  | { t: "buff"; x: number; y: number; id: number; fx?: string }
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
@@ -865,7 +867,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       const k = d > range ? range / d : 1;
       const x = clamp(f.x + (tx - f.x) * k, MARGIN, W - MARGIN);
       const y = clamp(f.y + (ty - f.y) * k, MARGIN, H - MARGIN);
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id === "gmaxblast" ? 108 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: 0.35, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 260, struck: false, mv, player: f.isPlayer });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id === "gmaxblast" ? 108 : mv.linger ? 84 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: mv.linger ?? 0.35, dmg: baseDamage(f, mv) * (mv.linger ? 0.5 : 1), type: mv.type, status: mv.status, kb: mv.linger ? 120 : 260, struck: false, mv, player: f.isPlayer, tick: 0.5 });
       break;
     }
     case "bolt": {
@@ -883,7 +885,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     case "buff":
       f.buffT = 6;
       f.buffMul = mv.power;
-      S.events.push({ t: "buff", x: f.x, y: f.y });
+      S.events.push({ t: "buff", x: f.x, y: f.y, id: f.id, fx: mv.fx });
       break;
   }
 }
@@ -1665,7 +1667,23 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
         }
         if (z.shape === "line") boom(S, z.x2, z.y2, 26, z.type);
       }
-    } else z.life -= dt;
+    } else {
+      z.life -= dt;
+      // a whirl keeps hurting what stays inside it
+      if (z.mv.linger && z.life > 0 && z.shape === "circle") {
+        z.tick = (z.tick ?? 0.5) - dt;
+        if (z.tick <= 0) {
+          z.tick = 0.5;
+          const src = S.fighters.find((f) => f.id === z.owner);
+          if (src) {
+            for (const o of S.fighters) {
+              if (!o.alive || o.team === z.team || len(o.x - z.x, o.y - z.y) > z.r + o.r) continue;
+              strike(S, src, o, z.dmg * 0.55, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: 30, status: z.status });
+            }
+          }
+        }
+      }
+    }
   }
   S.zones = S.zones.filter((z) => !z.struck || z.life > 0);
 

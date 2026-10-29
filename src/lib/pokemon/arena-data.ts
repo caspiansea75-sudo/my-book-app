@@ -41,6 +41,8 @@ export type MoveDef = {
   pierce?: boolean;
   /** Borrow another move's impact art (see the renderer's moveFx). */
   fx?: string;
+  /** Seconds a whirl stays and keeps hurting (lob moves). */
+  linger?: number;
   desc: string;
 };
 
@@ -111,6 +113,11 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "phantomforce", name: "Phantom Force", type: "Ghost", kind: "dash", power: 1.9, cd: 5.0, range: 270, desc: "Vanish and strike." }),
     m({ id: "kingsshield", name: "King's Shield", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Block almost everything for a moment." }),
     m({ id: "hyperbeam", name: "Hyper Beam", type: "Normal", kind: "bolt", power: 3.2, cd: 8, range: 560, windup: 0.7, pierce: true, desc: "An enormous beam after a long charge." }),
+    m({ id: "firespin", name: "Fire Spin", type: "Fire", kind: "lob", power: 1.4, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, status: { kind: "brn", chance: 0.35 }, fx: "firespin", desc: "A fire tornado that stays and keeps burning." }),
+    m({ id: "whirlpool", name: "Whirlpool", type: "Water", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "whirlpool", desc: "A whirlpool that holds foes in its swirl." }),
+    m({ id: "sandtomb", name: "Sand Tomb", type: "Ground", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "sandtomb", desc: "A column of sand that traps and scrapes." }),
+    m({ id: "doubleteam", name: "Double Team", type: "Normal", kind: "buff", power: 1.3, cd: 10, fx: "clones", desc: "Afterimages circle you: hit harder for a while." }),
+    m({ id: "agility", name: "Agility", type: "Psychic", kind: "buff", power: 1.3, cd: 10, fx: "clones", desc: "Blur into afterimages: hit harder for a while." }),
     m({ id: "heatwave", name: "Heat Wave", type: "Fire", kind: "nova", power: 1.9, cd: 5, range: 180, windup: 0.3, status: { kind: "brn", chance: 0.3 }, fx: "fireblast", desc: "A scorching wave all around." }),
     m({ id: "overheat", name: "Overheat", type: "Fire", kind: "bolt", power: 2.6, cd: 6.5, range: 480, windup: 0.5, status: { kind: "brn", chance: 0.3 }, pierce: true, desc: "A huge line of flame." }),
     m({ id: "firepunch", name: "Fire Punch", type: "Fire", kind: "dash", power: 1.4, cd: 2.6, range: 210, status: { kind: "brn", chance: 0.25 }, desc: "A burning fist." }),
@@ -136,7 +143,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "aromatherapy", name: "Aromatherapy", type: "Grass", kind: "heal", power: 0.32, cd: 10, desc: "A sweet scent restores HP." }),
     m({ id: "discharge", name: "Discharge", type: "Electric", kind: "nova", power: 1.7, cd: 4.8, range: 170, windup: 0.25, status: { kind: "par", chance: 0.3 }, fx: "thunder", desc: "Electricity bursts all around." }),
     m({ id: "volttackle", name: "Volt Tackle", type: "Electric", kind: "dash", power: 1.9, cd: 4.4, range: 250, status: { kind: "par", chance: 0.3 }, desc: "A crackling full-body charge." }),
-    m({ id: "zapcannon", name: "Zap Cannon", type: "Electric", kind: "bolt", power: 2.8, cd: 7, range: 520, windup: 0.65, status: { kind: "par", chance: 0.5 }, pierce: true, desc: "A huge bolt that paralyses." }),
+    m({ id: "zapcannon", name: "Zap Cannon", type: "Electric", kind: "bolt", power: 2.8, cd: 7, range: 520, windup: 0.65, status: { kind: "par", chance: 0.5 }, pierce: true, fx: "laser", desc: "A huge bolt that paralyses." }),
     m({ id: "spark", name: "Spark", type: "Electric", kind: "dash", power: 1.1, cd: 2.2, range: 220, status: { kind: "par", chance: 0.2 }, desc: "A sparkling tackle." }),
     m({ id: "electroball", name: "Electro Ball", type: "Electric", kind: "proj", power: 1.5, cd: 2, speed: 480, desc: "A ball of lightning." }),
     m({ id: "fusionbolt", name: "Fusion Bolt", type: "Electric", kind: "dash", power: 1.7, cd: 3.6, range: 240, desc: "A bolt rush." }),
@@ -183,7 +190,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "extrasensory", name: "Extrasensory", type: "Psychic", kind: "nova", power: 1.5, cd: 4, range: 150, windup: 0.25, desc: "A mind burst all around." }),
     m({ id: "psychocut", name: "Psycho Cut", type: "Psychic", kind: "spread", power: 0.75, cd: 2.2, n: 3, speed: 560, desc: "Blades of mind power." }),
     m({ id: "photongeyser", name: "Photon Geyser", type: "Psychic", kind: "lob", power: 2.6, cd: 6.5, range: 330, windup: 0.6, desc: "A pillar of light." }),
-    m({ id: "prismaticlaser", name: "Prismatic Laser", type: "Psychic", kind: "bolt", power: 3.0, cd: 7.5, range: 540, windup: 0.7, pierce: true, desc: "A dazzling laser." }),
+    m({ id: "prismaticlaser", name: "Prismatic Laser", type: "Psychic", kind: "bolt", power: 3.0, cd: 7.5, range: 540, windup: 0.7, pierce: true, fx: "laser", desc: "A dazzling laser." }),
     m({ id: "esperwing", name: "Esper Wing", type: "Psychic", kind: "spread", power: 0.7, cd: 2, n: 3, speed: 540, desc: "Feathers of mind power." }),
     m({ id: "psychoboost", name: "Psycho Boost", type: "Psychic", kind: "proj", power: 2.6, cd: 5, speed: 460, pierce: true, desc: "An overwhelming psychic ball." }),
     m({ id: "bugbuzz", name: "Bug Buzz", type: "Bug", kind: "nova", power: 1.6, cd: 4.4, range: 150, windup: 0.3, desc: "A buzzing shockwave." }),
@@ -226,7 +233,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "irontail", name: "Iron Tail", type: "Steel", kind: "dash", power: 1.4, cd: 3, range: 210, desc: "A steel tail slam." }),
     m({ id: "gyroball", name: "Gyro Ball", type: "Steel", kind: "dash", power: 1.4, cd: 3, range: 220, desc: "Spin and crash into them." }),
     m({ id: "doomdesire", name: "Doom Desire", type: "Steel", kind: "lob", power: 2.4, cd: 6.4, range: 340, windup: 0.8, desc: "Destruction falls soon after." }),
-    m({ id: "steelbeam", name: "Steel Beam", type: "Steel", kind: "bolt", power: 2.5, cd: 6, range: 500, windup: 0.6, pierce: true, desc: "A beam of steel." }),
+    m({ id: "steelbeam", name: "Steel Beam", type: "Steel", kind: "bolt", power: 2.5, cd: 6, range: 500, windup: 0.6, pierce: true, fx: "laser", desc: "A beam of steel." }),
     m({ id: "irondefense", name: "Iron Defense", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Harden and block almost everything." }),
     m({ id: "steelwing", name: "Steel Wing", type: "Steel", kind: "dash", power: 1.2, cd: 2.4, range: 220, desc: "Strike with hard wings." }),
     m({ id: "behemothblade", name: "Behemoth Blade", type: "Steel", kind: "dash", power: 2.0, cd: 4.6, range: 250, desc: "A giant sword slash." }),

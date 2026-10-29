@@ -8,7 +8,7 @@ import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageB
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -58,6 +58,7 @@ export class ArenaRenderer {
   private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number } }>();
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
+  private clones = new Map<number, number>();
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
   private failAt = new Map<string, number>();
@@ -376,6 +377,7 @@ export class ArenaRenderer {
           } else {
             for (let i = 0; i < 26; i++) this.parts.push({ kind: "dot", x: e.x + rnd(-18, 18), y: e.y + rnd(-6, 10), vx: rnd(-220, 220), vy: rnd(-340, -80), g: 620, life: rnd(0.6, 1.0), max: 1.0, size: rnd(3, 6.5), grow: 0, color: i % 2 ? "#7a5a3b" : "#c2a074" });
             this.ring(e.x, e.y, "#d9b98a", 120, 0.6);
+            this.scorch.push({ x: e.x, y: e.y, r: 38, seed: Math.random() * 100, t: 10, max: 10, type: "Rock" });
             for (let i = 0; i < 9; i++) {
               const a = (i / 9) * Math.PI * 2 + rnd(-0.2, 0.2);
               this.parts.push({ kind: "crack", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 1.1, max: 1.1, size: 1, grow: 0, color: "#000", x2: e.x + Math.cos(a) * 85, y2: e.y + Math.sin(a) * 60, seed: 3 + i });
@@ -511,7 +513,8 @@ export class ArenaRenderer {
           this.ring(e.x, e.y, "#9fd0ff", 60, 0.4);
           break;
         case "buff":
-          this.ring(e.x, e.y, "#ffb04d", 70, 0.5);
+          if (e.fx === "clones") this.clones.set(e.id, this.t + 6);
+          this.ring(e.x, e.y, e.fx === "clones" ? "#9dffb0" : "#ffb04d", 70, 0.5);
           for (let i = 0; i < 8; i++) this.parts.push({ kind: "text", x: e.x + rnd(-24, 24), y: e.y + 6, vx: 0, vy: -60, g: 0, life: 0.9, max: 0.9, size: 14, grow: 0, color: "#ffb04d", text: "▲", weight: 800 });
           break;
         default:
@@ -574,6 +577,7 @@ export class ArenaRenderer {
       case "dynamicpunch":
       case "outrage":
       case "xscissor":
+        if (e.fx === "xscissor") this.parts.push({ kind: "cross", x, y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: Math.max(70, r * 1.1), grow: 0, color: "#6dff7a" });
         for (let i = 0; i < 10; i++) {
           const a = (i / 10) * Math.PI * 2;
           this.parts.push({ kind: "streak", x, y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, g: 0, life: 0.28, max: 0.28, size: 9, grow: 0, color: i % 2 ? "#ffffff" : "#ffcf4d" });
@@ -739,6 +743,28 @@ export class ArenaRenderer {
         g.beginPath();
         g.arc(p.x, p.y, p.size * (0.4 + a * 0.6), 0, Math.PI * 2);
         g.fill();
+      } else if (p.kind === "cross") {
+        // two crossing slashes that flash in and thin out (X-Scissor)
+        const k = 1 - a;
+        const L = p.size * (0.5 + Math.min(1, k * 4) * 0.5);
+        g.strokeStyle = p.color;
+        g.lineCap = "round";
+        for (const sg of [1, -1]) {
+          g.lineWidth = 9 * a + 2;
+          g.beginPath();
+          g.moveTo(p.x - L * 0.7, p.y - L * 0.7 * sg);
+          g.lineTo(p.x + L * 0.7, p.y + L * 0.7 * sg);
+          g.stroke();
+        }
+        g.strokeStyle = "#ffffff";
+        for (const sg of [1, -1]) {
+          g.lineWidth = 3 * a + 1;
+          g.beginPath();
+          g.moveTo(p.x - L * 0.7, p.y - L * 0.7 * sg);
+          g.lineTo(p.x + L * 0.7, p.y + L * 0.7 * sg);
+          g.stroke();
+        }
+        g.lineCap = "butt";
       } else if (p.kind === "streak") {
         g.strokeStyle = p.color;
         g.lineWidth = 2.5;
@@ -1801,6 +1827,8 @@ export class ArenaRenderer {
           g.strokeRect(0, -z.r, L, z.r * 2);
         }
         g.restore();
+      } else if (z.mv.linger && z.shape === "circle") {
+        this.drawWhirl(g, z);
       } else {
         // the strike itself
         const a = Math.max(0, z.life / (z.shape === "line" ? 0.3 : 0.35));
@@ -1829,6 +1857,29 @@ export class ArenaRenderer {
             g.closePath();
             g.fill();
           }
+        } else if ((z.mv.fx ?? z.mv.id) === "laser" && z.shape === "line") {
+          // a thin bright laser with a glowing source
+          const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
+          const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
+          g.translate(z.x, z.y);
+          g.rotate(ang);
+          const w = z.r * 0.5;
+          g.globalAlpha = a * 0.3;
+          g.fillStyle = c;
+          g.fillRect(0, -w * 1.9, L, w * 3.8);
+          g.globalAlpha = a * 0.85;
+          g.fillRect(0, -w * 0.45, L, w * 0.9);
+          g.globalAlpha = a;
+          g.fillStyle = "#ffffff";
+          g.fillRect(0, -1.6, L, 3.2);
+          const gr = g.createRadialGradient(0, 0, 0, 0, 0, z.r * 1.3);
+          gr.addColorStop(0, "#fff");
+          gr.addColorStop(0.4, c);
+          gr.addColorStop(1, "rgba(0,0,0,0)");
+          g.fillStyle = gr;
+          g.beginPath();
+          g.arc(0, 0, z.r * 1.3, 0, Math.PI * 2);
+          g.fill();
         } else if (z.type === "Electric") {
           drawLightning(g, z.x, z.y, z.x2, z.y2, "#ffe14d", a, z.id + Math.floor(this.t * 20), 5);
         } else {
@@ -1861,6 +1912,74 @@ export class ArenaRenderer {
         }
         g.restore();
       }
+    }
+  }
+
+  /** A tornado of fire, water or sand that stays where it landed: stacked turning rings that widen going up. */
+  private drawWhirl(g: CanvasRenderingContext2D, z: State["zones"][number]) {
+    const fx = z.mv.fx ?? z.mv.id;
+    const pal: Record<string, [string, string, string, string]> = {
+      firespin: ["#ff5a1a", "#ffa62e", "#ffe27a", "#7a1c0c"],
+      whirlpool: ["#2f8fe0", "#8fd2ff", "#ffffff", "#12407a"],
+      sandtomb: ["#a8855a", "#d9bd8a", "#efe0b8", "#5c4128"],
+    };
+    const [c0, c1, c2, dark] = pal[fx] ?? pal.firespin!;
+    const total = z.mv.linger ?? 2.5;
+    const age = total - z.life;
+    const grow = Math.min(1, age / 0.35);
+    const fade = Math.min(1, z.life / 0.45);
+    const R = z.r;
+    g.save();
+    g.globalAlpha = fade;
+    // the footprint
+    g.fillStyle = "rgba(0,0,0,.22)";
+    g.beginPath();
+    g.ellipse(z.x, z.y + 4, R * 1.05, R * 0.4, 0, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = c1;
+    g.globalAlpha = fade * 0.55;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.ellipse(z.x, z.y, R, R * 0.36, 0, 0, Math.PI * 2);
+    g.stroke();
+    g.globalAlpha = fade;
+    const N = 12;
+    for (let k = 0; k < N; k++) {
+      const h = k / (N - 1);
+      const cy = z.y - h * R * 2.5 * grow;
+      const rx = R * (0.32 + 0.7 * h) * grow;
+      const ry = rx * 0.3;
+      const ph = this.t * (fx === "whirlpool" ? 5 : 7) + k * 0.75;
+      g.lineCap = "round";
+      g.strokeStyle = k % 3 === 0 ? c2 : k % 2 ? c0 : c1;
+      g.lineWidth = 8 - h * 4;
+      g.beginPath();
+      g.ellipse(z.x, cy, rx, ry, 0, ph, ph + Math.PI * 1.25);
+      g.stroke();
+      g.strokeStyle = dark;
+      g.globalAlpha = fade * 0.45;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.ellipse(z.x, cy + 4, rx, ry, 0, ph + 0.4, ph + Math.PI * 1.1);
+      g.stroke();
+      g.globalAlpha = fade;
+      if (fx === "firespin") {
+        // flames spiking off the edge of each ring
+        g.fillStyle = k % 2 ? c1 : c2;
+        const ex = z.x + Math.cos(ph + Math.PI * 1.25) * rx;
+        const ey = cy + Math.sin(ph + Math.PI * 1.25) * ry;
+        g.beginPath();
+        g.moveTo(ex - 4, ey);
+        g.lineTo(ex + 1, ey - 12 - h * 6);
+        g.lineTo(ex + 5, ey + 2);
+        g.closePath();
+        g.fill();
+      }
+    }
+    g.restore();
+    if (Math.random() < 0.5) {
+      const an = Math.random() * Math.PI * 2;
+      this.parts.push({ kind: "dot", x: z.x + Math.cos(an) * R * 0.9, y: z.y + Math.sin(an) * R * 0.3, vx: Math.cos(an + 1.6) * 90, vy: rnd(-200, -110), g: fx === "firespin" ? -40 : 120, life: 0.7, max: 0.7, size: rnd(2, 4), grow: 0, color: fx === "firespin" ? (Math.random() < 0.5 ? c1 : c2) : c1 });
     }
   }
 
@@ -2485,8 +2604,18 @@ export class ArenaRenderer {
         this.parts.push({ kind, x: f.x + rnd(-f.r * 0.5, f.r * 0.5), y: f.y + rnd(-f.r * 0.3, f.r * 0.5), vx: -f.mvx * 0.25 + rnd(-30, 30), vy: -f.mvy * 0.25 + rnd(-30, 30), g: gv, life: 0.4, max: 0.4, size: kind === "puff" ? 6 : kind === "smoke" ? 9 : 5, grow: kind === "puff" ? 10 : 10, color: tc, edge: "#7a2a0a", seed: Math.floor(Math.random() * 99) });
       }
     }
-    // afterimages behind a rush or a roll, and the long body of a serpent
+    // afterimages behind a rush or a roll
     const hist = this.hist.get(f.id) ?? [];
+    // Double Team / Agility: copies circle the Pokémon
+    const cloneUntil = this.clones.get(f.id) ?? 0;
+    if (im && !under && cloneUntil > this.t) {
+      const fade = Math.min(1, (cloneUntil - this.t) / 0.6);
+      for (let i = 0; i < 4; i++) {
+        const an = this.t * 2.6 + (i * Math.PI) / 2;
+        const bob = Math.sin(this.t * 5 + i) * 3;
+        this.body(g, im, usedId, f.x + Math.cos(an) * f.r * 2.3, f.y + Math.sin(an) * f.r * 1.1 - f.r * 0.6 - lift + bob, size * 0.92, faceLeft, sx, sy, rot, "#9dffb0", 0.3 * fade);
+      }
+    }
     if (im && !under && f.loco !== "slither" && ((f.dash && !f.dash.under) || rolling)) {
       for (const idx of [3, 6, 9]) {
         const h = hist[idx];
