@@ -59,6 +59,8 @@ export class ArenaRenderer {
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private clones = new Map<number, number>();
+  /** Rocks lifted off the floor by a psychic pulse. */
+  private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
   private failAt = new Map<string, number>();
@@ -512,6 +514,13 @@ export class ArenaRenderer {
         case "shield":
           this.ring(e.x, e.y, "#9fd0ff", 60, 0.4);
           break;
+        case "grab":
+          this.ring(e.x, e.y, "#ff9be6", 70, 0.5);
+          for (let i = 0; i < 12; i++) this.parts.push({ kind: "dot", x: e.x + rnd(-20, 20), y: e.y + rnd(-10, 14), vx: rnd(-30, 30), vy: rnd(-160, -60), g: 0, life: 0.7, max: 0.7, size: rnd(2, 4), grow: 0, color: i % 2 ? "#ffd1f4" : "#c77dff" });
+          break;
+        case "throw":
+          for (let i = 0; i < 10; i++) this.parts.push({ kind: "streak", x: e.x ?? 0, y: e.y ?? 0, vx: e.dx * 700 + rnd(-60, 60), vy: e.dy * 700 + rnd(-60, 60), g: 0, life: 0.3, max: 0.3, size: 7, grow: 0, color: i % 2 ? "#ffffff" : "#ff9be6" });
+          break;
         case "buff":
           if (e.fx === "clones") this.clones.set(e.id, this.t + 6);
           this.ring(e.x, e.y, e.fx === "clones" ? "#9dffb0" : "#ffb04d", 70, 0.5);
@@ -588,6 +597,29 @@ export class ArenaRenderer {
         for (let i = 0; i < 12; i++) this.parts.push({ kind: "dot", x: x + rnd(-r * 0.6, r * 0.6), y, vx: rnd(-160, 160), vy: rnd(-300, -100), g: 700, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3.5, 7), grow: 0, color: e.fx === "rockslide" ? "#8a8f99" : "#ff8a3d" });
         this.shake = Math.max(this.shake, 8);
         this.shakeT = 0.35;
+        break;
+      case "levitate": {
+        this.ring(x, y, "#ff9be6", Math.max(60, r * 1.4), 0.6);
+        const n = 11;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2 + rnd(-0.3, 0.3);
+          const d = rnd(70, 300);
+          const hMax = rnd(26, 70);
+          this.rocks.push({ x: clamp(x + Math.cos(a) * d, 70, ARENA.W - 70), y: clamp(y + Math.sin(a) * d * 0.75, 70, ARENA.H - 70), h: 0, hMax, rot: rnd(0, 6.28), vr: rnd(-1.2, 1.2), size: rnd(10, 22), t: 0, max: rnd(3.2, 4.4), seed: Math.random() * 100 });
+        }
+        if (this.rocks.length > 40) this.rocks.splice(0, this.rocks.length - 40);
+        break;
+      }
+      case "slam":
+        this.scorch.push({ x, y, r: 46, seed: Math.random() * 100, t: 12, max: 12, type: "Rock" });
+        for (let i = 0; i < 16; i++) this.parts.push({ kind: "dot", x: x + rnd(-14, 14), y: y + rnd(-6, 8), vx: rnd(-240, 240), vy: rnd(-380, -110), g: 760, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3, 6.5), grow: 0, color: i % 2 ? "#8a7a68" : "#c9b79a" });
+        this.ring(x, y, "#ff9be6", r * 1.3, 0.45);
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + rnd(-0.2, 0.2);
+          this.parts.push({ kind: "crack", x, y, vx: 0, vy: 0, g: 0, life: 1.2, max: 1.2, size: 1, grow: 0, color: "#000", x2: x + Math.cos(a) * 80, y2: y + Math.sin(a) * 56, seed: 5 + i });
+        }
+        this.shake = Math.max(this.shake, 12);
+        this.shakeT = 0.4;
         break;
       case "sludgebomb":
         for (let i = 0; i < 16; i++) this.parts.push({ kind: "dot", x, y, vx: rnd(-150, 150), vy: rnd(-200, -40), g: 420, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3, 6), grow: 0, color: i % 2 ? "#a855f7" : "#6b21a8" });
@@ -718,6 +750,8 @@ export class ArenaRenderer {
     this.drawItems(g, S);
     this.drawZones(g, S);
     this.drawTelegraphs(g, S);
+    this.drawRocks(g, dt);
+    this.drawTethers(g, S);
 
     // crates, pillars and Pokémon are drawn back to front so they stand behind and in front of each other
     const things: { y: number; draw: () => void }[] = [];
@@ -1983,6 +2017,270 @@ export class ArenaRenderer {
     }
   }
 
+  /** Rocks rising off the floor in a psychic pulse: they bob for a few seconds, then drop and crumble. */
+  private drawRocks(g: CanvasRenderingContext2D, dt: number) {
+    if (!this.rocks.length) return;
+    for (const r of this.rocks) {
+      r.t += dt;
+      r.rot += r.vr * dt;
+    }
+    const keep: typeof this.rocks = [];
+    for (const r of this.rocks) {
+      const up = smooth(0, 0.8, r.t);
+      const down = r.t > r.max - 0.5 ? smooth(r.max - 0.5, r.max, r.t) : 0;
+      const h = r.hMax * up * (1 - down) + Math.sin(this.t * 2.2 + r.seed) * 5 * up;
+      if (r.t >= r.max) {
+        for (let i = 0; i < 6; i++) this.parts.push({ kind: "dot", x: r.x + rnd(-8, 8), y: r.y, vx: rnd(-90, 90), vy: rnd(-160, -40), g: 520, life: 0.6, max: 0.6, size: rnd(2.5, 5), grow: 0, color: "#8a7a68" });
+        continue;
+      }
+      keep.push(r);
+      const alpha = Math.min(1, up * 1.6);
+      g.save();
+      // shadow on the floor
+      g.globalAlpha = 0.28 * alpha;
+      g.fillStyle = "#000";
+      g.beginPath();
+      g.ellipse(r.x, r.y + 6, r.size * (1 - h / 260), r.size * 0.4, 0, 0, Math.PI * 2);
+      g.fill();
+      // the rock
+      g.translate(r.x, r.y - h);
+      g.rotate(r.rot);
+      g.globalAlpha = alpha;
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        const rr = r.size * (0.75 + 0.3 * Math.sin(i * 2.7 + r.seed));
+        pts.push([Math.cos(a) * rr, Math.sin(a) * rr * 0.85]);
+      }
+      g.fillStyle = "#6d6258";
+      g.beginPath();
+      pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.closePath();
+      g.fill();
+      g.fillStyle = "#9a8d7e";
+      g.beginPath();
+      g.moveTo(pts[0]![0], pts[0]![1]);
+      g.lineTo(pts[1]![0], pts[1]![1]);
+      g.lineTo(pts[2]![0], pts[2]![1]);
+      g.lineTo(0, 0);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = "#2f2822";
+      g.lineWidth = 1.5;
+      g.beginPath();
+      pts.forEach(([px, py], i) => (i ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.closePath();
+      g.stroke();
+      // a purple glow underneath and a few motes
+      g.globalCompositeOperation = "lighter";
+      g.globalAlpha = 0.16 * alpha;
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r.size * 1.6);
+      gr.addColorStop(0, "#d28bff");
+      gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(0, 0, r.size * 1.6, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+      if (Math.random() < 0.05) this.parts.push({ kind: "dot", x: r.x + rnd(-r.size, r.size), y: r.y - h + r.size * 0.5, vx: 0, vy: -26, g: 0, life: 0.8, max: 0.8, size: 2, grow: 0, color: "#e0b0ff" });
+    }
+    this.rocks = keep;
+  }
+
+  /** A dotted pink thread from the holder to a foe it is lifting. */
+  private drawTethers(g: CanvasRenderingContext2D, S: State) {
+    for (const o of S.fighters) {
+      if (!(o.grabT > 0)) continue;
+      const by = S.fighters.find((x) => x.id === o.grabBy);
+      if (!by) continue;
+      g.save();
+      g.strokeStyle = "#ffb3ee";
+      g.lineWidth = 2.2;
+      g.globalAlpha = 0.85;
+      g.setLineDash([2, 8]);
+      g.lineDashOffset = -this.t * 40;
+      g.beginPath();
+      g.moveTo(by.x, by.y - by.r * 0.6);
+      g.lineTo(o.x, o.y - o.r * 0.6 - 24);
+      g.stroke();
+      g.restore();
+    }
+  }
+
+  /** Onix and Steelix are drawn here instead of from a picture: a faceted stone head and a body of linked stones. */
+  private drawRockSerpent(g: CanvasRenderingContext2D, f: Fighter, px: number, py: number, faceLeft: boolean, hist: { x: number; y: number }[], whiten: number, tint: string | null) {
+    const steel = f.sp.id === "steelix";
+    const mix = (hex: string, to: string, k: number) => {
+      const a = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const b = [1, 3, 5].map((i) => parseInt(to.slice(i, i + 2), 16));
+      return `rgb(${a.map((v, i) => Math.round(v + (b[i]! - v) * k)).join(",")})`;
+    };
+    let base = steel ? "#8d97a3" : "#7f98a3";
+    let light = steel ? "#c9d2db" : "#b9cfd8";
+    let dark = steel ? "#4f5964" : "#4a606b";
+    if (tint) {
+      base = mix(base.startsWith("#") ? base : "#7f98a3", tint, 0.5);
+      light = mix(light, tint, 0.4);
+    }
+    const col2 = (c: string) => (whiten > 0 ? mix(c.startsWith("#") ? c : "#8fa6b0", "#ffffff", Math.min(1, whiten)) : c);
+    const dir = faceLeft ? -1 : 1;
+    const R = f.r * 1.35;
+    const N = 10;
+    const t = this.t;
+    const moving = Math.hypot((hist[0]?.x ?? 0) - (hist[6]?.x ?? 0), (hist[0]?.y ?? 0) - (hist[6]?.y ?? 0)) > 4;
+    const oy = py - f.y;
+    const segs: { x: number; y: number; r: number; a: number }[] = [];
+    let cx = px;
+    let cy = py;
+    for (let i = 1; i <= N; i++) {
+      const h = hist[Math.min(hist.length - 1, i * 3)];
+      let dx = (h?.x ?? cx) - (cx - 0);
+      let dy = (h?.y ?? f.y) + oy - cy;
+      let d = Math.hypot(dx, dy);
+      if (d < 1) {
+        dx = -dir;
+        dy = 0.15;
+        d = Math.hypot(dx, dy);
+      }
+      const gap = R * 0.88;
+      const sway = Math.sin(t * (moving ? 6 : 2) - i * 0.85) * R * (moving ? 0.28 : 0.12);
+      cx += (dx / d) * gap;
+      cy += (dy / d) * gap;
+      segs.push({ x: cx + (-dy / d) * sway, y: cy + (dx / d) * sway, r: R * (1.08 - i * 0.05), a: i });
+    }
+    g.save();
+    g.lineJoin = "round";
+    // the shadow under the whole body
+    g.fillStyle = "rgba(0,0,0,.22)";
+    for (const sg of [{ x: px, y: py, r: R }, ...segs]) {
+      g.beginPath();
+      g.ellipse(sg.x, sg.y + sg.r * 0.9, sg.r * 0.95, sg.r * 0.33, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    const block = (x: number, y: number, r: number, k: number) => {
+      const pts: [number, number][] = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + k * 0.5;
+        const rr = r * (0.88 + 0.16 * Math.sin(i * 2.1 + k * 1.7));
+        pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.92]);
+      }
+      g.fillStyle = col2(base);
+      g.beginPath();
+      pts.forEach(([a, b], i) => (i ? g.lineTo(a, b) : g.moveTo(a, b)));
+      g.closePath();
+      g.fill();
+      g.fillStyle = col2(light);
+      g.beginPath();
+      g.moveTo(pts[5]![0], pts[5]![1]);
+      g.lineTo(pts[6]![0], pts[6]![1]);
+      g.lineTo(pts[7]![0], pts[7]![1]);
+      g.lineTo(pts[0]![0], pts[0]![1]);
+      g.lineTo(x, y);
+      g.closePath();
+      g.fill();
+      g.fillStyle = col2(dark);
+      g.beginPath();
+      g.moveTo(pts[1]![0], pts[1]![1]);
+      g.lineTo(pts[2]![0], pts[2]![1]);
+      g.lineTo(pts[3]![0], pts[3]![1]);
+      g.lineTo(pts[4]![0], pts[4]![1]);
+      g.lineTo(x, y);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = "#26323b";
+      g.lineWidth = 2;
+      g.beginPath();
+      pts.forEach(([a, b], i) => (i ? g.lineTo(a, b) : g.moveTo(a, b)));
+      g.closePath();
+      g.stroke();
+      if (steel && k % 2 === 0) {
+        g.fillStyle = col2(light);
+        g.beginPath();
+        g.moveTo(x - r * 0.18, y - r * 0.75);
+        g.lineTo(x, y - r * 1.25);
+        g.lineTo(x + r * 0.18, y - r * 0.75);
+        g.closePath();
+        g.fill();
+        g.stroke();
+      }
+    };
+    for (let i = N - 1; i >= 0; i--) block(segs[i]!.x, segs[i]!.y, segs[i]!.r, i + 1);
+    // the head
+    g.translate(px, py);
+    g.scale(dir, 1);
+    const H = R * 0.95;
+    const skull: [number, number][] = [[-0.95, 0.15], [-0.6, -0.85], [0.35, -1.0], [1.1, -0.35], [1.35, 0.3], [0.7, 0.75], [-0.55, 0.85]];
+    g.fillStyle = col2(base);
+    g.beginPath();
+    skull.forEach(([a, b], i) => (i ? g.lineTo(a * H, b * H) : g.moveTo(a * H, b * H)));
+    g.closePath();
+    g.fill();
+    g.fillStyle = col2(light);
+    g.beginPath();
+    g.moveTo(-0.6 * H, -0.85 * H);
+    g.lineTo(0.35 * H, -1.0 * H);
+    g.lineTo(1.1 * H, -0.35 * H);
+    g.lineTo(0.2 * H, -0.2 * H);
+    g.closePath();
+    g.fill();
+    g.fillStyle = col2(dark);
+    g.beginPath();
+    g.moveTo(-0.95 * H, 0.15 * H);
+    g.lineTo(-0.55 * H, 0.85 * H);
+    g.lineTo(0.7 * H, 0.75 * H);
+    g.lineTo(0.1 * H, 0.3 * H);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = "#26323b";
+    g.lineWidth = 2.2;
+    g.beginPath();
+    skull.forEach(([a, b], i) => (i ? g.lineTo(a * H, b * H) : g.moveTo(a * H, b * H)));
+    g.closePath();
+    g.stroke();
+    // the horn
+    g.fillStyle = col2(light);
+    g.beginPath();
+    g.moveTo(0.0 * H, -0.95 * H);
+    g.lineTo(0.3 * H, -1.85 * H);
+    g.lineTo(0.55 * H, -0.95 * H);
+    g.closePath();
+    g.fill();
+    g.stroke();
+    // a fierce eye, the mouth and two teeth
+    g.fillStyle = "#ffffff";
+    g.beginPath();
+    g.moveTo(0.45 * H, -0.3 * H);
+    g.lineTo(1.0 * H, -0.12 * H);
+    g.lineTo(0.55 * H, 0.02 * H);
+    g.closePath();
+    g.fill();
+    g.fillStyle = "#c0392b";
+    g.beginPath();
+    g.arc(0.72 * H, -0.1 * H, H * 0.07, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = "#26323b";
+    g.lineWidth = 2.4;
+    g.beginPath();
+    g.moveTo(0.35 * H, -0.42 * H);
+    g.lineTo(1.05 * H, -0.2 * H);
+    g.stroke();
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(-0.1 * H, 0.45 * H);
+    g.lineTo(1.2 * H, 0.38 * H);
+    g.stroke();
+    g.fillStyle = "#f4f4f4";
+    for (const tx of [0.45, 0.85]) {
+      g.beginPath();
+      g.moveTo(tx * H, 0.42 * H);
+      g.lineTo((tx + 0.1) * H, 0.62 * H);
+      g.lineTo((tx + 0.2) * H, 0.4 * H);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  }
+
   /** The line, fan or circle that shows where the move being aimed will go. */
   private drawAim(g: CanvasRenderingContext2D) {
     const rt = this.reticle;
@@ -2509,6 +2807,11 @@ export class ArenaRenderer {
       lift -= f.r * 0.3;
       if (moving && Math.random() < 0.3) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r), y: f.y + f.r * 0.4, vx: rnd(-40, 40), vy: rnd(-120, -40), g: 360, life: 0.5, max: 0.5, size: rnd(2, 4), grow: 0, color: "#cfeaff" });
     }
+    if (f.grabT > 0) lift += 26 + Math.sin(t * 8 + f.id) * 3;
+    if (f.flyT > 0) {
+      lift += 14;
+      spin = t * 18;
+    }
     const stretch = f.dash && !under ? 1.18 : 1;
 
     // riding the water: a wake behind, and for Ice types a sheet of ice that grows along its path
@@ -2728,8 +3031,23 @@ export class ArenaRenderer {
     const py = f.y - f.r * 0.6 - lift + oy;
     const sxx = sx * stretch;
     const syy = sy / (stretch * 0.95 + 0.05);
+    if ((f.grabT > 0 || f.flyT > 0) && !under) {
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      const gg = g.createRadialGradient(px, py, 0, px, py, f.r * 2.1);
+      gg.addColorStop(0, "rgba(255,160,235,.55)");
+      gg.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gg;
+      g.beginPath();
+      g.arc(px, py, f.r * 2.1, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
     if (under) {
       // nothing above ground
+    } else if (f.sp.id === "onix" || f.sp.id === "steelix") {
+      const tintC = f.status.frz > 0 ? "#8ee8ff" : f.tera ? col(f.tera.type) : null;
+      this.drawRockSerpent(g, f, px, py, faceLeft, hist, f.flash > 0 ? Math.min(1, f.flash * 9) : 0, tintC);
     } else if (im) {
       const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
       this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, undefined, 1, wk);

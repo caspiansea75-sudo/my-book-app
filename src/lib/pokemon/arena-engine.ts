@@ -60,6 +60,16 @@ export type Fighter = {
   status: Record<StatusKind, number> & { frzImmune: number };
   flash: number;
   stun: number;
+  /** Held in the air by a Psychic Grip, and thrown afterwards. */
+  grabT: number;
+  grabBy: number;
+  grabDmg: number;
+  flyT: number;
+  flyDx: number;
+  flyDy: number;
+  flyBy: number;
+  flyDmg: number;
+  flyHit: number[];
   kx: number;
   ky: number;
   alive: boolean;
@@ -172,6 +182,8 @@ export type Ev =
   | { t: "status"; x: number; y: number; kind: StatusKind }
   | { t: "shield"; x: number; y: number }
   | { t: "buff"; x: number; y: number; id: number; fx?: string }
+  | { t: "grab"; id: number; by: number; x: number; y: number }
+  | { t: "throw"; id: number; dx: number; dy: number; x: number; y: number }
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
@@ -408,6 +420,15 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     status: emptyStatus(),
     flash: 0,
     stun: 0,
+    grabT: 0,
+    grabBy: 0,
+    grabDmg: 0,
+    flyT: 0,
+    flyDx: 0,
+    flyDy: 0,
+    flyBy: 0,
+    flyDmg: 0,
+    flyHit: [],
     kx: 0,
     ky: 0,
     alive: true,
@@ -882,11 +903,110 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     case "heal":
       f.heal = { t: 1.2, per: (f.maxHp * mv.power) / 1.2 };
       break;
+    case "grab": {
+      const reach = mv.range ?? 380;
+      let tgt: Fighter | null = null;
+      let best = -Infinity;
+      for (const o of foesOf(S, f)) {
+        if (!o.alive || o.invuln > 0 || o.boss || o.grabT > 0 || o.flyT > 0) continue;
+        const d = len(o.x - f.x, o.y - f.y);
+        if (d > reach) continue;
+        const dot = ((o.x - f.x) * dx + (o.y - f.y) * dy) / Math.max(1, d);
+        if (dot < 0.25) continue;
+        const sc = dot * 220 - d;
+        if (sc > best) {
+          best = sc;
+          tgt = o;
+        }
+      }
+      if (!tgt) {
+        // nothing in front: only a pulse of mind power
+        boom(S, f.x + dx * 60, f.y + dy * 60, 56, mv.type, mv.fx);
+        break;
+      }
+      tgt.grabT = 1.0;
+      tgt.grabBy = f.id;
+      tgt.grabDmg = baseDamage(f, mv);
+      tgt.stun = Math.max(tgt.stun, 1.1);
+      tgt.cast = null;
+      tgt.channel = null;
+      tgt.dash = null;
+      S.events.push({ t: "grab", id: tgt.id, by: f.id, x: tgt.x, y: tgt.y });
+      boom(S, tgt.x, tgt.y, 60, mv.type, mv.fx);
+      break;
+    }
     case "buff":
       f.buffT = 6;
       f.buffMul = mv.power;
       S.events.push({ t: "buff", x: f.x, y: f.y, id: f.id, fx: mv.fx });
       break;
+  }
+}
+
+/** Held foes hover in front of their holder; thrown foes fly, hit others on the way and slam down. */
+function updateGrabs(S: State, dt: number) {
+  for (const o of S.fighters) {
+    if (!o.alive) {
+      o.grabT = 0;
+      o.flyT = 0;
+      continue;
+    }
+    if (o.grabT > 0) {
+      const by = S.fighters.find((x) => x.id === o.grabBy);
+      if (!by || !by.alive) {
+        o.grabT = 0;
+        continue;
+      }
+      o.grabT -= dt;
+      const ax = Math.cos(by.face);
+      const ay = Math.sin(by.face);
+      const k = Math.min(1, dt * 9);
+      o.x += (clamp(by.x + ax * 78, MARGIN, W - MARGIN) - o.x) * k;
+      o.y += (clamp(by.y + ay * 78, MARGIN, H - MARGIN) - o.y) * k;
+      o.kx = 0;
+      o.ky = 0;
+      o.mvx = 0;
+      o.mvy = 0;
+      o.stun = Math.max(o.stun, 0.25);
+      if (o.grabT <= 0) {
+        o.flyT = 0.42;
+        o.flyDx = ax;
+        o.flyDy = ay;
+        o.flyBy = by.id;
+        o.flyDmg = o.grabDmg;
+        o.flyHit = [];
+        o.stun = Math.max(o.stun, 0.6);
+        S.events.push({ t: "throw", id: o.id, dx: ax, dy: ay, x: o.x, y: o.y });
+      }
+    } else if (o.flyT > 0) {
+      const src = S.fighters.find((x) => x.id === o.flyBy);
+      o.flyT -= dt;
+      o.kx = 0;
+      o.ky = 0;
+      o.mvx = 0;
+      o.mvy = 0;
+      o.stun = Math.max(o.stun, 0.25);
+      const nx = o.x + o.flyDx * 980 * dt;
+      const ny = o.y + o.flyDy * 980 * dt;
+      const cx = clamp(nx, MARGIN, W - MARGIN);
+      const cy = clamp(ny, MARGIN, H - MARGIN);
+      const wall = cx !== nx || cy !== ny;
+      o.x = cx;
+      o.y = cy;
+      if (src && src.alive) {
+        for (const q of S.fighters) {
+          if (q === o || !q.alive || q.team === src.team || o.flyHit.includes(q.id) || len(q.x - o.x, q.y - o.y) > q.r + o.r) continue;
+          o.flyHit.push(q.id);
+          strike(S, src, q, o.flyDmg * 0.55, "Psychic", { kx: o.flyDx, ky: o.flyDy, kb: 260 });
+        }
+      }
+      if (o.flyT <= 0 || wall) {
+        o.flyT = 0;
+        boom(S, o.x, o.y, 78, "Psychic", "slam");
+        if (src) strike(S, src, o, o.flyDmg, "Psychic", { kx: o.flyDx, ky: o.flyDy, kb: 120 });
+        o.stun = Math.max(o.stun, 0.5);
+      }
+    }
   }
 }
 
@@ -1097,6 +1217,7 @@ const useRange = (mv: MoveDef): [number, number] => {
     case "nova": return [0, (mv.range ?? 130) * 0.85];
     case "lob": return [90, mv.range ?? 320];
     case "bolt": return [100, (mv.range ?? 480) * 0.9];
+    case "grab": return [60, (mv.range ?? 380) * 0.85];
     default: return [0, 9999];
   }
 };
@@ -1606,6 +1727,8 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     }
   }
   S.projs = S.projs.filter((p2) => p2.life > 0);
+
+  updateGrabs(S, dt);
 
   // ---- zones (telegraphed circles and lines)
   for (const z of S.zones) {

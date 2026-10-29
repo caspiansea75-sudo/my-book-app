@@ -17,7 +17,8 @@ export type MoveKind =
   | "bolt" //   a long line that strikes after a short wind-up
   | "guard" //  a shield
   | "heal" //   recovery over a moment
-  | "buff"; //  more damage for a while
+  | "buff" //  more damage for a while
+  | "grab"; //  lift a foe in front of you, then throw it
 
 export type StatusKind = "brn" | "psn" | "par" | "frz";
 
@@ -80,7 +81,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "stoneedge", name: "Stone Edge", type: "Rock", kind: "spread", power: 0.85, cd: 2.4, n: 4, speed: 500, desc: "Jagged stones fly out." }),
     m({ id: "rockslide", name: "Rock Slide", type: "Rock", kind: "lob", power: 1.9, cd: 5, range: 320, windup: 0.5, desc: "Boulders fall on the spot." }),
     m({ id: "psybeam", name: "Psybeam", type: "Psychic", kind: "proj", power: 1.0, cd: 1.2, speed: 520, desc: "A shimmering ray." }),
-    m({ id: "psychic", name: "Psychic", type: "Psychic", kind: "nova", power: 1.6, cd: 4.4, range: 140, windup: 0.3, desc: "A burst of mind power." }),
+    m({ id: "psychic", name: "Psychic", type: "Psychic", kind: "nova", power: 1.6, cd: 4.4, range: 140, windup: 0.3, fx: "levitate", desc: "A burst of mind power." }),
     m({ id: "psystrike", name: "Psystrike", type: "Psychic", kind: "proj", power: 2.2, cd: 3.2, speed: 460, pierce: true, desc: "A piercing psychic blast." }),
     m({ id: "moonblast", name: "Moonblast", type: "Fairy", kind: "lob", power: 1.9, cd: 4.8, range: 330, windup: 0.5, desc: "Moonlight falls on the spot." }),
     m({ id: "calmmind", name: "Calm Mind", type: "Psychic", kind: "buff", power: 1.4, cd: 10, desc: "Focus: hit much harder for a while." }),
@@ -113,6 +114,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "phantomforce", name: "Phantom Force", type: "Ghost", kind: "dash", power: 1.9, cd: 5.0, range: 270, desc: "Vanish and strike." }),
     m({ id: "kingsshield", name: "King's Shield", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Block almost everything for a moment." }),
     m({ id: "hyperbeam", name: "Hyper Beam", type: "Normal", kind: "bolt", power: 3.2, cd: 8, range: 560, windup: 0.7, pierce: true, desc: "An enormous beam after a long charge." }),
+    m({ id: "psychicgrip", name: "Psychic Grip", type: "Psychic", kind: "grab", power: 2.6, cd: 7, range: 380, fx: "levitate", desc: "Lift a foe with your mind, hold it, then hurl it away." }),
     m({ id: "firespin", name: "Fire Spin", type: "Fire", kind: "lob", power: 1.4, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, status: { kind: "brn", chance: 0.35 }, fx: "firespin", desc: "A fire tornado that stays and keeps burning." }),
     m({ id: "whirlpool", name: "Whirlpool", type: "Water", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "whirlpool", desc: "A whirlpool that holds foes in its swirl." }),
     m({ id: "sandtomb", name: "Sand Tomb", type: "Ground", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "sandtomb", desc: "A column of sand that traps and scrapes." }),
@@ -187,7 +189,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "oblivionwing", name: "Oblivion Wing", type: "Flying", kind: "homing", power: 1.2, cd: 2.4, speed: 440, desc: "Wings of light seek the foe." }),
     m({ id: "futuresight", name: "Future Sight", type: "Psychic", kind: "lob", power: 2.4, cd: 6.4, range: 340, windup: 0.8, desc: "An attack from the future lands soon." }),
     m({ id: "psyshock", name: "Psyshock", type: "Psychic", kind: "proj", power: 1.4, cd: 1.9, speed: 520, desc: "A psychic shot." }),
-    m({ id: "extrasensory", name: "Extrasensory", type: "Psychic", kind: "nova", power: 1.5, cd: 4, range: 150, windup: 0.25, desc: "A mind burst all around." }),
+    m({ id: "extrasensory", name: "Extrasensory", type: "Psychic", kind: "nova", power: 1.5, cd: 4, range: 150, windup: 0.25, fx: "levitate", desc: "A mind burst all around." }),
     m({ id: "psychocut", name: "Psycho Cut", type: "Psychic", kind: "spread", power: 0.75, cd: 2.2, n: 3, speed: 560, desc: "Blades of mind power." }),
     m({ id: "photongeyser", name: "Photon Geyser", type: "Psychic", kind: "lob", power: 2.6, cd: 6.5, range: 330, windup: 0.6, desc: "A pillar of light." }),
     m({ id: "prismaticlaser", name: "Prismatic Laser", type: "Psychic", kind: "bolt", power: 3.0, cd: 7.5, range: 540, windup: 0.7, pierce: true, fx: "laser", desc: "A dazzling laser." }),
@@ -334,7 +336,7 @@ export const ROSTER: Species[] = [
   { id: "tatsugiri", num: 978, name: "Tatsugiri", types: ["Dragon", "Water"], bs: [68, 50, 60, 120, 95, 82], moves: ["dragonpulse", "hydropump", "dracometeor", "calmmind"], role: "shooter", size: 20, blurb: "Small, but it sits in a very big dragon." },
   { id: "meowstic", num: 678, name: "Meowstic", types: ["Psychic"], bs: [74, 48, 76, 83, 81, 104], moves: ["psybeam", "shadowball", "calmmind", "recover"], role: "shooter", size: 22, blurb: "Quick psychic cat." },
   { id: "magearna", num: 801, name: "Magearna", types: ["Steel", "Fairy"], bs: [80, 95, 115, 130, 115, 65], moves: ["flashcannon", "moonblast", "shadowball", "kingsshield"], role: "bomber", size: 28, blurb: "A wind-up wonder. Mega form too." },
-  { id: "mewtwo", num: 150, name: "Mewtwo", types: ["Psychic"], bs: [106, 110, 90, 154, 90, 130], moves: ["psystrike", "shadowball", "aurasphere", "recover"], role: "shooter", size: 30, blurb: "The first boss. Reach wave 5 to play as it.", unlock: 5 },
+  { id: "mewtwo", num: 150, name: "Mewtwo", types: ["Psychic"], bs: [106, 110, 90, 154, 90, 130], moves: ["psystrike", "shadowball", "psychicgrip", "recover"], role: "shooter", size: 30, blurb: "The first boss. Reach wave 5 to play as it.", unlock: 5 },
   { id: "rayquaza", num: 384, name: "Rayquaza", types: ["Dragon", "Flying"], bs: [105, 150, 90, 150, 90, 95], moves: ["dragonpulse", "dracometeor", "aerialace", "outrage"], role: "brawler", size: 34, blurb: "The sky boss. Reach wave 10 to play as it.", unlock: 10 },
   { id: "onix", num: 95, name: "Onix", types: ["Rock", "Ground"], bs: [65, 75, 160, 35, 50, 70], moves: ["rockslide", "irontail", "earthquake", "protect"], role: "brawler", size: 38, blurb: "A giant rock snake. Slow to hurt, heavy to meet." },
   { id: "steelix", num: 208, name: "Steelix", types: ["Steel", "Ground"], bs: [75, 85, 200, 55, 65, 30], moves: ["ironhead", "earthquake", "stoneedge", "irondefense"], role: "brawler", size: 40, blurb: "An iron serpent with a huge guard." },
@@ -623,7 +625,7 @@ export function movePool(id: string): string[] {
   const known = LEARNSETS[id];
   let list: string[];
   if (known) {
-    const set = new Set(known.filter((m) => MOVES[m]));
+    const set = new Set([...sp.moves, ...known].filter((m) => MOVES[m]));
     for (const k of Object.keys(MOVES)) if (sp.types.includes(MOVES[k]!.type) && !SIGNATURE.has(k)) set.add(k);
     list = [...set];
   }
