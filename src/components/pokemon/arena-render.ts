@@ -2171,6 +2171,10 @@ export class ArenaRenderer {
     const grow = Math.min(1, age / 0.35);
     const fade = Math.min(1, z.life / 0.45);
     const R = z.r;
+    if (fx === "frenzyplant") {
+      this.drawRoots(g, z, age, fade);
+      return;
+    }
     if (fx === "firespin") {
       this.drawFireSpin(g, z, grow, fade);
       return;
@@ -2231,6 +2235,52 @@ export class ArenaRenderer {
       const an = Math.random() * Math.PI * 2;
       this.parts.push({ kind: "dot", x: z.x + Math.cos(an) * R * 0.9, y: z.y + Math.sin(an) * R * 0.3, vx: Math.cos(an + 1.6) * 90, vy: rnd(-200, -110), g: fx === "firespin" ? -40 : 120, life: 0.7, max: 0.7, size: rnd(2, 4), grow: 0, color: fx === "firespin" ? (Math.random() < 0.5 ? c1 : c2) : c1 });
     }
+  }
+
+  /** Frenzy Plant: a field of twisted thorny roots erupting out of the ground inside a green ring. */
+  private drawRoots(g: CanvasRenderingContext2D, z: State["zones"][number], age: number, fade: number) {
+    const R = z.r * 1.25;
+    const seed = (n: number) => { const v = Math.sin(z.x * 12.9898 + z.y * 78.233 + n * 37.719) * 43758.5453; return v - Math.floor(v); };
+    g.save();
+    g.globalAlpha = fade;
+    g.fillStyle = "rgba(120,190,60,.14)";
+    g.strokeStyle = "rgba(190,230,90,.7)";
+    g.lineWidth = 2;
+    g.beginPath(); g.ellipse(z.x, z.y, R, R * 0.7, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.strokeStyle = "rgba(60,40,20,.5)";
+    for (let k = 0; k < 7; k++) { // cracks in the floor
+      const a = seed(k + 90) * 6.28, l = R * (0.4 + seed(k + 91) * 0.5);
+      g.beginPath(); g.moveTo(z.x, z.y); g.lineTo(z.x + Math.cos(a) * l, z.y + Math.sin(a) * l * 0.7); g.stroke();
+    }
+    const N = 26;
+    const roots: { x: number; y: number; k: number }[] = [];
+    for (let k = 0; k < N; k++) {
+      const a = seed(k) * 6.283, d = Math.sqrt(seed(k + 40)) * R * 0.92;
+      roots.push({ x: z.x + Math.cos(a) * d, y: z.y + Math.sin(a) * d * 0.7, k });
+    }
+    roots.sort((a, b) => a.y - b.y);
+    for (const r of roots) {
+      const delay = seed(r.k + 5) * 0.35;
+      const up = Math.min(1, Math.max(0, (age - delay) / 0.3));
+      if (up <= 0) continue;
+      const h = (26 + seed(r.k + 7) * 26) * up;
+      const sway = Math.sin(this.t * 3 + r.k) * 2.5;
+      const twist = seed(r.k + 9) * 6;
+      const pts: [number, number][] = [];
+      for (let i = 0; i <= 8; i++) { const u = i / 8; pts.push([r.x + Math.sin(u * 5 + twist) * 5 * u + sway * u, r.y - u * h]); }
+      g.lineCap = "round"; g.lineJoin = "round";
+      g.strokeStyle = "#3b2a14"; g.lineWidth = 6.5;
+      g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
+      g.strokeStyle = "#9a7440"; g.lineWidth = 4;
+      g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
+      g.strokeStyle = "#c9a468"; g.lineWidth = 1.2;
+      g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0] - 1, q[1]) : g.moveTo(q[0] - 1, q[1]))); g.stroke();
+      g.fillStyle = "#6fae3a"; // leaf buds
+      for (let i = 3; i < 8; i += 2) { const q = pts[i]!; const sd = i % 4 === 3 ? -1 : 1; g.beginPath(); g.ellipse(q[0] + sd * 4, q[1], 4, 2, sd * 0.6, 0, 6.3); g.fill(); }
+      const t = pts[8]!; g.fillStyle = "#cfe87a"; g.beginPath(); g.arc(t[0], t[1], 2.4, 0, 6.3); g.fill();
+    }
+    g.restore();
+    if (age < 0.5 && Math.random() < 0.7) this.parts.push({ kind: "dot", x: z.x + rnd(-R, R) * 0.9, y: z.y + rnd(-R, R) * 0.5, vx: rnd(-50, 50), vy: rnd(-160, -70), g: 360, life: 0.6, max: 0.6, size: rnd(2, 4), grow: 0, color: Math.random() < 0.5 ? "#8a6a3e" : "#6fae3a" });
   }
 
   /** Rocks rising off the floor in a psychic pulse: they bob for a few seconds, then drop and crumble. */
@@ -2697,35 +2747,61 @@ export class ArenaRenderer {
     void first;
     g.save();
     if (type === "Water") {
-      // two thin streams twisting round each other, a bright core, spray at the tip
-      g.globalCompositeOperation = "lighter";
+      // a thick wavy jet: tapered body with a dark rim, scrolling white wave crests, foam on the edges and a white swirl splash at the tip
+      const half = (d: number) => (7 + Math.min(1, d / 90) * 8) * (0.9 + Math.sin(d * 0.05 - t * 14) * 0.1);
+      const edge = (side: number) => {
+        const pts: [number, number][] = [];
+        for (let d = 0; d <= len; d += 6) {
+          const w = Math.sin(d * 0.045 - t * 12) * 3.5;
+          pts.push([mx + ux * d + nx * (w + side * half(d)), my + uy * d + ny * (w + side * half(d))]);
+        }
+        return pts;
+      };
+      const L = edge(-1), Rr = edge(1).reverse();
+      const body = (grow: number, fill: string | CanvasGradient) => {
+        g.fillStyle = fill;
+        g.beginPath();
+        L.forEach((p, i) => (i ? g.lineTo(p[0] + nx * 0, p[1]) : g.moveTo(p[0], p[1])));
+        Rr.forEach((p) => g.lineTo(p[0], p[1]));
+        g.closePath();
+        if (grow) { g.lineWidth = grow; g.strokeStyle = fill; g.lineJoin = "round"; g.stroke(); }
+        g.fill();
+      };
+      body(5, "#14498f");
+      const grad = g.createLinearGradient(mx, my, last.x, last.y);
+      grad.addColorStop(0, "#5fb4ff"); grad.addColorStop(1, "#2f86e6");
+      body(0, grad);
       g.lineCap = "round";
-      g.strokeStyle = "rgba(60,150,255,.3)";
-      g.lineWidth = 16;
-      g.beginPath();
-      g.moveTo(mx, my);
-      g.lineTo(last.x, last.y);
-      g.stroke();
-      for (const ph of [0, Math.PI]) {
-        g.strokeStyle = ph ? "#9ddcff" : "#4aa8ff";
-        g.lineWidth = 5;
+      g.strokeStyle = "rgba(190,230,255,.85)"; g.lineWidth = 2.5;
+      for (const side of [-0.45, 0.45]) { // glossy streaks
         g.beginPath();
         for (let d = 0; d <= len; d += 8) {
-          const w = Math.sin(d * 0.07 - t * 22 + ph) * (4 + Math.min(1, d / 120) * 5);
-          const x = mx + ux * d + nx * w;
-          const y = my + uy * d + ny * w;
-          if (d === 0) g.moveTo(x, y);
-          else g.lineTo(x, y);
+          const w = Math.sin(d * 0.045 - t * 12) * 3.5 + side * half(d);
+          const x = mx + ux * d + nx * w, y = my + uy * d + ny * w;
+          if (d === 0) g.moveTo(x, y); else g.lineTo(x, y);
         }
         g.stroke();
       }
-      g.strokeStyle = "#ffffff";
-      g.lineWidth = 3;
-      g.beginPath();
-      g.moveTo(mx, my);
-      g.lineTo(last.x, last.y);
-      g.stroke();
-    } else if (type === "Fire") {
+      g.strokeStyle = "#ffffff"; g.lineWidth = 2.2; // crest chevrons flowing outward
+      const off = (t * 150) % 22;
+      for (let d = off; d < len; d += 22) {
+        const h = half(d), w = Math.sin(d * 0.045 - t * 12) * 3.5;
+        const cx = mx + ux * d + nx * w, cy = my + uy * d + ny * w;
+        g.beginPath();
+        g.moveTo(cx - nx * h * 0.8 - ux * 5, cy - ny * h * 0.8 - uy * 5);
+        g.lineTo(cx + ux * 4, cy + uy * 4);
+        g.lineTo(cx + nx * h * 0.8 - ux * 5, cy + ny * h * 0.8 - uy * 5);
+        g.stroke();
+      }
+      // the splash: spiralling white arcs
+      g.strokeStyle = "#ffffff"; g.lineWidth = 3;
+      for (let k = 0; k < 3; k++) {
+        const r0 = 12 + k * 7, a0 = t * 9 + k * 2.1;
+        g.beginPath(); g.arc(last.x, last.y, r0, a0, a0 + 2.4); g.stroke();
+      }
+      g.fillStyle = "#ffffff";
+      g.beginPath(); g.arc(last.x, last.y, 6, 0, 6.3); g.fill();
+        } else if (type === "Fire") {
       // a rolling tube of flame: stacked blobs, wider toward the end
       for (let d = 0; d <= len; d += 11) {
         const k = d / Math.max(1, len);
@@ -2782,6 +2858,44 @@ export class ArenaRenderer {
         g.lineTo(sx - 3.5, sy);
         g.closePath();
         g.fill();
+      }
+    } else if (type === "Ghost" || type === "Dark") {
+      // a thin crackling violet beam, dark halo, white-violet core and drifting sparkles
+      g.lineCap = "round"; g.lineJoin = "round";
+      g.strokeStyle = "rgba(25,5,45,.55)"; g.lineWidth = 20;
+      g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      g.globalCompositeOperation = "lighter";
+      for (const [w, cc] of [[11, "rgba(150,60,255,.55)"], [5, "#c77dff"]] as const) {
+        g.strokeStyle = cc; g.lineWidth = w;
+        g.beginPath();
+        for (let d = 0; d <= len; d += 7) {
+          const j = Math.sin(d * 0.3 - t * 40) * (w > 6 ? 2.5 : 1.5) * Math.min(1, d / 40);
+          const x = mx + ux * d + nx * j, y = my + uy * d + ny * j;
+          if (d === 0) g.moveTo(x, y); else g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+      g.strokeStyle = "#f4e6ff"; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      g.fillStyle = "#e9c9ff";
+      for (let k = 0; k < 7; k++) {
+        const d = ((t * 120 + k * 37) % Math.max(20, len));
+        const sw = Math.sin(k * 5 + t * 6) * 12;
+        g.beginPath(); g.arc(mx + ux * d + nx * sw, my + uy * d + ny * sw, 1.8, 0, 6.3); g.fill();
+      }
+    } else if (type === "Psychic") {
+      // a thick pink beam with bright core and rings sliding along it
+      g.lineCap = "round";
+      g.globalCompositeOperation = "lighter";
+      for (const [w, cc] of [[34, "rgba(255,90,200,.25)"], [20, "rgba(255,120,220,.6)"], [9, "#ffd0f2"], [4, "#ffffff"]] as const) {
+        g.strokeStyle = cc; g.lineWidth = w * (0.92 + Math.sin(t * 28) * 0.08);
+        g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      }
+      g.strokeStyle = "rgba(255,230,250,.9)"; g.lineWidth = 2.5;
+      const o = (t * 220) % 40;
+      for (let d = o; d < len; d += 40) {
+        const cx = mx + ux * d, cy = my + uy * d, h = 14 + Math.min(1, d / 120) * 6;
+        g.beginPath(); g.ellipse(cx, cy, 5, h, Math.atan2(uy, ux), 0, 6.3); g.stroke();
       }
     } else {
       g.globalCompositeOperation = "lighter";
