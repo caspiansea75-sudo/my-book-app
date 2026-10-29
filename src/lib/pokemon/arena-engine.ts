@@ -893,7 +893,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     }
     case "bolt": {
       const range = mv.range ?? 480;
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "line", x: f.x, y: f.y, x2: f.x + dx * range, y2: f.y + dy * range, r: 20, delay: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), total: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), life: 0.3, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 200, struck: false, mv, player: f.isPlayer });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "line", x: f.x, y: f.y, x2: f.x + dx * range, y2: f.y + dy * range, r: 20, delay: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), total: (mv.windup ?? 0.5) * (f.isPlayer ? 0.35 : 1), life: 0.55, dmg: baseDamage(f, mv), type: mv.type, status: mv.status, kb: 200, struck: false, mv, player: f.isPlayer });
       break;
     }
     case "guard":

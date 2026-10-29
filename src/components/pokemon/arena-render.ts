@@ -60,6 +60,7 @@ export class ArenaRenderer {
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private clones = new Map<number, number>();
   /** Rocks lifted off the floor by a psychic pulse. */
+  private waves: { x: number; y: number; r: number; t: number; life: number; kind: string }[] = [];
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
@@ -550,7 +551,15 @@ export class ArenaRenderer {
         this.parts.push({ kind: "bolt", x: x + rnd(-50, 50), y: -60, vx: 0, vy: 0, g: 0, life: 0.32, max: 0.32, size: 1, grow: 0, color: "#ffe14d", x2: x, y2: y, seed: Math.floor(x) });
         this.flashT = Math.max(this.flashT, 0.12);
         break;
+      case "heatwave":
+      case "hypervoice":
+      case "sludgewave":
+        this.waves.push({ x, y, r, t: 0, life: 0.85, kind: e.fx });
+        if (e.fx === "sludgewave") for (let i = 0; i < 18; i++) this.parts.push({ kind: "dot", x, y, vx: Math.cos(i) * rnd(r, r * 2.2), vy: Math.sin(i) * rnd(r, r * 2.2) * 0.6 - 60, g: 300, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3, 6), grow: 0, color: i % 2 ? "#a855f7" : "#5b8c2a" });
+        if (e.fx === "heatwave") this.shake = Math.max(this.shake, 6);
+        break;
       case "surf":
+        this.waves.push({ x, y, r, t: 0, life: 0.9, kind: "surf" });
         // curved blades of water spinning outward, then a wave of foam rolling out
         for (let i = 0; i < 4; i++) {
           const a0 = (i / 4) * Math.PI * 2;
@@ -750,6 +759,7 @@ export class ArenaRenderer {
     this.drawItems(g, S);
     this.drawZones(g, S);
     this.drawTelegraphs(g, S);
+    this.drawWaves(g, dt);
     this.drawRocks(g, dt);
     this.drawTethers(g, S);
 
@@ -1865,7 +1875,7 @@ export class ArenaRenderer {
         this.drawWhirl(g, z);
       } else {
         // the strike itself
-        const a = Math.max(0, z.life / (z.shape === "line" ? 0.3 : 0.35));
+        const a = Math.max(0, z.life / (z.shape === "line" ? 0.55 : 0.35));
         g.save();
         g.globalCompositeOperation = "lighter";
         g.globalAlpha = a;
@@ -1916,6 +1926,8 @@ export class ArenaRenderer {
           g.fill();
         } else if (z.type === "Electric") {
           drawLightning(g, z.x, z.y, z.x2, z.y2, "#ffe14d", a, z.id + Math.floor(this.t * 20), 5);
+        } else if (z.shape === "line") {
+          this.drawFancyBeam(g, z, a);
         } else {
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
           const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
@@ -2281,6 +2293,155 @@ export class ArenaRenderer {
     }
     g.restore();
     if (age < 0.5 && Math.random() < 0.7) this.parts.push({ kind: "dot", x: z.x + rnd(-R, R) * 0.9, y: z.y + rnd(-R, R) * 0.5, vx: rnd(-50, 50), vy: rnd(-160, -70), g: 360, life: 0.6, max: 0.6, size: rnd(2, 4), grow: 0, color: Math.random() < 0.5 ? "#8a6a3e" : "#6fae3a" });
+  }
+
+  /** A real wave: a rippled band that rolls outward from the caster with a scalloped crest and a fading wake. */
+  private drawWaves(g: CanvasRenderingContext2D, dt: number) {
+    if (!this.waves.length) return;
+    const keep: typeof this.waves = [];
+    const pal: Record<string, [string, string, string, string]> = {
+      surf: ["#1d6fd1", "#59b4ff", "#ffffff", "#0d3a7a"],
+      sludgewave: ["#5a2a86", "#9a4fd6", "#c6e86a", "#2b1048"],
+      heatwave: ["#ff5a1a", "#ffa62e", "#fff0a8", "#8a1c08"],
+      hypervoice: ["#e8e4d8", "#ffffff", "#ffffff", "#a9a395"],
+    };
+    for (const w of this.waves) {
+      w.t += dt;
+      if (w.t >= w.life) continue;
+      keep.push(w);
+      const k = w.t / w.life;
+      const ease = 1 - Math.pow(1 - k, 2.2);
+      const R = w.r * (0.25 + 1.0 * ease);
+      const [c0, c1, c2, dk] = pal[w.kind] ?? pal.surf!;
+      const fade = Math.min(1, (1 - k) * 2.2);
+      const N = w.kind === "hypervoice" ? 0 : w.kind === "heatwave" ? 16 : 11;
+      const amp = w.kind === "heatwave" ? 7 : 6 + R * 0.04;
+      const rad = (a: number, off: number) => R + off + (N ? Math.sin(a * N + this.t * 10) * amp * (1 - k * 0.4) : 0);
+      const thick = Math.max(10, w.r * 0.3) * (1 - k * 0.5);
+      g.save();
+      g.translate(w.x, w.y);
+      g.scale(1, 0.78);
+      g.globalAlpha = fade;
+      const STEP = 0.07;
+      const band = (inner: number, outer: number) => {
+        g.beginPath();
+        for (let a = 0; a <= Math.PI * 2 + STEP; a += STEP) g.lineTo(Math.cos(a) * rad(a, outer), Math.sin(a) * rad(a, outer));
+        for (let a = Math.PI * 2; a >= -STEP; a -= STEP) g.lineTo(Math.cos(a) * rad(a, inner), Math.sin(a) * rad(a, inner));
+        g.closePath();
+      };
+      // wake behind the crest
+      const wake = g.createRadialGradient(0, 0, Math.max(1, R - thick * 2.6), 0, 0, R + 4);
+      wake.addColorStop(0, "rgba(0,0,0,0)");
+      wake.addColorStop(1, c0 + "aa");
+      g.fillStyle = wake;
+      g.beginPath(); g.arc(0, 0, R + 4, 0, Math.PI * 2); g.fill();
+      // the body of the wave, dark rim first, then the bright face
+      g.fillStyle = dk;
+      band(-thick - 3, 6);
+      g.fill();
+      const gr = g.createRadialGradient(0, 0, Math.max(1, R - thick), 0, 0, R + 4);
+      gr.addColorStop(0, c0); gr.addColorStop(0.7, c1); gr.addColorStop(1, c2);
+      g.fillStyle = gr;
+      band(-thick, 2);
+      g.fill();
+      // scalloped crest of foam
+      g.strokeStyle = c2; g.lineWidth = 3.5; g.lineJoin = "round";
+      g.beginPath();
+      for (let a = 0; a <= Math.PI * 2 + STEP; a += STEP) g.lineTo(Math.cos(a) * rad(a, 5), Math.sin(a) * rad(a, 5));
+      g.stroke();
+      // a few trailing swell lines
+      g.lineWidth = 1.8; g.globalAlpha = fade * 0.65;
+      for (const off of [-thick - 12, -thick - 24]) {
+        g.beginPath();
+        for (let a = 0; a <= Math.PI * 2 + STEP; a += STEP) g.lineTo(Math.cos(a) * rad(a, off), Math.sin(a) * rad(a, off));
+        g.stroke();
+      }
+      if (w.kind === "hypervoice") { // sound rings
+        g.globalAlpha = fade; g.lineWidth = 3;
+        for (const o of [0, -22, -44]) { g.beginPath(); g.arc(0, 0, Math.max(2, R + o), 0, Math.PI * 2); g.stroke(); }
+      }
+      g.restore();
+      if (Math.random() < 0.9) {
+        const a = Math.random() * Math.PI * 2;
+        const px = w.x + Math.cos(a) * R, py = w.y + Math.sin(a) * R * 0.78;
+        if (w.kind === "sludgewave") this.parts.push({ kind: "dot", x: px, y: py, vx: Math.cos(a) * 40, vy: rnd(-120, -40), g: 300, life: 0.5, max: 0.5, size: rnd(2.5, 5), grow: 0, color: Math.random() < 0.5 ? "#c6e86a" : "#9a4fd6" });
+        else if (w.kind === "heatwave") this.parts.push({ kind: "smoke", x: px, y: py, vx: Math.cos(a) * 30, vy: rnd(-90, -40), g: 0, life: 0.6, max: 0.6, size: rnd(6, 10), grow: 14, color: "#ffd9a0" });
+        else this.parts.push({ kind: "dot", x: px, y: py, vx: Math.cos(a) * 50, vy: rnd(-140, -50), g: 340, life: 0.45, max: 0.45, size: rnd(1.8, 3.5), grow: 0, color: "#ffffff" });
+      }
+    }
+    this.waves = keep;
+  }
+
+  /** A fancy beam for the big line attacks: pulsing glow, twin spiralling strands, travelling pulses, sparkles, a charge orb at the source and a flare where it lands. */
+  private drawFancyBeam(g: CanvasRenderingContext2D, z: State["zones"][number], a: number) {
+    const pal: Record<string, [string, string, string]> = {
+      Grass: ["#7be04a", "#fff3a0", "#ffffff"],
+      Water: ["#3aa0ff", "#bfe8ff", "#ffffff"],
+      Fire: ["#ff6a1a", "#ffd24d", "#fff7d0"],
+      Ice: ["#7fd8ff", "#dff6ff", "#ffffff"],
+      Dragon: ["#7a5cff", "#4fe3ff", "#ffffff"],
+      Fairy: ["#ff8fd8", "#ffd6f2", "#ffffff"],
+      Steel: ["#9fb4c4", "#e4eef5", "#ffffff"],
+      Ghost: ["#9a4fe0", "#d9b3ff", "#ffffff"],
+      Dark: ["#6a3ab0", "#b58cff", "#ffffff"],
+      Psychic: ["#ff6fd0", "#ffd0f2", "#ffffff"],
+      Flying: ["#9ad6ff", "#e8f7ff", "#ffffff"],
+      Normal: ["#ffd86b", "#fff3c9", "#ffffff"],
+      Poison: ["#b04fe0", "#e6b3ff", "#ffffff"],
+      Bug: ["#9ad03a", "#e5ffa8", "#ffffff"],
+      Rock: ["#b89a68", "#efe0b8", "#ffffff"],
+      Ground: ["#c8a050", "#f0dca0", "#ffffff"],
+      Fighting: ["#ff6a4a", "#ffd0b8", "#ffffff"],
+    };
+    const [c0, c1, c2] = pal[z.type] ?? pal.Normal!;
+    const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
+    const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
+    const t = this.t;
+    const W = z.r * (0.8 + Math.sin(t * 40) * 0.06) * (a > 0.8 ? 1 : 0.4 + a * 0.75);
+    g.translate(z.x, z.y);
+    g.rotate(ang);
+    g.lineCap = "round";
+    // outer halo, a soft gradient across the beam
+    const cg = g.createLinearGradient(0, -W * 1.8, 0, W * 1.8);
+    cg.addColorStop(0, "rgba(0,0,0,0)"); cg.addColorStop(0.5, c0); cg.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = a * 0.55; g.fillStyle = cg; g.fillRect(0, -W * 1.8, L, W * 3.6);
+    g.globalAlpha = a * 0.85; g.fillStyle = c0; g.fillRect(0, -W * 0.85, L, W * 1.7);
+    g.globalAlpha = a; g.fillStyle = c1; g.fillRect(0, -W * 0.5, L, W);
+    // twin spiral strands
+    for (const ph of [0, Math.PI]) {
+      g.strokeStyle = ph ? c2 : c1; g.lineWidth = 2.6; g.globalAlpha = a * 0.9;
+      g.beginPath();
+      for (let d = 0; d <= L; d += 6) { const y = Math.sin(d * 0.045 - t * 26 + ph) * W * 1.05; if (d === 0) g.moveTo(d, y); else g.lineTo(d, y); }
+      g.stroke();
+    }
+    // white-hot core
+    g.globalAlpha = a; g.fillStyle = c2; g.fillRect(0, -W * 0.2, L, W * 0.4);
+    // pulses sliding down the beam
+    g.fillStyle = c2; g.globalAlpha = a * 0.9;
+    for (let d = (t * 520) % 80; d < L; d += 80) { g.beginPath(); g.ellipse(d, 0, 14, W * 0.62, 0, 0, Math.PI * 2); g.fill(); }
+    // rings (psychic/dragon/fairy get extra)
+    if (z.type === "Psychic" || z.type === "Dragon" || z.type === "Fairy") {
+      g.strokeStyle = c2; g.lineWidth = 2.5;
+      for (let d = (t * 300) % 54; d < L; d += 54) { g.beginPath(); g.ellipse(d, 0, W * 0.25, W * 1.5, 0, 0, Math.PI * 2); g.stroke(); }
+    }
+    // motes drifting off the beam
+    g.fillStyle = c2;
+    for (let k = 0; k < 18; k++) {
+      const d = (k * 61 + t * 160 * (1 + (k % 3) * 0.3)) % Math.max(30, L);
+      const y = Math.sin(k * 7.3 + t * 5) * W * 1.9;
+      g.globalAlpha = a * (0.5 + 0.5 * Math.sin(k + t * 20));
+      g.beginPath(); g.arc(d, y, 1.6 + (k % 3) * 0.7, 0, Math.PI * 2); g.fill();
+    }
+    // charge orb at the source and a flare where it lands
+    for (const [x, r] of [[0, W * 2.2], [L, W * 2.6]] as const) {
+      const rg = g.createRadialGradient(x, 0, 0, x, 0, r);
+      rg.addColorStop(0, "#fff"); rg.addColorStop(0.35, c1); rg.addColorStop(1, "rgba(0,0,0,0)");
+      g.globalAlpha = a; g.fillStyle = rg; g.beginPath(); g.arc(x, 0, r, 0, Math.PI * 2); g.fill();
+    }
+    // starburst at the end
+    g.strokeStyle = c2; g.lineWidth = 2; g.globalAlpha = a * 0.8;
+    for (let i = 0; i < 8; i++) { const aa = (i / 8) * Math.PI * 2 + t * 6; g.beginPath(); g.moveTo(L + Math.cos(aa) * W, Math.sin(aa) * W); g.lineTo(L + Math.cos(aa) * W * 2.6, Math.sin(aa) * W * 2.6); g.stroke(); }
+    if (Math.random() < 0.8) { const d = Math.random() * L; this.parts.push({ kind: "dot", x: z.x + Math.cos(ang) * d + rnd(-6, 6), y: z.y + Math.sin(ang) * d + rnd(-6, 6), vx: rnd(-60, 60), vy: rnd(-80, -10), g: 0, life: 0.5, max: 0.5, size: rnd(2, 4), grow: 0, color: Math.random() < 0.5 ? c1 : c0 }); }
   }
 
   /** Rocks rising off the floor in a psychic pulse: they bob for a few seconds, then drop and crumble. */

@@ -172,7 +172,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "gunkshot", name: "Gunk Shot", type: "Poison", kind: "lob", power: 2.2, cd: 5.5, range: 330, windup: 0.5, status: { kind: "psn", chance: 0.5 }, fx: "sludgebomb", desc: "Garbage hurled at the spot." }),
     m({ id: "venoshock", name: "Venoshock", type: "Poison", kind: "proj", power: 1.2, cd: 1.7, speed: 460, status: { kind: "psn", chance: 0.4 }, desc: "A shot of venom." }),
     m({ id: "acidspray", name: "Acid Spray", type: "Poison", kind: "spread", power: 0.6, cd: 2, n: 5, speed: 500, status: { kind: "psn", chance: 0.2 }, desc: "A fan of acid." }),
-    m({ id: "sludgewave", name: "Sludge Wave", type: "Poison", kind: "nova", power: 1.8, cd: 5, range: 160, windup: 0.3, status: { kind: "psn", chance: 0.4 }, fx: "sludgebomb", desc: "A wave of sludge." }),
+    m({ id: "sludgewave", name: "Sludge Wave", type: "Poison", kind: "nova", power: 1.8, cd: 5, range: 160, windup: 0.3, status: { kind: "psn", chance: 0.4 }, fx: "sludgewave", desc: "A wave of sludge." }),
     m({ id: "earthpower", name: "Earth Power", type: "Ground", kind: "lob", power: 2.0, cd: 4.8, range: 330, windup: 0.5, fx: "earthquake", desc: "The ground erupts at the spot." }),
     m({ id: "bulldoze", name: "Bulldoze", type: "Ground", kind: "nova", power: 1.5, cd: 3.6, range: 150, windup: 0.25, fx: "earthquake", desc: "Stomp the ground flat." }),
     m({ id: "precipiceblades", name: "Precipice Blades", type: "Ground", kind: "nova", power: 2.5, cd: 6.5, range: 190, windup: 0.4, fx: "earthquake", desc: "Blades of rock burst up all around." }),
