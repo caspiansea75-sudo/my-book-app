@@ -2187,91 +2187,6 @@ export class ArenaRenderer {
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
-  /** The long body of a serpent: linked segments that follow the head's path in a gentle S, instead of ghost copies of the whole sprite. */
-  private drawSerpent(g: CanvasRenderingContext2D, f: Fighter, hist: { x: number; y: number }[], faceLeft: boolean, lift: number) {
-    const pal: Record<string, [string, string, string]> = {
-      gyarados: ["#2e6fb8", "#8fc3f0", "#e9dfb4"],
-      "gyarados-mega": ["#2a2f4a", "#5a6ea8", "#c8c0d8"],
-      onix: ["#8c8e94", "#c2c4ca", "#5d5f66"],
-      steelix: ["#7c828c", "#b8bec8", "#4d525a"],
-      sandaconda: ["#b8903f", "#e8cf86", "#e6d9a8"],
-    };
-    const sid = f.form?.sprite ?? f.sp.id;
-    const base = f.sp.id;
-    const [dark, light, belly] = pal[sid] ?? pal[base] ?? ["#6a7a8a", "#a5b4c4", "#d8d8d8"];
-    const rock = base === "onix" || base === "steelix";
-    const N = 7;
-    const back = faceLeft ? 1 : -1;
-    const t = this.t;
-    const moving = Math.hypot((hist[0]?.x ?? 0) - (hist[6]?.x ?? 0), (hist[0]?.y ?? 0) - (hist[6]?.y ?? 0)) > 4;
-    const segs: { x: number; y: number; r: number }[] = [];
-    let px = f.x;
-    let py = f.y;
-    for (let i = 1; i <= N; i++) {
-      const h = hist[Math.min(hist.length - 1, i * 4)];
-      let dx = (h?.x ?? px) - px;
-      let dy = (h?.y ?? py) - py;
-      let d = Math.hypot(dx, dy);
-      const gap = f.r * 1.25;
-      if (d < 1) {
-        dx = back;
-        dy = 0;
-        d = 1;
-      }
-      const nx = px + (dx / d) * gap;
-      const ny = py + (dy / d) * gap;
-      const sway = Math.sin(t * (moving ? 7 : 2.2) - i * 0.9) * f.r * (moving ? 0.3 : 0.14) * (i / N + 0.3);
-      const x = nx + (-dy / d) * sway;
-      const y = ny + (dx / d) * sway;
-      segs.push({ x, y, r: f.r * (1.5 - i * 0.14) });
-      px = nx;
-      py = ny;
-    }
-    g.save();
-    for (let i = N - 1; i >= 0; i--) {
-      const sg = segs[i]!;
-      const cy = sg.y - f.r * 0.25 - lift * 0.4;
-      g.fillStyle = "rgba(0,0,0,0.22)";
-      g.beginPath();
-      g.ellipse(sg.x, sg.y + f.r * 0.45, sg.r * 0.95, sg.r * 0.34, 0, 0, Math.PI * 2);
-      g.fill();
-      const gr = g.createRadialGradient(sg.x - sg.r * 0.3, cy - sg.r * 0.35, sg.r * 0.1, sg.x, cy, sg.r);
-      gr.addColorStop(0, light);
-      gr.addColorStop(1, dark);
-      g.fillStyle = gr;
-      g.beginPath();
-      if (rock) {
-        for (let k = 0; k < 7; k++) {
-          const a = (k / 7) * Math.PI * 2 + i * 0.7;
-          const rr = sg.r * (0.88 + 0.14 * Math.sin(k * 2.3 + i));
-          g.lineTo(sg.x + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.92);
-        }
-        g.closePath();
-      } else g.arc(sg.x, cy, sg.r, 0, Math.PI * 2);
-      g.fill();
-      g.strokeStyle = "rgba(0,0,0,0.35)";
-      g.lineWidth = 1.5;
-      g.stroke();
-      if (!rock && i % 2 === 0) {
-        g.fillStyle = belly;
-        g.beginPath();
-        g.ellipse(sg.x, cy + sg.r * 0.45, sg.r * 0.55, sg.r * 0.22, 0, 0, Math.PI * 2);
-        g.fill();
-      }
-    }
-    // the tail tip: a fin for the sea serpent, a pointed rock for the snake
-    const tl = segs[N - 1]!;
-    g.fillStyle = rock ? dark : belly;
-    g.beginPath();
-    g.moveTo(tl.x, tl.y - f.r * 0.25);
-    g.lineTo(tl.x + back * f.r * 1.0, tl.y - f.r * 0.9);
-    g.lineTo(tl.x + back * f.r * 0.9, tl.y + f.r * 0.1);
-    g.closePath();
-    g.fill();
-    g.restore();
-    if (moving && Math.random() < 0.35) this.parts.push({ kind: "dot", x: tl.x + rnd(-6, 6), y: tl.y + f.r * 0.3, vx: rnd(-30, 30), vy: rnd(-90, -30), g: 300, life: 0.45, max: 0.45, size: rnd(2, 3.5), grow: 0, color: rock ? "#b9b3a5" : "#bfe6ff" });
-  }
-
   private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }) {
     g.save();
     g.globalAlpha *= alpha;
@@ -2578,7 +2493,6 @@ export class ArenaRenderer {
         if (h) this.body(g, im, usedId, h.x, h.y - f.r * 0.6 - lift, size, faceLeft, sx, sy, rot + spin, c, 0.34 - idx * 0.02);
       }
     }
-    if (f.loco === "slither" && !under) this.drawSerpent(g, f, hist, faceLeft, lift);
     // underground: only a moving mound of earth shows
     if (under) {
       g.save();
