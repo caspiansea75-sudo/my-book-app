@@ -3261,9 +3261,6 @@ export class ArenaRenderer {
     }
     if (under) {
       // nothing above ground
-    } else if (f.sp.id === "onix" || f.sp.id === "steelix") {
-      const tintC = f.status.frz > 0 ? "#8ee8ff" : f.tera ? col(f.tera.type) : null;
-      this.drawRockSerpent(g, f, px, py, faceLeft, hist, f.flash > 0 ? Math.min(1, f.flash * 9) : 0, tintC);
     } else if (im) {
       const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
       this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, undefined, 1, wk);
