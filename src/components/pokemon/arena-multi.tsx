@@ -3,6 +3,7 @@ import { Avatar } from "@/components/members/avatar";
 import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { aimHandlers, currentAim } from "@/components/pokemon/aim-pad";
+import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
@@ -47,22 +48,13 @@ function PickPanel({ pick, onChange }: { pick: ArenaPick; onChange: (p: ArenaPic
   const forms = MEGAS[pick.species] ?? [];
   const set = (patch: Partial<ArenaPick>) => onChange({ ...pick, ...patch });
   const choose = (id: string) => {
-    sfx.pick();
     const sp = speciesOf(id);
     const ok = gimmicksFor(id) as string[];
     onChange({ species: id, gimmick: ok.includes(pick.gimmick) ? pick.gimmick : "awaken", mega: (MEGAS[id] ?? [])[0]?.id ?? "", tera: sp.types[0] ?? "Normal", moves: loadMoves(id) });
   };
   return (
     <div className="am-pick">
-      <div className="ab-roster">
-        {ROSTER.filter((s) => !s.unlock).map((s) => (
-          <button key={s.id} type="button" className={`ab-card ${pick.species === s.id ? "on" : ""}`} onClick={() => choose(s.id)}>
-            <Sprite info={{ id: s.id, num: s.num, types: s.types }} still alt={s.name} />
-            <b>{s.name}</b>
-            <span style={{ display: "flex", gap: 2 }}>{s.types.map((ty) => <TypeIcon key={ty} type={ty} size={14} />)}</span>
-          </button>
-        ))}
-      </div>
+      <RosterPicker pick={pick.species} onPick={choose} isLocked={(s) => !!s.unlock} hideLocked />
       <MovePicker species={pick.species} moves={pick.moves.length === 4 ? pick.moves : loadMoves(pick.species)} onChange={(m) => { saveMoves(pick.species, m); set({ moves: m }); }} />
       <div className="ab-gim">
         <b>{t("ব্যাটল জিমিক", "Battle gimmick")}</b>

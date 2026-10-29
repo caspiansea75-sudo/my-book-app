@@ -3,6 +3,7 @@ import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, ZoomIn, ZoomOut } 
 import { ArenaRenderer } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { aimHandlers, currentAim, type AimCtl } from "@/components/pokemon/aim-pad";
+import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
@@ -558,19 +559,7 @@ export function ArenaBrawl() {
           </button>
         </div>
 
-        <div className="ab-roster">
-          {ROSTER.map((s) => {
-            const locked = !unlocked(s.unlock);
-            return (
-              <button key={s.id} type="button" disabled={locked} className={`ab-card ${pick === s.id ? "on" : ""} ${locked ? "lock" : ""}`} onClick={() => { sfx.pick(); setPick(s.id); }}>
-                <Sprite info={{ id: s.id, num: s.num, types: s.types }} still alt={s.name} />
-                <b>{locked ? "???" : s.name}</b>
-                <span style={{ display: "flex", gap: 2 }}>{s.types.map((ty) => <TypeIcon key={ty} type={ty} size={14} />)}</span>
-                {locked ? <small style={{ fontSize: 10, opacity: 0.8 }}>{t("ওয়েভ", "Wave")} {s.unlock}</small> : null}
-              </button>
-            );
-          })}
-        </div>
+        <RosterPicker pick={pick} onPick={(id) => setPick(id)} isLocked={(s) => !unlocked(s.unlock)} />
 
         <div className="ab-detail">
           <h3>{sp.name}</h3>

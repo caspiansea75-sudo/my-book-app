@@ -852,7 +852,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     }
     case "nova": {
       const r = mv.range ?? 130;
-      boom(S, f.x, f.y, r, mv.type, mv.id);
+      boom(S, f.x, f.y, r, mv.type, mv.fx ?? mv.id);
       for (const o of foesOf(S, f)) {
         const d = len(o.x - f.x, o.y - f.y);
         if (d <= r + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 240, status: mv.status });
@@ -1485,7 +1485,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
         if (f.dash.t >= f.dash.total) {
           const mv = f.dash.mv;
           S.events.push({ t: "dig", x: f.x, y: f.y, id: f.id, phase: "up", type: mv.type });
-          boom(S, f.x, f.y, 95, mv.type, mv.id);
+          boom(S, f.x, f.y, 95, mv.type, mv.fx ?? mv.id);
           for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 95 + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 460, status: mv.status });
           f.dash = null;
         }
@@ -1612,7 +1612,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       if (z.delay <= 0) {
         z.struck = true;
         const src = S.fighters.find((f) => f.id === z.owner);
-        if (z.shape === "circle") boom(S, z.x, z.y, z.r, z.type, z.mv.id);
+        if (z.shape === "circle") boom(S, z.x, z.y, z.r, z.type, z.mv.fx ?? z.mv.id);
         else {
           const [ux, uy] = norm(z.x2 - z.x, z.y2 - z.y);
           const L = len(z.x2 - z.x, z.y2 - z.y);

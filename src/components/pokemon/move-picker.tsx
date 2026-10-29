@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { useT } from "@/components/pokemon/ui";
 import { MOVES, cleanMoves, movePool, speciesOf, type MoveKind } from "@/lib/pokemon/arena-data";
@@ -48,6 +48,26 @@ export function MovePicker({ species, moves, onChange }: { species: string; move
   const def = speciesOf(species).moves;
   const pool = movePool(species);
   const isDefault = cur.every((m, i) => m === def[i]);
+  const own = speciesOf(species).types;
+  const [q, setQ] = useState("");
+  const [flt, setFlt] = useState<"all" | "stab" | "hit" | "area" | "support">("all");
+  const [order, setOrder] = useState<"default" | "power" | "cd">("default");
+  const shown = useMemo(() => {
+    const ql = q.trim().toLowerCase();
+    let l = pool.filter((id) => {
+      const mv = MOVES[id]!;
+      if (ql && !mv.name.toLowerCase().includes(ql) && !mv.type.toLowerCase().startsWith(ql)) return false;
+      if (flt === "stab") return own.includes(mv.type);
+      if (flt === "hit") return ["proj", "spread", "homing", "beam", "bolt", "lob"].includes(mv.kind);
+      if (flt === "area") return ["nova", "dash", "burrow"].includes(mv.kind);
+      if (flt === "support") return ["guard", "heal", "buff"].includes(mv.kind);
+      return true;
+    });
+    if (order === "power") l = [...l].sort((a, b) => MOVES[b]!.power - MOVES[a]!.power);
+    if (order === "cd") l = [...l].sort((a, b) => MOVES[a]!.cd - MOVES[b]!.cd);
+    return l;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pool.join(","), q, flt, order, own.join(",")]);
 
   useEffect(() => {
     if (!open) return;
@@ -104,15 +124,28 @@ export function MovePicker({ species, moves, onChange }: { species: string; move
               })}
             </div>
             <small className="mp-hint">{t(`স্লট ${slot + 1} বদলাচ্ছেন: নিচ থেকে একটি চাল ছুঁয়ে দিন।`, `Changing slot ${slot + 1}: tap a move below.`)}</small>
+            <div className="mp-tools">
+              <input className="rp-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("চাল বা টাইপ খুঁজুন…", "Search moves or types…")} aria-label="Search moves" />
+              <button type="button" className="ab-chip" onClick={() => setOrder(order === "default" ? "power" : order === "power" ? "cd" : "default")}>
+                {order === "default" ? t("সাজানো: ডিফল্ট", "Sort: default") : order === "power" ? t("সাজানো: ক্ষমতা", "Sort: power") : t("সাজানো: দ্রুত", "Sort: fastest")}
+              </button>
+            </div>
+            <div className="rp-chips">
+              {([["all", "সব", "All"], ["stab", "নিজের টাইপ", "Own type"], ["hit", "দূরের আঘাত", "Ranged"], ["area", "কাছের/ছুটে", "Close & rush"], ["support", "সহায়ক", "Support"]] as const).map(([k, bn, en]) => (
+                <button key={k} type="button" className={`ab-chip ${flt === k ? "on" : ""}`} onClick={() => setFlt(k)}>{t(bn, en)}</button>
+              ))}
+              <span className="rp-count">{shown.length} / {pool.length}</span>
+            </div>
             <div className="mp-pool">
-              {pool.map((id) => {
+              {shown.length === 0 ? <p className="rp-none">{t("কিছু পাওয়া যায়নি", "Nothing matches.")}</p> : null}
+              {shown.map((id) => {
                 const mv = MOVES[id]!;
                 const at = cur.indexOf(id);
                 return (
                   <button key={id} type="button" className={`mp-move ${at >= 0 ? "has" : ""}`} style={{ ["--c" as string]: TYPE_COLOR[mv.type] ?? "#fff" }} onClick={() => put(id)}>
                     <span className="mp-ic"><TypeIcon type={mv.type} size={20} /></span>
                     <span className="mp-info">
-                      <b>{mv.name}{at >= 0 ? <em> · {at + 1}</em> : null}</b>
+                      <b>{mv.name}{own.includes(mv.type) ? <i className="mp-stab">STAB</i> : null}{at >= 0 ? <em> · {at + 1}</em> : null}</b>
                       <small>{t(KIND[mv.kind][0], KIND[mv.kind][1])} · {t("ক্ষমতা", "power")} {mv.power} · {mv.cd}s</small>
                       <small className="mp-desc">{mv.desc}</small>
                     </span>
