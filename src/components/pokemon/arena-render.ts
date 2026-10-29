@@ -2039,6 +2039,124 @@ export class ArenaRenderer {
     if (Math.random() < 0.12) this.parts.push({ kind: "smoke", x: z.x + rnd(-R * 0.5, R * 0.5), y: z.y - H, vx: rnd(-20, 20), vy: -60, g: 0, life: 0.9, max: 0.9, size: rnd(8, 14), grow: 18, color: "#3a2a24" });
   }
 
+  /** Whirlpool: a spiral sucking down into the floor under a funnel of water. Sand Tomb: a column of sand with stones circling in it. */
+  private drawWaterSand(g: CanvasRenderingContext2D, z: State["zones"][number], fx: string, grow: number, fade: number) {
+    const water = fx === "whirlpool";
+    const R = z.r;
+    const H = R * 2.4 * grow;
+    const t = this.t;
+    const cMid = water ? "#2f8fe0" : "#c9a56e";
+    const cLight = water ? "#9fdcff" : "#e8d2a0";
+    const cDark = water ? "#14508f" : "#7d5d36";
+    g.save();
+    g.globalAlpha = fade;
+    // the floor: a dark swirl of water, or a sunken ring of sand
+    const fl = g.createRadialGradient(z.x, z.y, 0, z.x, z.y, R * 1.15);
+    fl.addColorStop(0, water ? "rgba(5,25,60,.9)" : "rgba(70,48,24,.85)");
+    fl.addColorStop(0.7, water ? "rgba(30,120,210,.55)" : "rgba(170,135,85,.55)");
+    fl.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = fl;
+    g.beginPath();
+    g.ellipse(z.x, z.y, R * 1.15, R * 0.46, 0, 0, Math.PI * 2);
+    g.fill();
+    g.lineCap = "round";
+    for (let arm = 0; arm < 3; arm++) {
+      g.strokeStyle = arm % 2 ? cLight : "#ffffff";
+      g.globalAlpha = fade * (water ? 0.75 : 0.5);
+      g.lineWidth = water ? 3.4 : 2.6;
+      g.beginPath();
+      for (let i = 0; i <= 26; i++) {
+        const k = i / 26;
+        const rr = R * (0.12 + 0.95 * k);
+        const an = -t * 4.2 + (arm * Math.PI * 2) / 3 + k * 3.6;
+        const x = z.x + Math.cos(an) * rr;
+        const y = z.y + Math.sin(an) * rr * 0.4;
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+    g.globalAlpha = fade;
+    const N = 9;
+    // the funnel / column: the far half of every band first, then the near half over it
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = N - 1; k >= 0; k--) {
+        const h = k / (N - 1);
+        const cy = z.y - h * H;
+        // a whirlpool funnel is widest at the top, a sand column is a bit more even
+        const rx = R * (water ? 0.3 + 0.8 * h : 0.55 + 0.45 * h) * Math.max(0.2, grow);
+        const ry = rx * 0.3;
+        const ph = t * (water ? 6 : 5) + k * 0.85;
+        const a0 = ph + pass * Math.PI;
+        const a1 = a0 + Math.PI * 0.95;
+        const th = (water ? 16 : 19) - h * 4;
+        g.fillStyle = pass ? (k % 2 ? cMid : cLight) : cDark;
+        g.globalAlpha = fade * (water ? (pass ? 0.8 : 0.6) : pass ? 0.92 : 0.8);
+        g.beginPath();
+        g.ellipse(z.x, cy, rx, ry, 0, a0, a1);
+        g.ellipse(z.x, cy - th * 0.6, rx * 0.93, ry * 0.93, 0, a1, a0, true);
+        g.closePath();
+        g.fill();
+        if (water && pass) {
+          // a foam crest on the leading edge and flung droplets
+          g.strokeStyle = "#ffffff";
+          g.globalAlpha = fade * 0.9;
+          g.lineWidth = 2.4;
+          g.beginPath();
+          g.ellipse(z.x, cy - th * 0.6, rx * 0.93, ry * 0.93, 0, a1 - 0.7, a1);
+          g.stroke();
+          g.fillStyle = "#ffffff";
+          for (let j = 0; j < 3; j++) {
+            const aa = a1 + 0.12 * (j + 1) + Math.sin(t * 9 + k + j) * 0.05;
+            g.beginPath();
+            g.arc(z.x + Math.cos(aa) * (rx + 5 + j * 3), cy + Math.sin(aa) * (ry + 2) - 3, 2.2 - j * 0.4, 0, Math.PI * 2);
+            g.fill();
+          }
+        }
+        if (!water && pass) {
+          // grains of sand blowing around the band
+          for (let j = 0; j < 9; j++) {
+            const aa = a0 + (j / 9) * Math.PI * 0.95 + Math.sin(t * 7 + j * 2.3 + k) * 0.08;
+            g.fillStyle = j % 3 === 0 ? "#6b4d2c" : j % 3 === 1 ? "#f3e3b8" : "#b58f58";
+            g.globalAlpha = fade * 0.9;
+            g.fillRect(z.x + Math.cos(aa) * rx * 1.02, cy + Math.sin(aa) * ry * 1.02 - th * 0.7 - (j % 3) * 2, 2.2, 2.2);
+          }
+        }
+      }
+      if (!water && pass === 1) {
+        // stones carried round in the column
+        g.globalAlpha = fade;
+        for (let i = 0; i < 4; i++) {
+          const h = 0.2 + i * 0.2;
+          const an = t * 5.5 + i * 1.7;
+          const rx = R * (0.55 + 0.45 * h);
+          const x = z.x + Math.cos(an) * rx * 1.08;
+          const y = z.y - h * H + Math.sin(an) * rx * 0.32;
+          const sz = 5 + (i % 2) * 2;
+          g.fillStyle = "#6e6a64";
+          g.beginPath();
+          g.moveTo(x - sz, y);
+          g.lineTo(x - sz * 0.3, y - sz * 0.8);
+          g.lineTo(x + sz, y - sz * 0.2);
+          g.lineTo(x + sz * 0.5, y + sz * 0.7);
+          g.lineTo(x - sz * 0.5, y + sz * 0.6);
+          g.closePath();
+          g.fill();
+          g.fillStyle = "#a59e92";
+          g.fillRect(x - sz * 0.4, y - sz * 0.5, sz * 0.7, sz * 0.4);
+        }
+      }
+    }
+    g.restore();
+    const an = Math.random() * Math.PI * 2;
+    if (water) {
+      if (Math.random() < 0.7) this.parts.push({ kind: "dot", x: z.x + Math.cos(an) * R * 0.9, y: z.y + Math.sin(an) * R * 0.3 - Math.random() * H, vx: Math.cos(an) * 110, vy: rnd(-170, -60), g: 520, life: 0.6, max: 0.6, size: rnd(2, 4), grow: 0, color: Math.random() < 0.5 ? "#bfe6ff" : "#ffffff" });
+    } else {
+      if (Math.random() < 0.8) this.parts.push({ kind: "dot", x: z.x + Math.cos(an) * R * 0.9, y: z.y + Math.sin(an) * R * 0.3 - Math.random() * H, vx: Math.cos(an + 1.6) * 120, vy: rnd(-90, -20), g: 160, life: 0.6, max: 0.6, size: rnd(1.8, 3.2), grow: 0, color: Math.random() < 0.5 ? "#d9bd8a" : "#8a6a3e" });
+      if (Math.random() < 0.25) this.parts.push({ kind: "smoke", x: z.x + rnd(-R * 0.8, R * 0.8), y: z.y + rnd(-6, 6), vx: rnd(-40, 40), vy: -30, g: 0, life: 0.8, max: 0.8, size: rnd(7, 12), grow: 20, color: "#c9ae80" });
+    }
+  }
+
   /** A tornado of fire, water or sand that stays where it landed: stacked turning rings that widen going up. */
   private drawWhirl(g: CanvasRenderingContext2D, z: State["zones"][number]) {
     const fx = z.mv.fx ?? z.mv.id;
@@ -2055,6 +2173,10 @@ export class ArenaRenderer {
     const R = z.r;
     if (fx === "firespin") {
       this.drawFireSpin(g, z, grow, fade);
+      return;
+    }
+    if (fx === "whirlpool" || fx === "sandtomb") {
+      this.drawWaterSand(g, z, fx, grow, fade);
       return;
     }
     g.save();
