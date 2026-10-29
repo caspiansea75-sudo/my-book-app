@@ -76,6 +76,8 @@ interface PeerSlot {
 
 const FAST_POLL_MS = 400;
 const IDLE_POLL_MS = 2000;
+/** Longest single message sent as is (characters). */
+const CHUNK = 12_000;
 const PING_INTERVAL_MS = 2000;
 const STALL_MS = 10_000;
 const MAX_RECOVERY_ATTEMPTS = 3;
@@ -104,6 +106,7 @@ export class P2PRoom {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private closed = false;
+  private chunkId = 0;
   private everPolled = false;
   private lastPeersFingerprint = "";
 
@@ -146,11 +149,23 @@ export class P2PRoom {
     }).catch(() => {});
   }
 
-  /** Send on the unreliable game-state channel (drops stale packets). */
+  /** Send on the unreliable game-state channel (drops stale packets). Big messages go reliably in pieces instead. */
   broadcast(data: unknown): void {
     const wire = JSON.stringify({ t: "d", d: data });
+    if (wire.length > CHUNK) {
+      for (const slot of this.peers.values()) this.sendChunked(slot.reliable, wire);
+      return;
+    }
     for (const slot of this.peers.values()) {
-      if (slot.state?.readyState === "open") slot.state.send(wire);
+      const ch = slot.state;
+      if (ch?.readyState !== "open") continue;
+      // a stalled peer must not pile up old state: skip instead of queueing
+      if (ch.bufferedAmount > 256_000) continue;
+      try {
+        ch.send(wire);
+      } catch {
+        /* too big for this peer or the queue is full: the next update replaces it */
+      }
     }
   }
 
@@ -158,8 +173,22 @@ export class P2PRoom {
   send(data: unknown, peerId?: string): void {
     const wire = JSON.stringify({ t: "d", d: data });
     const targets = peerId ? [this.peers.get(peerId)] : [...this.peers.values()];
-    for (const slot of targets) {
-      if (slot?.reliable?.readyState === "open") slot.reliable.send(wire);
+    for (const slot of targets) this.sendChunked(slot?.reliable, wire);
+  }
+
+  /** Browsers only promise messages of about 16 KB; a longer one is cut into pieces and put back together on the other side. */
+  private sendChunked(ch: RTCDataChannel | undefined, wire: string): void {
+    if (ch?.readyState !== "open") return;
+    try {
+      if (wire.length <= CHUNK) {
+        ch.send(wire);
+        return;
+      }
+      const id = ++this.chunkId;
+      const n = Math.ceil(wire.length / CHUNK);
+      for (let i = 0; i < n; i++) ch.send(JSON.stringify({ t: "c", id, i, n, d: wire.slice(i * CHUNK, (i + 1) * CHUNK) }));
+    } catch (err) {
+      console.warn("[p2p] send failed:", err);
     }
   }
 
@@ -318,16 +347,15 @@ export class P2PRoom {
     channel.onopen = () => {
       slot.lastProgressAt = Date.now();
     };
-    channel.onmessage = (e) => {
-      let msg: { t: string; d?: unknown };
-      try {
-        msg = JSON.parse(e.data as string) as { t: string; d?: unknown };
-      } catch {
-        return;
-      }
+    const parts = new Map<string, { n: number; got: number; list: string[] }>();
+    const handle = (msg: { t: string; d?: unknown }) => {
       if (msg.t === "ping") {
         if (slot.state?.readyState === "open") {
-          slot.state.send(JSON.stringify({ t: "pong" }));
+          try {
+            slot.state.send(JSON.stringify({ t: "pong" }));
+          } catch {
+            /* ignore */
+          }
         }
       } else if (msg.t === "pong") {
         if (slot.pingSentAt) {
@@ -336,12 +364,38 @@ export class P2PRoom {
           this.emitPeers();
         }
       } else {
-        this.opts.onMessage?.(
-          slot.info.id,
-          msg.d,
-          channel.label === "state" ? "state" : "reliable",
-        );
+        this.opts.onMessage?.(slot.info.id, msg.d, channel.label === "state" ? "state" : "reliable");
       }
+    };
+    channel.onmessage = (e) => {
+      let msg: { t: string; d?: unknown; id?: number; i?: number; n?: number };
+      try {
+        msg = JSON.parse(e.data as string) as typeof msg;
+      } catch {
+        return;
+      }
+      if (msg.t === "c" && typeof msg.d === "string" && msg.n && msg.i !== undefined) {
+        // one piece of a long message: wait for the rest
+        const key = String(msg.id);
+        let p = parts.get(key);
+        if (!p) {
+          p = { n: msg.n, got: 0, list: new Array<string>(msg.n).fill("") };
+          parts.set(key, p);
+          if (parts.size > 8) parts.delete(parts.keys().next().value as string);
+        }
+        if (!p.list[msg.i]) p.got++;
+        p.list[msg.i] = msg.d;
+        if (p.got >= p.n) {
+          parts.delete(key);
+          try {
+            handle(JSON.parse(p.list.join("")) as { t: string; d?: unknown });
+          } catch {
+            /* a broken message is dropped */
+          }
+        }
+        return;
+      }
+      handle(msg);
     };
   }
 
@@ -485,7 +539,11 @@ export class P2PRoom {
       if (slot.pingSentAt === undefined || stale) {
         // A lost pong must not freeze rttMs forever: expire and re-ping.
         slot.pingSentAt = performance.now();
-        slot.state.send(wire);
+        try {
+          slot.state.send(wire);
+        } catch {
+          /* ignore */
+        }
       }
     }
   }

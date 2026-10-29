@@ -514,7 +514,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         if (fid !== undefined) hostPick(fid, id);
       } else {
         // sent a few times: the host ignores repeats, and a dropped message must not leave everyone waiting
-        for (const d of [0, 600, 1500]) setTimeout(() => p2p.send({ k: "perk", id }, hostPeer), d);
+        for (const d of [0, 600, 1500, 3000, 5000, 8000]) setTimeout(() => p2p.send({ k: "perk", id }, hostPeer), d);
       }
     };
 
