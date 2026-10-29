@@ -1949,6 +1949,96 @@ export class ArenaRenderer {
     }
   }
 
+  /** A real fire tornado: a glowing core, thick turning bands of flame and tongues of fire licking up from every band. */
+  private drawFireSpin(g: CanvasRenderingContext2D, z: State["zones"][number], grow: number, fade: number) {
+    const R = z.r;
+    const H = R * 2.6 * grow;
+    const t = this.t;
+    g.save();
+    g.globalAlpha = fade;
+    // scorched footprint and a hot glow on the floor
+    g.fillStyle = "rgba(30,8,0,.35)";
+    g.beginPath();
+    g.ellipse(z.x, z.y + 4, R * 1.1, R * 0.42, 0, 0, Math.PI * 2);
+    g.fill();
+    g.globalCompositeOperation = "lighter";
+    const fl = g.createRadialGradient(z.x, z.y, 0, z.x, z.y, R * 1.2);
+    fl.addColorStop(0, "rgba(255,200,80,.55)");
+    fl.addColorStop(1, "rgba(255,80,0,0)");
+    g.fillStyle = fl;
+    g.beginPath();
+    g.ellipse(z.x, z.y, R * 1.2, R * 0.5, 0, 0, Math.PI * 2);
+    g.fill();
+    // the bright core column
+    const core = g.createLinearGradient(0, z.y, 0, z.y - H);
+    core.addColorStop(0, "rgba(255,240,170,.8)");
+    core.addColorStop(0.5, "rgba(255,150,40,.45)");
+    core.addColorStop(1, "rgba(220,50,10,0)");
+    g.fillStyle = core;
+    g.beginPath();
+    g.moveTo(z.x - R * 0.3, z.y);
+    g.lineTo(z.x - R * 0.7, z.y - H);
+    g.lineTo(z.x + R * 0.7, z.y - H);
+    g.lineTo(z.x + R * 0.3, z.y);
+    g.closePath();
+    g.fill();
+    g.globalCompositeOperation = "source-over";
+    const N = 9;
+    const flame = (x: number, y: number, w: number, hgt: number, rot: number, c: string) => {
+      g.save();
+      g.translate(x, y);
+      g.rotate(rot);
+      g.fillStyle = c;
+      g.beginPath();
+      g.moveTo(-w, 0);
+      g.quadraticCurveTo(-w * 1.05, -hgt * 0.5, 0, -hgt);
+      g.quadraticCurveTo(w * 1.05, -hgt * 0.5, w, 0);
+      g.closePath();
+      g.fill();
+      g.restore();
+    };
+    // bands drawn from the top down, the far half first and the near half over it
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = N - 1; k >= 0; k--) {
+        const h = k / (N - 1);
+        const cy = z.y - h * H;
+        const rx = R * (0.4 + 0.72 * h) * Math.max(0.2, grow);
+        const ry = rx * 0.32;
+        const ph = t * (6.5 - h * 1.5) + k * 0.8;
+        const heat = 1 - h;
+        const band = heat > 0.66 ? "#ffd05a" : heat > 0.33 ? "#ff8a24" : "#d93a14";
+        const dim = heat > 0.66 ? "#ff9a2e" : heat > 0.33 ? "#e5521a" : "#8a1c0a";
+        const a0 = ph + pass * Math.PI;
+        const a1 = a0 + Math.PI * 0.95;
+        // a thick curved band: outer edge out, inner edge back
+        const th = 11 - h * 4;
+        g.fillStyle = pass ? band : dim;
+        g.beginPath();
+        g.ellipse(z.x, cy, rx, ry, 0, a0, a1);
+        g.ellipse(z.x, cy - th * 0.6, rx * 0.92, ry * 0.92, 0, a1, a0, true);
+        g.closePath();
+        g.fill();
+        // tongues of fire along the band
+        const n = 6;
+        for (let j = 0; j < n; j++) {
+          const aa = a0 + ((j + 0.5) / n) * Math.PI * 0.95;
+          const fx2 = z.x + Math.cos(aa) * rx;
+          const fy2 = cy + Math.sin(aa) * ry;
+          const flick = 0.75 + 0.35 * Math.sin(t * 22 + k * 3 + j * 1.9);
+          flame(fx2, fy2, 4.2 + (1 - h) * 2.5, (13 + (1 - h) * 12) * flick, Math.cos(aa) * 0.35, pass ? (j % 2 ? "#ffe27a" : band) : dim);
+        }
+      }
+    }
+    g.restore();
+    // sparks and smoke rising off the top
+    if (Math.random() < 0.7) {
+      const an = Math.random() * Math.PI * 2;
+      const hh = Math.random();
+      this.parts.push({ kind: "dot", x: z.x + Math.cos(an) * R * (0.4 + 0.7 * hh), y: z.y - hh * H, vx: Math.cos(an + 1.6) * 80, vy: rnd(-170, -90), g: -30, life: 0.7, max: 0.7, size: rnd(2, 4.2), grow: 0, color: Math.random() < 0.5 ? "#ffcf4d" : "#ff7a1f" });
+    }
+    if (Math.random() < 0.12) this.parts.push({ kind: "smoke", x: z.x + rnd(-R * 0.5, R * 0.5), y: z.y - H, vx: rnd(-20, 20), vy: -60, g: 0, life: 0.9, max: 0.9, size: rnd(8, 14), grow: 18, color: "#3a2a24" });
+  }
+
   /** A tornado of fire, water or sand that stays where it landed: stacked turning rings that widen going up. */
   private drawWhirl(g: CanvasRenderingContext2D, z: State["zones"][number]) {
     const fx = z.mv.fx ?? z.mv.id;
@@ -1963,6 +2053,10 @@ export class ArenaRenderer {
     const grow = Math.min(1, age / 0.35);
     const fade = Math.min(1, z.life / 0.45);
     const R = z.r;
+    if (fx === "firespin") {
+      this.drawFireSpin(g, z, grow, fade);
+      return;
+    }
     g.save();
     g.globalAlpha = fade;
     // the footprint
