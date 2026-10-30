@@ -68,7 +68,16 @@ import {
   runsToText,
   textToRuns,
 } from "@/lib/rich";
-import { COLOR_SWATCHES, TEXT_EFFECTS } from "@/lib/text-style";
+import {
+  COLOR_SWATCHES,
+  FANCY_EFFECTS,
+  TEXT_EFFECTS,
+  TEXT_FONTS,
+  TEXT_SIZES,
+  sizeOf,
+  toggleFx,
+  withSize,
+} from "@/lib/text-style";
 import { cn } from "@/lib/utils";
 
 type PBlock = {
@@ -261,6 +270,8 @@ export function ChapterEditor({
   const [pubStatus, setPubStatus] = useState<"draft" | "published">(chapter?.status ?? (slug ? "published" : "draft"));
 
   const handles = useRef(new Map<string, RichHandle>());
+  // Effects of the text selected inside one paragraph, so the toolbar can show the size / font in use.
+  const [selFx, setSelFx] = useState<{ key: string; fx: string[] | null } | null>(null);
   const pendingFocus = useRef<{ key: string; pos: "start" | "end" | number } | null>(null);
   const blocksRef = useRef(blocks);
   blocksRef.current = blocks;
@@ -535,7 +546,8 @@ export function ChapterEditor({
   function fmt(key: string, cmd: FormatCmd) {
     const h = handles.current.get(key);
     if (!h) return;
-    const blockLevel = cmd.k === "c" || cmd.k === "fx" || cmd.k === "clear";
+    const blockLevel =
+      cmd.k === "c" || cmd.k === "fx" || cmd.k === "size" || cmd.k === "sizeStep" || cmd.k === "clear";
     const hadSelection = h.hasSelection();
     const applied = h.format(cmd, { selectionOnly: blockLevel });
     if (cmd.k === "clear" && !hadSelection) {
@@ -549,9 +561,13 @@ export function ChapterEditor({
     if (cmd.k === "c") updateKey(key, { color: cmd.v });
     if (cmd.k === "fx") {
       const has = (src.effects ?? []).includes(cmd.id);
-      updateKey(key, {
-        effects: has ? (src.effects ?? []).filter((x) => x !== cmd.id) : [...(src.effects ?? []), cmd.id],
-      });
+      updateKey(key, { effects: toggleFx(src.effects, cmd.id, !has) });
+    }
+    if (cmd.k === "size" || cmd.k === "sizeStep") {
+      // Nothing selected: the whole paragraph changes size.
+      const to = cmd.k === "size" ? cmd.v : Math.min(9, Math.max(1, sizeOf(src.effects) + cmd.d));
+      const effects = withSize(src.effects, to);
+      updateKey(key, { effects: effects.length ? effects : undefined });
     }
   }
 
@@ -1047,6 +1063,7 @@ export function ChapterEditor({
                     effects={block.effects}
                     align={block.align}
                     placeholder="অনুচ্ছেদ লিখুন…"
+                    onSelectionFx={(fx) => setSelFx({ key: block.key, fx })}
                     onChange={(runs) => setBlockRuns(block.key, runs)}
                     onSplit={(head, tail) => splitBlock(block.key, head, tail)}
                     onPasteParts={(head, rest, tail) => pasteParts(block.key, head, rest, tail)}
@@ -1057,7 +1074,7 @@ export function ChapterEditor({
                 {block.type === "p" && !canon && showTools ? (
                   <TextToolbar
                     color={block.color}
-                    effects={block.effects ?? []}
+                    effects={(selFx?.key === block.key ? selFx.fx : null) ?? block.effects ?? []}
                     align={block.align}
                     onFmt={(cmd) => fmt(block.key, cmd)}
                     onAlign={(a) => setAlign(block.key, a)}
@@ -1461,6 +1478,64 @@ function TextToolbar({
         <CustomColor onPick={(v) => onFmt({ k: "c", v })} />
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-sans text-[11px] text-muted">সাইজ</span>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onFmt({ k: "sizeStep", d: -1 })}
+          title="লেখা ছোট"
+          aria-label="লেখা ছোট"
+          className="pressable h-7 min-w-8 rounded-full border border-border px-2 font-sans text-[11px] text-muted hover:text-fg"
+        >
+          A−
+        </button>
+        {TEXT_SIZES.map((n) => (
+          <button
+            key={n}
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onFmt({ k: "size", v: n })}
+            title={n === 5 ? "সাইজ ৫ (স্বাভাবিক)" : `সাইজ ${formatCount(n)}`}
+            aria-label={n === 5 ? "সাইজ ৫ (স্বাভাবিক)" : `সাইজ ${formatCount(n)}`}
+            aria-pressed={sizeOf(effects) === n}
+            className={cn(
+              "pressable h-7 min-w-7 rounded-full border px-1.5 font-sans text-[11px]",
+              sizeOf(effects) === n ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+            )}
+          >
+            {formatCount(n)}
+          </button>
+        ))}
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onFmt({ k: "sizeStep", d: 1 })}
+          title="লেখা বড়"
+          aria-label="লেখা বড়"
+          className="pressable h-7 min-w-8 rounded-full border border-border px-2 font-sans text-[11px] text-muted hover:text-fg"
+        >
+          A+
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-sans text-[11px] text-muted">ফন্ট</span>
+        {TEXT_FONTS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onFmt({ k: "fx", id: f.id })}
+            aria-pressed={effects.includes(f.id)}
+            className={cn(
+              "pressable h-7 rounded-full border px-2.5 text-[12px]",
+              effects.includes(f.id) ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+            )}
+          >
+            <span className={`tx-${f.id}`}>{f.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
         <span className="mr-1 font-sans text-[11px] text-muted">ইফেক্ট</span>
         {TEXT_EFFECTS.map((fx) => (
           <button
@@ -1474,6 +1549,24 @@ function TextToolbar({
             )}
           >
             {fx.label}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 font-sans text-[11px] text-muted">ফ্যান্সি</span>
+        {FANCY_EFFECTS.map((fx) => (
+          <button
+            key={fx.id}
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => onFmt({ k: "fx", id: fx.id })}
+            aria-pressed={effects.includes(fx.id)}
+            className={cn(
+              "pressable h-7 rounded-full border px-2.5 font-sans text-[11px]",
+              effects.includes(fx.id) ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+            )}
+          >
+            <span className={`tx-${fx.id} tx-chip`}>{fx.label}</span>
           </button>
         ))}
       </div>

@@ -42,6 +42,11 @@ export const Route = createRootRoute({
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap",
       },
+      // Story fonts (studio: ফন্ট). Separate request on purpose; each file only downloads when a story uses it.
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Tiro+Bangla:ital@0;1&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Galada&family=Caveat:wght@500;700&family=Atma:wght@500;700&family=Courier+Prime:wght@400;700&display=swap",
+      },
     ],
   }),
   component: () => (

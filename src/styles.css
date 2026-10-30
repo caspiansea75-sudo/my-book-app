@@ -830,6 +830,155 @@
   }
 }
 
+/* --- Writer text sizes: steps 1–9, 5 is normal (studio: সাইজ) --- */
+.tx-sz-1 {
+  font-size: 0.6em;
+}
+.tx-sz-2 {
+  font-size: 0.72em;
+}
+.tx-sz-3 {
+  font-size: 0.85em;
+}
+.tx-sz-4 {
+  font-size: 0.93em;
+}
+.tx-sz-6 {
+  font-size: 1.2em;
+}
+.tx-sz-7 {
+  font-size: 1.5em;
+}
+.tx-sz-8 {
+  font-size: 1.9em;
+}
+.tx-sz-9 {
+  font-size: 2.4em;
+}
+
+/* --- Writer fonts (studio: ফন্ট). Each stack has Latin first, then a Bengali face. --- */
+.tx-ff-elegant {
+  font-family: "Cormorant Garamond", "Tiro Bangla", "Noto Serif Bengali", Georgia, serif;
+  letter-spacing: 0.01em;
+}
+.tx-ff-script {
+  font-family: "Caveat", "Galada", "Noto Serif Bengali", cursive;
+}
+.tx-ff-playful {
+  font-family: "Atma", "Hind Siliguri", system-ui, sans-serif;
+  font-weight: 500;
+}
+.tx-ff-type {
+  font-family: "Courier Prime", "Hind Siliguri", ui-monospace, monospace;
+}
+
+/* --- Fancy effects (studio: ফ্যান্সি) --- */
+.tx-gold,
+.tx-rainbow {
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.tx-gold {
+  background-image: linear-gradient(100deg, #b8860b 0%, #f6e27a 30%, #fff6c8 50%, #e0b23a 70%, #b8860b 100%);
+  background-size: 250% 100%;
+  animation: tx-shimmer 4.5s ease-in-out infinite alternate;
+}
+.tx-rainbow {
+  background-image: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff, #c77dff, #ff6b6b);
+  background-size: 200% 100%;
+  animation: tx-slide 6s linear infinite;
+}
+.tx-neon {
+  text-shadow:
+    0 0 3px currentColor,
+    0 0 9px currentColor,
+    0 0 20px color-mix(in oklab, currentColor 70%, #ff4fd8),
+    0 0 38px #7a5cff;
+}
+.tx-dream {
+  letter-spacing: 0.03em;
+  text-shadow:
+    0 0 10px color-mix(in oklab, currentColor 55%, transparent),
+    0 0 22px color-mix(in oklab, currentColor 30%, transparent);
+  animation: tx-dream 5.5s ease-in-out infinite;
+}
+.tx-ghost {
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 8px currentColor;
+  animation: tx-ghost 4.2s ease-in-out infinite;
+}
+.tx-wave {
+  position: relative;
+  animation: tx-bob 1.6s ease-in-out infinite;
+}
+.tx-wide {
+  letter-spacing: 0.16em;
+}
+.tx-marker {
+  background: linear-gradient(
+    transparent 52%,
+    rgb(255 213 79 / 0.45) 52%,
+    rgb(255 213 79 / 0.45) 92%,
+    transparent 92%
+  );
+  padding: 0 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.tx-strike {
+  text-decoration: line-through;
+  text-decoration-thickness: 0.07em;
+}
+@keyframes tx-shimmer {
+  to {
+    background-position: 100% 0;
+  }
+}
+@keyframes tx-slide {
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes tx-dream {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+@keyframes tx-ghost {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.22;
+  }
+}
+@keyframes tx-bob {
+  0%,
+  100% {
+    top: 0;
+  }
+  50% {
+    top: -0.14em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tx-gold,
+  .tx-rainbow,
+  .tx-dream,
+  .tx-ghost,
+  .tx-wave {
+    animation: none;
+  }
+}
+
 /* --- Rich paragraph editor (studio) --- */
 .tx-inl.tx-shake {
   display: inline-block;
@@ -847,7 +996,10 @@
 .rich-edit.tx-shake,
 .rich-edit .tx-shake,
 .rich-edit.tx-flicker,
-.rich-edit .tx-flicker {
+.rich-edit .tx-flicker,
+.rich-edit[class*="tx-"],
+.rich-edit [class*="tx-"] {
+  /* still while writing: moving text makes the caret hard to follow */
   animation: none;
 }
 .rich-bare {

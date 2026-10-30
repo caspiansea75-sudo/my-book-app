@@ -116,6 +116,27 @@ export const GALLERY_EXACT: Record<string, string> = {
   "সব বাদ দিন": "Clear all",
   "এই ফোল্ডারে বাছার মতো নতুন ছবি নেই": "No new images to select in this folder",
   "যোগ করা যায়নি, আবার চেষ্টা করুন": "Couldn't add them, please try again",
+
+  // Studio text toolbar: size, font and fancy effects
+  "সাইজ": "Size",
+  "ফন্ট": "Font",
+  "ফ্যান্সি": "Fancy",
+  "লেখা ছোট": "Smaller text",
+  "লেখা বড়": "Bigger text",
+  "সাইজ ৫ (স্বাভাবিক)": "Size 5 (normal)",
+  "মার্জিত": "Elegant",
+  "হাতের লেখা": "Handwriting",
+  "মজার": "Playful",
+  "টাইপরাইটার": "Typewriter",
+  "সোনালি ঝিলিক": "Golden shimmer",
+  "রামধনু": "Rainbow",
+  "নিয়ন": "Neon",
+  "স্বপ্নিল": "Dreamy",
+  "ভুতুড়ে": "Ghostly",
+  "ঢেউ খেলানো": "Wave",
+  "ছড়ানো": "Spaced out",
+  "মার্কার": "Highlighter",
+  "কাটা দাগ": "Strikethrough",
 };
 
 /** Counts rendered as one piece of text, e.g. "৩টি ফাইল", "২ সাবফোল্ডার", "মোট ১২", "(৩)". */
@@ -149,4 +170,5 @@ export const GALLERY_PATTERNS: [string, string][] = [
   ["^([০-৯0-9,]+)টি প্যানেল যোগ করুন$", "Add {1} panels"],
   ["^(১|1)টি প্যানেল যোগ হয়েছে$", "1 panel added"],
   ["^([০-৯0-9,]+)টি প্যানেল যোগ হয়েছে$", "{1} panels added"],
+  ["^সাইজ ([০-৯0-9]+)$", "Size {1}"],
 ];
