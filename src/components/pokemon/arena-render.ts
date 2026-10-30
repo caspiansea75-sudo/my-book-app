@@ -2670,6 +2670,35 @@ export class ArenaRenderer {
       g.beginPath(); g.arc(s * 0.1, -s * 0.28, s * 0.09, 0, Math.PI * 2); g.fill();
       // streaming ribbons from the neck
       for (const k of [-1, 1]) { g.strokeStyle = k > 0 ? "#7a5cff" : "#4fe3ff"; g.lineWidth = 4; g.beginPath(); for (let i = 0; i <= 8; i++) { const u = i / 8; const x = -s * (0.9 + u * 2.2), y = k * s * (0.25 + u * 0.35) + Math.sin(t * 20 + u * 6 + k) * 6; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+    } else if (id === "nuzzle") {
+      // a cheek-full of sparks: a burst of little yellow bolts and a bright flash at the contact
+      g.translate(f.x + d.dx * f.r * 1.5, f.y - f.r * 0.2 + d.dy * f.r * 1.5);
+      g.rotate(ang);
+      g.globalAlpha = 1 - p * 0.5;
+      const rg = g.createRadialGradient(0, 0, 0, 0, 0, s);
+      rg.addColorStop(0, "#ffffff"); rg.addColorStop(0.5, "#ffe14d"); rg.addColorStop(1, "rgba(255,200,0,0)");
+      g.fillStyle = rg; g.beginPath(); g.arc(0, 0, s, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = "#fff3a0"; g.lineWidth = 2.5;
+      for (let i = 0; i < 7; i++) { const aa = (i / 7) * Math.PI * 2 + t * 9; g.beginPath(); g.moveTo(Math.cos(aa) * s * 0.4, Math.sin(aa) * s * 0.4); g.lineTo(Math.cos(aa + 0.25) * s * 0.8, Math.sin(aa + 0.25) * s * 0.8); g.lineTo(Math.cos(aa - 0.1) * s * 1.1, Math.sin(aa - 0.1) * s * 1.1); g.lineTo(Math.cos(aa + 0.2) * s * 1.5, Math.sin(aa + 0.2) * s * 1.5); g.stroke(); }
+    } else if (id === "thunderpunch") {
+      // a fist crackling with lightning: bolts wrap around it and arc off at the impact
+      g.translate(f.x + d.dx * f.r * 1.7, f.y - f.r * 0.2 + d.dy * f.r * 1.7);
+      g.rotate(ang);
+      g.globalAlpha = 1 - p * 0.4;
+      const rg = g.createRadialGradient(0, 0, 0, 0, 0, s * 1.2);
+      rg.addColorStop(0, "#ffffff"); rg.addColorStop(0.4, "#ffe14d"); rg.addColorStop(1, "rgba(255,200,0,0)");
+      g.fillStyle = rg; g.beginPath(); g.arc(0, 0, s * 1.2, 0, Math.PI * 2); g.fill();
+      const sd = Math.floor(t * 30);
+      g.strokeStyle = "#fff6a0"; g.lineWidth = 3;
+      for (let b = 0; b < 5; b++) { g.beginPath(); g.moveTo(0, 0); for (let i = 1; i <= 4; i++) { const v = Math.sin((b * 7 + i) * 12.9 + sd * 78.2) * 43758.5; const jj = v - Math.floor(v) - 0.5; const aa = (b / 5) * Math.PI * 2 + jj * 0.6; g.lineTo(Math.cos(aa) * s * 0.4 * i, Math.sin(aa) * s * 0.4 * i); } g.stroke(); }
+    } else if (id === "strength") {
+      // a crushing blow: expanding dust and shock rings with flying rubble
+      g.translate(f.x + d.dx * f.r * 1.7, f.y + d.dy * f.r * 1.7);
+      g.globalCompositeOperation = "source-over";
+      for (let k = 0; k < 3; k++) { g.globalAlpha = (1 - p) * (0.9 - k * 0.25); g.strokeStyle = k ? "#d9c9a8" : "#ffffff"; g.lineWidth = 4 - k; g.beginPath(); g.ellipse(0, 0, s * (0.5 + p * 1.1 + k * 0.35), s * (0.3 + p * 0.6 + k * 0.2), 0, 0, Math.PI * 2); g.stroke(); }
+      g.globalAlpha = 1; g.fillStyle = "#8d7a60";
+      for (let k = 0; k < 6; k++) { const aa = k * 1.05 + 0.3; g.beginPath(); g.arc(Math.cos(aa) * s * (0.5 + p), Math.sin(aa) * s * (0.3 + p * 0.5) - Math.sin(p * 3.14) * 14, 3, 0, Math.PI * 2); g.fill(); }
+      if (Math.random() < 0.5) { this.shake = Math.max(this.shake, 4); this.shakeT = 0.1; }
     } else if (id === "drainpunch") {
       // a fist of force: a shockwave burst at the knuckles and green life-energy streaming back to the attacker
       g.translate(f.x + d.dx * f.r * 1.7, f.y - f.r * 0.2 + d.dy * f.r * 1.7);
@@ -3700,7 +3729,7 @@ export class ArenaRenderer {
     g.stroke();
     g.restore();
 
-    if (f.dash && !under && (f.dash.mv.type === "Dragon" || f.dash.mv.id === "shadowclaw" || f.dash.mv.id === "drainpunch")) this.drawDragonDash(g, f);
+    if (f.dash && !under && (f.dash.mv.type === "Dragon" || ["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"].includes(f.dash.mv.id))) this.drawDragonDash(g, f);
     const dn = this.dances.get(f.id);
     if (dn && dn.until > this.t) this.drawDance(g, f, dn.until, dn.kind);
     // each type of rush leaves its own trail

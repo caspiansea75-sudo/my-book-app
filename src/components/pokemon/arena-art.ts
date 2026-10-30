@@ -470,6 +470,34 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
   }
 
   switch (p.mv) {
+    case "hiddenpower": {
+      // a white core ringed by orbs of every colour, turning
+      g.globalCompositeOperation = "lighter";
+      const cs = ["#ff5a5a", "#ffb04d", "#ffe14d", "#7be04a", "#4fc3ff", "#a07aff", "#ff7ad9"];
+      for (let k = 0; k < 7; k++) {
+        const an = t * 9 + (k / 7) * Math.PI * 2;
+        g.fillStyle = cs[k]!; g.beginPath(); g.arc(Math.cos(an) * r * 1.5, Math.sin(an) * r * 1.5, r * 0.65, 0, Math.PI * 2); g.fill();
+      }
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 1.5);
+      gr.addColorStop(0, "#ffffff"); gr.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r * 1.5, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case "shockwave": {
+      // a living zig-zag of lightning that reshapes every frame
+      g.rotate(ang);
+      g.globalCompositeOperation = "lighter"; g.lineCap = "round"; g.lineJoin = "round";
+      const sd = Math.floor(t * 30);
+      for (const [wd, cc] of [[r * 1.1, "rgba(255,225,60,.35)"], [r * 0.45, "#ffe14d"], [r * 0.18, "#ffffff"]] as const) {
+        g.strokeStyle = cc; g.lineWidth = Math.max(1.5, wd); g.beginPath();
+        for (let i = 0; i <= 7; i++) { const v = Math.sin((i + 1) * 12.9898 + sd * 78.233) * 43758.5453; const j = (v - Math.floor(v) - 0.5) * r * 2.2; const x = r * 1.2 - i * r * 0.9; i ? g.lineTo(x, j) : g.moveTo(x, 0); }
+        g.stroke();
+      }
+      const gl = g.createRadialGradient(r * 1.2, 0, 0, r * 1.2, 0, r * 1.6);
+      gl.addColorStop(0, "#fff"); gl.addColorStop(1, "rgba(255,225,60,0)");
+      g.fillStyle = gl; g.beginPath(); g.arc(r * 1.2, 0, r * 1.6, 0, Math.PI * 2); g.fill();
+      break;
+    }
     case "energyball": {
       // a green orb of living energy, leaves circling it
       const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 2.6);
