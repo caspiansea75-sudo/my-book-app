@@ -632,7 +632,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             const live = new Set(p2p.peerList().filter((p) => p.connectionState === "connected").map((p) => p.id));
             livePeers = live;
             for (const f of S.fighters) {
-              if (f.member === meId || !f.alive) continue;
+              if (!f.isPlayer || f.member === undefined || f.member === null || f.member === meId || !f.alive) continue;
               if (live.has(`m${f.member}`)) lastSeen.set(f.member!, now);
               else if (now - (lastSeen.get(f.member!) ?? t0 + 12000) > 6000) {
                 f.alive = false;
