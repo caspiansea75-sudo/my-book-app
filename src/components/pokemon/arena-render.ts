@@ -511,7 +511,11 @@ export class ArenaRenderer {
         case "heal":
           break;
         case "status":
-          this.pop(e.x, e.y - 20, { brn: "BURN", psn: "POISON", par: "PARALYSIS", frz: "FROZEN" }[e.kind], { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff" }[e.kind], 12, 800);
+          this.pop(e.x, e.y - 20, { brn: "BURNED!", psn: "POISONED!", par: "PARALYZED!", frz: "FROZEN!", cnf: "CONFUSED!", slp: "ASLEEP!" }[e.kind], { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 13, 900);
+          this.ring(e.x, e.y, { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 50, 0.4);
+          break;
+        case "ailment":
+          this.pop(e.x, e.y - 24, { par: "CAN'T MOVE!", cnf: "HURT ITSELF!", slp: "ZZZ" }[e.kind], { par: "#ffe14d", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 12, 700);
           break;
         case "shield":
           this.ring(e.x, e.y, "#9fd0ff", 60, 0.4);
@@ -552,6 +556,11 @@ export class ArenaRenderer {
       case "thunder":
         this.parts.push({ kind: "bolt", x: x + rnd(-50, 50), y: -60, vx: 0, vy: 0, g: 0, life: 0.32, max: 0.32, size: 1, grow: 0, color: "#ffe14d", x2: x, y2: y, seed: Math.floor(x) });
         this.flashT = Math.max(this.flashT, 0.12);
+        break;
+      case "sleeppowder":
+      case "stunspore":
+        // a drifting cloud of dust that settles over the target
+        for (let i = 0; i < 18; i++) { const a = Math.random() * Math.PI * 2, d = rnd(0, r * 0.9); this.parts.push({ kind: "smoke", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.6, vx: rnd(-20, 20), vy: rnd(-40, -10), g: 0, life: rnd(0.8, 1.4), max: 1.4, size: rnd(10, 18), grow: 18, color: e.fx === "stunspore" ? (i % 2 ? "#ffe14d" : "#fff3a0") : (i % 2 ? "#ffb0e8" : "#a8e890") }); }
         break;
       case "thunderwave":
         this.waves.push({ x, y, r, t: 0, life: 0.75, kind: "thunderwave" });
@@ -2780,6 +2789,64 @@ export class ArenaRenderer {
     g.restore();
   }
 
+  /** What is wrong with a Pokémon, shown on it: flames, bubbles, sparks, an ice block, dizzy stars, sleepy Zs, and a badge row. */
+  private drawStatusFx(g: CanvasRenderingContext2D, f: Fighter) {
+    const st = f.status;
+    const t = this.t;
+    const top = f.y - f.r * 2.1;
+    const badges: [string, string][] = [];
+    g.save();
+    if (st.brn > 0) {
+      badges.push(["BRN", "#ff7a2e"]);
+      g.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 4; k++) { const bx = f.x + (k - 1.5) * f.r * 0.55, h = f.r * (0.7 + Math.sin(t * 14 + k * 2) * 0.25); g.fillStyle = k % 2 ? "#ffb04d" : "#ff5a1a"; g.beginPath(); g.moveTo(bx - 5, f.y + f.r * 0.3); g.quadraticCurveTo(bx - 2, f.y - h * 0.5, bx, f.y - h); g.quadraticCurveTo(bx + 3, f.y - h * 0.4, bx + 5, f.y + f.r * 0.3); g.fill(); }
+      g.globalCompositeOperation = "source-over";
+    }
+    if (st.psn > 0) {
+      badges.push(["PSN", "#b259d6"]);
+      for (let k = 0; k < 4; k++) { const ph = (t * 0.9 + k * 0.25) % 1; g.globalAlpha = 1 - ph; g.strokeStyle = "#d28bff"; g.fillStyle = "rgba(160,70,210,.35)"; g.lineWidth = 2; g.beginPath(); g.arc(f.x + Math.sin(k * 3 + t * 2) * f.r * 0.8, f.y + f.r * 0.2 - ph * f.r * 2, 3 + (k % 2) * 2, 0, Math.PI * 2); g.fill(); g.stroke(); }
+      g.globalAlpha = 1;
+    }
+    if (st.par > 0) {
+      badges.push(["PAR", "#e8c400"]);
+      g.globalCompositeOperation = "lighter"; g.strokeStyle = "#ffe14d"; g.lineWidth = 2; g.lineJoin = "round";
+      const sd = Math.floor(t * 20);
+      for (let b = 0; b < 3; b++) { g.beginPath(); for (let i = 0; i <= 5; i++) { const v = Math.sin((b * 9 + i) * 12.9 + sd * 78.2) * 43758.5; const j = v - Math.floor(v); const an = (b / 3) * Math.PI * 2 + i * 0.5 + j * 0.4; const rr = f.r * (0.8 + j * 0.5); const x = f.x + Math.cos(an) * rr, y = f.y - f.r * 0.2 + Math.sin(an) * rr * 0.8; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+      g.globalCompositeOperation = "source-over";
+    }
+    if (st.frz > 0) {
+      badges.push(["FRZ", "#5fc8f0"]);
+      // an ice block with a shine and cracks over the whole Pokémon
+      const w = f.r * 1.7, h = f.r * 2.0;
+      g.fillStyle = "rgba(160,225,255,.45)"; g.strokeStyle = "#e8fbff"; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(f.x - w, f.y - h * 0.8); g.lineTo(f.x + w * 0.8, f.y - h); g.lineTo(f.x + w, f.y + h * 0.3); g.lineTo(f.x + w * 0.6, f.y + h * 0.6); g.lineTo(f.x - w * 0.9, f.y + h * 0.55); g.closePath(); g.fill(); g.stroke();
+      g.strokeStyle = "rgba(255,255,255,.85)"; g.lineWidth = 3; g.beginPath(); g.moveTo(f.x - w * 0.6, f.y - h * 0.55); g.lineTo(f.x - w * 0.2, f.y - h * 0.8); g.stroke();
+      g.strokeStyle = "rgba(255,255,255,.5)"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(f.x + w * 0.1, f.y - h * 0.3); g.lineTo(f.x + w * 0.35, f.y); g.lineTo(f.x + w * 0.1, f.y + h * 0.3); g.stroke();
+    }
+    if (st.cnf > 0) {
+      badges.push(["CNF", "#ff7ad0"]);
+      // dizzy stars circling the head and a wobbling question mark
+      for (let k = 0; k < 3; k++) {
+        const an = t * 4 + k * 2.094, x = f.x + Math.cos(an) * f.r * 0.95, y = top + Math.sin(an) * f.r * 0.28;
+        g.globalAlpha = Math.sin(an) > 0 ? 1 : 0.55; g.fillStyle = k % 2 ? "#ffe14d" : "#ff9be6";
+        g.beginPath(); for (let i = 0; i < 10; i++) { const rr = i % 2 ? 2.5 : 6; const aa = (i / 10) * Math.PI * 2 - Math.PI / 2; i ? g.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr) : g.moveTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr); } g.closePath(); g.fill();
+      }
+      g.globalAlpha = 1; g.fillStyle = "#ffe6fb"; g.font = "800 15px system-ui, sans-serif"; g.textAlign = "center"; g.fillText("?", f.x + Math.sin(t * 6) * 4, top - 12);
+    }
+    if (st.slp > 0) {
+      badges.push(["SLP", "#8fa4ff"]);
+      for (let k = 0; k < 3; k++) { const ph = (t * 0.7 + k / 3) % 1; g.globalAlpha = Math.sin(ph * Math.PI); g.fillStyle = "#cfd8ff"; g.font = `800 ${11 + k * 4}px system-ui, sans-serif`; g.textAlign = "center"; g.fillText("Z", f.x + f.r * 0.5 + ph * 18 + k * 4, top + 6 - ph * 28 - k * 4); }
+      g.globalAlpha = 0.25; g.fillStyle = "#1a2050"; g.beginPath(); g.ellipse(f.x, f.y - f.r * 0.1, f.r * 1.2, f.r * 1.3, 0, 0, Math.PI * 2); g.fill();
+    }
+    // the badge row: one small pill per condition, above the head
+    if (badges.length) {
+      g.globalAlpha = 1; g.font = "800 9px system-ui, sans-serif"; g.textAlign = "center";
+      const wpx = 24, gap = 3, total = badges.length * wpx + (badges.length - 1) * gap;
+      badges.forEach(([txt, cc], i) => { const bx = f.x - total / 2 + i * (wpx + gap), by = top - f.r * 0.55 - 8; g.fillStyle = "rgba(10,10,20,.8)"; g.strokeStyle = cc; g.lineWidth = 1.5; g.beginPath(); g.roundRect(bx, by, wpx, 12, 6); g.fill(); g.stroke(); g.fillStyle = cc; g.fillText(txt, bx + wpx / 2, by + 9); });
+    }
+    g.restore();
+  }
+
   /** Rocks rising off the floor in a psychic pulse: they bob for a few seconds, then drop and crumble. */
   private drawRocks(g: CanvasRenderingContext2D, dt: number) {
     if (!this.rocks.length) return;
@@ -3890,7 +3957,7 @@ export class ArenaRenderer {
       // nothing above ground
     } else if (im) {
       const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
-      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, undefined, 1, wk);
+      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin + (f.status.slp > 0 ? 0.4 : 0) + (f.status.par > 0 ? Math.sin(t * 60) * 0.05 : 0) + (f.status.cnf > 0 ? Math.sin(t * 9) * 0.12 : 0), undefined, 1, wk);
       if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk);
       else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk);
       else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk);
@@ -4022,6 +4089,7 @@ export class ArenaRenderer {
     }
     // flames, bubbles and sparks for what is wrong with them
     if (f.alive) {
+      this.drawStatusFx(g, f);
       if (f.status.brn > 0 && Math.random() < 0.35) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r), y: f.y, vx: 0, vy: -60, g: 0, life: 0.5, max: 0.5, size: 4, grow: 0, color: "#ff8a3d" });
       if (f.status.psn > 0 && Math.random() < 0.25) this.parts.push({ kind: "ring", x: f.x + rnd(-f.r, f.r), y: f.y, vx: 0, vy: -30, g: 0, life: 0.7, max: 0.7, size: 3, grow: 6, color: "#b259d6" });
       if (f.status.par > 0 && Math.random() < 0.3) this.parts.push({ kind: "streak", x: f.x + rnd(-f.r, f.r), y: f.y - f.r, vx: rnd(-90, 90), vy: rnd(-90, 90), g: 0, life: 0.15, max: 0.15, size: 6, grow: 0, color: "#ffe14d" });

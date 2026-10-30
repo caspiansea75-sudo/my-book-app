@@ -180,6 +180,7 @@ export type Ev =
   | { t: "combo"; n: number; finish: boolean }
   | { t: "heal"; x: number; y: number; amt: number }
   | { t: "status"; x: number; y: number; kind: StatusKind }
+  | { t: "ailment"; x: number; y: number; kind: "par" | "cnf" | "slp" }
   | { t: "shield"; x: number; y: number }
   | { t: "buff"; x: number; y: number; id: number; fx?: string }
   | { t: "grab"; id: number; by: number; x: number; y: number }
@@ -263,7 +264,7 @@ const norm = (x: number, y: number): [number, number] => {
   return l < 1e-6 ? [1, 0] : [x / l, y / l];
 };
 
-const emptyStatus = () => ({ brn: 0, psn: 0, par: 0, frz: 0, frzImmune: 0 });
+const emptyStatus = () => ({ brn: 0, psn: 0, par: 0, frz: 0, cnf: 0, slp: 0, frzImmune: 0 });
 
 /* ----------------------------------------------------------------- the arena floor */
 
@@ -699,7 +700,14 @@ function applyStatus(S: State, f: Fighter, kind: StatusKind) {
     if (f.status.frzImmune > 0 || f.boss) return;
     f.status.frz = 1.0;
     f.status.frzImmune = 4.5;
-  } else if (kind === "par") f.status.par = 3.5;
+  } else if (kind === "slp") {
+    // asleep: cannot act until woken by a hard hit or the time runs out, then safe from sleep for a while
+    if (f.status.frzImmune > 0 || f.boss) return;
+    f.status.slp = 2.4;
+    f.status.frzImmune = 5;
+    f.cast = f.channel = null;
+  } else if (kind === "cnf") f.status.cnf = f.boss ? 2 : 4;
+  else if (kind === "par") f.status.par = 3.5;
   else if (kind === "brn") f.status.brn = 4;
   else f.status.psn = 5;
   S.events.push({ t: "status", x: f.x, y: f.y, kind });
@@ -749,6 +757,7 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     dst.ky += ny * o.kb * (heavy ? 1.3 : 1);
   }
   if (heavy) S.freeze = Math.max(S.freeze, src.isPlayer || dst.isPlayer ? 0.07 : 0.03);
+  if (dst.status.slp > 0 && dmg > 0) dst.status.slp = Math.max(0, dst.status.slp - 1.1); // a hit shakes them awake
   if (o.status && Math.random() < o.status.chance) applyStatus(S, dst, o.status.kind);
   S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy });
   if (src.isPlayer) S.score += Math.round(dmg * 0.5);
@@ -1012,10 +1021,31 @@ function updateGrabs(S: State, dt: number) {
 
 /** Start using a move. Returns false if it is not possible right now. */
 export function tryCast(S: State, f: Fighter, slot: number, input: Input | null = null): boolean {
-  if (!f.alive || f.stun > 0 || f.status.frz > 0) return false;
+  if (!f.alive || f.stun > 0 || f.status.frz > 0 || f.status.slp > 0) return false;
   if (f.cd[slot]! > 0 || f.cast || f.channel || f.dash) return false;
+  // paralysed: sometimes the body will not obey; confused: sometimes they hit themselves instead
+  if (f.status.par > 0 && Math.random() < 0.25) {
+    f.cd[slot] = 0.5;
+    S.events.push({ t: "ailment", x: f.x, y: f.y, kind: "par" });
+    return false;
+  }
+  if (f.status.cnf > 0 && Math.random() < 0.35) {
+    f.cd[slot] = 0.7;
+    f.hp = Math.max(1, f.hp - f.maxHp * 0.05);
+    f.flash = 0.2;
+    S.events.push({ t: "ailment", x: f.x, y: f.y, kind: "cnf" });
+    return false;
+  }
   const mv = moveOf(f, slot);
   const a = aimOf(S, f, input);
+  if (f.status.cnf > 0) {
+    // confused aim: the shot flies off to one side
+    const sw = Math.sin(S.time * 6 + f.id) * 0.8;
+    const c = Math.cos(sw), sn = Math.sin(sw);
+    const nx = a.dx * c - a.dy * sn, ny = a.dx * sn + a.dy * c;
+    const dd = len(a.tx - f.x, a.ty - f.y);
+    a.dx = nx; a.dy = ny; a.tx = f.x + nx * dd; a.ty = f.y + ny * dd;
+  }
   f.cd[slot] = mv.cd * f.cdMul;
   if (f.isPlayer) {
     // chain different moves for a combo
@@ -1046,7 +1076,7 @@ export function tryCast(S: State, f: Fighter, slot: number, input: Input | null 
 }
 
 function startDodge(S: State, f: Fighter, dx: number, dy: number) {
-  if (!f.alive || f.dodge.cd > 0 || f.dodge.t > 0 || f.status.frz > 0 || f.stun > 0) return false;
+  if (!f.alive || f.dodge.cd > 0 || f.dodge.t > 0 || f.status.frz > 0 || f.status.slp > 0 || f.stun > 0) return false;
   const [nx, ny] = norm(dx, dy);
   f.dodge = { t: 0.3, cd: 1.15 * f.dodgeMul, dx: nx, dy: ny, perfected: false };
   f.invuln = Math.max(f.invuln, 0.27);
@@ -1141,7 +1171,7 @@ function doDynamax(S: State, f: Fighter) {
   f.hp = Math.round(f.hp * 1.5);
   f.ghost = f.hp;
   f.invuln = Math.max(f.invuln, 0.5);
-  f.status.brn = f.status.psn = f.status.par = f.status.frz = 0;
+  f.status.brn = f.status.psn = f.status.par = f.status.frz = f.status.cnf = f.status.slp = 0;
   const type = f.types[0] ?? "Normal";
   // its own special move: a giant strike that lands where you aim
   f.override[3] = f.gmax
@@ -1360,12 +1390,19 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     f.mvy = sy * 0.4;
   } else {
     let k = f.speedMul;
+    if (f.status.cnf > 0) {
+      // stumbling: the walking direction wanders
+      const w = Math.sin(S.time * 4.2 + f.id * 1.7) * 1.5;
+      const c = Math.cos(w), sn = Math.sin(w);
+      const vx = f.vx * c - f.vy * sn, vy = f.vx * sn + f.vy * c;
+      f.vx = vx; f.vy = vy;
+    }
     if (f.awaken > 0) k *= 1.25;
     if (f.mega > 0) k *= f.megaS;
     if (f.dyna > 0) k *= 0.92;
     if (f.haste > 0) k *= 1.3;
     if (f.status.par > 0) k *= 0.55;
-    if (f.status.frz > 0 || f.stun > 0) k = 0;
+    if (f.status.frz > 0 || f.status.slp > 0 || f.stun > 0) k = 0;
     if (f.channel) k *= 0.35;
     // water: swimmers are quick, flyers do not care, everyone else wades
     if (f.inWater) k *= f.swimmer ? 1.3 : f.canFly ? 1 : 0.62;
@@ -1570,6 +1607,8 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     if (!f.alive) continue;
     f.status.par = Math.max(0, f.status.par - dt);
     f.status.frz = Math.max(0, f.status.frz - dt);
+    f.status.cnf = Math.max(0, f.status.cnf - dt);
+    f.status.slp = Math.max(0, f.status.slp - dt);
     if (f.heal) {
       f.hp = Math.min(f.maxHp, f.hp + f.heal.per * dt);
       f.heal.t -= dt;
@@ -1578,7 +1617,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
 
     // a move being wound up
     if (f.cast) {
-      if (f.status.frz > 0) f.cast = null;
+      if (f.status.frz > 0 || f.status.slp > 0) f.cast = null;
       else {
         f.cast.t -= dt;
         if (f.cast.t <= 0) {
@@ -1598,7 +1637,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
         f.channel.tick = 0.55 / (mv.n ?? 8);
         spawnProj(S, f, mv, f.channel.dx, f.channel.dy, { speed: 760, life: (mv.range ?? 260) / 760, r: 10, pierce: true, beam: true, off: rnd(-0.07, 0.07), dmg: baseDamage(f, mv) });
       }
-      if (f.channel.t <= 0 || f.status.frz > 0) f.channel = null;
+      if (f.channel.t <= 0 || f.status.frz > 0 || f.status.slp > 0) f.channel = null;
     }
     // a rush (or a burrow)
     if (f.dash) {

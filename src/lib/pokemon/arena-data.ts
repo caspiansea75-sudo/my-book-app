@@ -20,7 +20,7 @@ export type MoveKind =
   | "buff" //  more damage for a while
   | "grab"; //  lift a foe in front of you, then throw it
 
-export type StatusKind = "brn" | "psn" | "par" | "frz";
+export type StatusKind = "brn" | "psn" | "par" | "frz" | "cnf" | "slp";
 
 export type MoveDef = {
   id: string;
@@ -66,6 +66,15 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "nuzzle", name: "Nuzzle", type: "Electric", kind: "dash", power: 0.9, cd: 2.2, range: 200, status: { kind: "par", chance: 0.7 }, desc: "A cheek full of sparks; usually paralyzes." }),
     m({ id: "thunderpunch", name: "Thunder Punch", type: "Electric", kind: "dash", power: 1.4, cd: 2.6, range: 210, status: { kind: "par", chance: 0.2 }, desc: "A punch wrapped in lightning." }),
     m({ id: "strength", name: "Strength", type: "Normal", kind: "dash", power: 1.5, cd: 3.0, range: 200, desc: "A crushing blow that shakes the ground." }),
+    m({ id: "confuseray", name: "Confuse Ray", type: "Ghost", kind: "proj", power: 0.3, cd: 3.2, speed: 380, status: { kind: "cnf", chance: 0.95 }, desc: "A strange light that leaves the target confused." }),
+    m({ id: "supersonic", name: "Supersonic", type: "Normal", kind: "proj", power: 0.25, cd: 3.0, speed: 420, pierce: true, status: { kind: "cnf", chance: 0.8 }, desc: "Sound waves that confuse whatever they pass through." }),
+    m({ id: "sing", name: "Sing", type: "Normal", kind: "proj", power: 0.2, cd: 4.5, speed: 340, pierce: true, status: { kind: "slp", chance: 0.8 }, desc: "A lullaby that puts foes to sleep." }),
+    m({ id: "hypnosis", name: "Hypnosis", type: "Psychic", kind: "proj", power: 0.25, cd: 4.5, speed: 360, status: { kind: "slp", chance: 0.8 }, desc: "Hypnotic rings that put the target to sleep." }),
+    m({ id: "spore", name: "Spore", type: "Grass", kind: "proj", power: 0.25, cd: 5.5, speed: 380, status: { kind: "slp", chance: 0.95 }, desc: "A cloud of spores that nearly always sleeps the target." }),
+    m({ id: "sleeppowder", name: "Sleep Powder", type: "Grass", kind: "lob", power: 0.4, cd: 5.0, range: 320, windup: 0.45, status: { kind: "slp", chance: 0.85 }, fx: "sleeppowder", desc: "A cloud of sleepy dust." }),
+    m({ id: "stunspore", name: "Stun Spore", type: "Grass", kind: "lob", power: 0.4, cd: 4.0, range: 320, windup: 0.4, status: { kind: "par", chance: 0.9 }, fx: "stunspore", desc: "A cloud of paralysing dust." }),
+    m({ id: "toxic", name: "Toxic", type: "Poison", kind: "proj", power: 0.35, cd: 3.2, speed: 360, status: { kind: "psn", chance: 1 }, desc: "A bubble of toxin that always poisons." }),
+    m({ id: "powdersnow", name: "Powder Snow", type: "Ice", kind: "proj", power: 0.8, cd: 1.8, speed: 480, status: { kind: "frz", chance: 0.18 }, desc: "A flurry that sometimes freezes." }),
     m({ id: "hydropump", name: "Hydro Pump", type: "Water", kind: "beam", power: 0.52, cd: 3.4, n: 8, range: 300, desc: "A powerful jet of water." }),
     m({ id: "surf", name: "Surf", type: "Water", kind: "nova", power: 1.7, cd: 5.0, range: 150, windup: 0.3, desc: "A wave that pushes everything away." }),
     m({ id: "razorleaf", name: "Razor Leaf", type: "Grass", kind: "spread", power: 0.62, cd: 1.7, n: 5, speed: 520, desc: "A fan of sharp leaves." }),
@@ -90,7 +99,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "earthquake", name: "Earthquake", type: "Ground", kind: "nova", power: 1.9, cd: 5.2, range: 170, windup: 0.35, desc: "The whole ground shakes." }),
     m({ id: "stoneedge", name: "Stone Edge", type: "Rock", kind: "spread", power: 0.85, cd: 2.4, n: 4, speed: 500, desc: "Jagged stones fly out." }),
     m({ id: "rockslide", name: "Rock Slide", type: "Rock", kind: "lob", power: 1.9, cd: 5, range: 320, windup: 0.5, desc: "Boulders fall on the spot." }),
-    m({ id: "psybeam", name: "Psybeam", type: "Psychic", kind: "proj", power: 1.0, cd: 1.2, speed: 520, desc: "A shimmering ray." }),
+    m({ id: "psybeam", name: "Psybeam", type: "Psychic", kind: "proj", power: 1.0, cd: 1.2, speed: 520, status: { kind: "cnf", chance: 0.22 }, desc: "A shimmering ray." }),
     m({ id: "psychic", name: "Psychic", type: "Psychic", kind: "nova", power: 1.6, cd: 4.4, range: 140, windup: 0.3, fx: "levitate", desc: "A burst of mind power." }),
     m({ id: "psystrike", name: "Psystrike", type: "Psychic", kind: "proj", power: 2.2, cd: 3.2, speed: 460, pierce: true, desc: "A piercing psychic blast." }),
     m({ id: "moonblast", name: "Moonblast", type: "Fairy", kind: "lob", power: 1.9, cd: 4.8, range: 330, windup: 0.5, desc: "Moonlight falls on the spot." }),

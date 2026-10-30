@@ -470,6 +470,75 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
   }
 
   switch (p.mv) {
+    case "confuseray": {
+      // a spinning purple-pink eye of light
+      g.globalCompositeOperation = "lighter";
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 2.8);
+      gr.addColorStop(0, "rgba(255,140,255,.7)"); gr.addColorStop(1, "rgba(150,60,255,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r * 2.8, 0, Math.PI * 2); g.fill();
+      g.lineCap = "round"; g.strokeStyle = "#f0b8ff"; g.lineWidth = 2.5;
+      g.beginPath();
+      for (let i = 0; i <= 18; i++) { const u = i / 18; const an = t * 10 + u * 9; const rr = r * (0.2 + u * 1.7); i ? g.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : g.moveTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+      g.stroke();
+      g.fillStyle = "#ffffff"; g.beginPath(); g.arc(0, 0, r * 0.4, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case "supersonic": {
+      // spreading rings of sound
+      g.rotate(ang); g.lineCap = "round";
+      for (let k = 0; k < 4; k++) {
+        const ph = (t * 3 + k * 0.25) % 1;
+        g.globalAlpha = 1 - ph; g.strokeStyle = k % 2 ? "#ffffff" : "#bfe0ff"; g.lineWidth = 3;
+        g.beginPath(); g.arc(-ph * r * 3, 0, r * (0.8 + ph * 1.8), -1.1, 1.1); g.stroke();
+      }
+      g.globalAlpha = 1;
+      break;
+    }
+    case "sing": {
+      // music notes drifting forward
+      g.rotate(0);
+      g.fillStyle = "#ffd6f2"; g.strokeStyle = "#ffd6f2"; g.lineWidth = 2.5;
+      for (let k = 0; k < 2; k++) {
+        const ox = -k * r * 2.4, oy = Math.sin(t * 8 + k * 2) * r * 0.8;
+        g.beginPath(); g.ellipse(ox, oy, r * 0.8, r * 0.55, -0.4, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.moveTo(ox + r * 0.7, oy - r * 0.1); g.lineTo(ox + r * 0.7, oy - r * 2.3); g.lineTo(ox + r * 1.5, oy - r * 1.7); g.stroke();
+      }
+      break;
+    }
+    case "hypnosis": {
+      // concentric pink rings pulsing outward
+      g.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 4; k++) {
+        const ph = (t * 2.2 + k * 0.25) % 1;
+        g.globalAlpha = 1 - ph; g.strokeStyle = k % 2 ? "#ff9be6" : "#c77dff"; g.lineWidth = 3;
+        g.beginPath(); g.arc(0, 0, r * (0.5 + ph * 2.6), 0, Math.PI * 2); g.stroke();
+      }
+      g.globalAlpha = 1; g.fillStyle = "#ffffff"; g.beginPath(); g.arc(0, 0, r * 0.4, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case "spore": {
+      // a drifting puff of yellow-green spores
+      for (let k = 0; k < 9; k++) {
+        const an = t * 3 + k * 0.7, rr = r * (0.7 + (k % 3) * 0.6);
+        g.globalAlpha = 0.85; g.fillStyle = k % 2 ? "#e8ff8a" : "#9be07a";
+        g.beginPath(); g.arc(Math.cos(an) * rr, Math.sin(an) * rr, r * (0.35 + (k % 3) * 0.15), 0, Math.PI * 2); g.fill();
+      }
+      g.globalAlpha = 1;
+      break;
+    }
+    case "toxic": {
+      // a glossy purple bubble with a skull-shaped glint
+      g.fillStyle = "rgba(150,60,200,.85)"; g.strokeStyle = "#e1a8ff"; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(0, 0, r * 1.5, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = "rgba(255,255,255,.7)"; g.beginPath(); g.ellipse(-r * 0.5, -r * 0.5, r * 0.4, r * 0.22, -0.6, 0, Math.PI * 2); g.fill();
+      g.fillStyle = "#2a0a3a"; g.beginPath(); g.arc(-r * 0.3, r * 0.1, r * 0.22, 0, Math.PI * 2); g.arc(r * 0.3, r * 0.1, r * 0.22, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case "powdersnow": {
+      g.globalCompositeOperation = "lighter"; g.fillStyle = "#eaf9ff";
+      for (let k = 0; k < 8; k++) { const an = t * 6 + k; g.beginPath(); g.arc(Math.cos(an) * r * 1.4 - k * 2, Math.sin(an * 1.3) * r * 1.2, r * 0.3, 0, Math.PI * 2); g.fill(); }
+      break;
+    }
     case "hiddenpower": {
       // a white core ringed by orbs of every colour, turning
       g.globalCompositeOperation = "lighter";
