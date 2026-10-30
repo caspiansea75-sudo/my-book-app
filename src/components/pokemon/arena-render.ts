@@ -59,6 +59,7 @@ export class ArenaRenderer {
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private clones = new Map<number, number>();
+  private dances = new Map<number, number>();
   /** Rocks lifted off the floor by a psychic pulse. */
   private waves: { x: number; y: number; r: number; t: number; life: number; kind: string }[] = [];
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
@@ -524,6 +525,7 @@ export class ArenaRenderer {
           break;
         case "buff":
           if (e.fx === "clones") this.clones.set(e.id, this.t + 6);
+          if (e.fx === "dragondance") { this.dances.set(e.id, this.t + 5); this.ring(e.x, e.y, "#4fe3ff", 90, 0.7); this.ring(e.x, e.y, "#7a5cff", 60, 0.5); }
           this.ring(e.x, e.y, e.fx === "clones" ? "#9dffb0" : "#ffb04d", 70, 0.5);
           for (let i = 0; i < 8; i++) this.parts.push({ kind: "text", x: e.x + rnd(-24, 24), y: e.y + 6, vx: 0, vy: -60, g: 0, life: 0.9, max: 0.9, size: 14, grow: 0, color: "#ffb04d", text: "▲", weight: 800 });
           break;
@@ -591,9 +593,28 @@ export class ArenaRenderer {
           this.parts.push({ kind: "dot", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 30, life: rnd(0.7, 1.3), max: 1.3, size: rnd(2, 5), grow: 0, color: i % 2 ? "#ffffff" : "#aeeaff" });
         }
         break;
+      case "outrage":
+        // a furious wave of red-violet flame with a ring of fire rising off the ground
+        this.waves.push({ x, y, r, t: 0, life: 0.8, kind: "outrage" });
+        for (let i = 0; i < 20; i++) {
+          const a = (i / 20) * Math.PI * 2;
+          this.parts.push({ kind: "puff", x: x + Math.cos(a) * r * 0.6, y: y + Math.sin(a) * r * 0.45, vx: Math.cos(a) * 50, vy: rnd(-170, -90), g: 0, life: 0.7, max: 0.7, size: 8, grow: 6, color: i % 2 ? "#ff5a5a" : "#b24dff", edge: "#3a0a2a", seed: i });
+        }
+        this.shake = Math.max(this.shake, 9);
+        this.shakeT = 0.3;
+        break;
+      case "clangingscales":
+        // ringing metal scales: quick concentric chimes, silver sparks
+        this.waves.push({ x, y, r, t: 0, life: 0.8, kind: "scales" });
+        this.ring(x, y, "#ffffff", r * 0.8, 0.35);
+        this.ring(x, y, "#9fd4e8", r * 1.0, 0.5);
+        for (let i = 0; i < 26; i++) {
+          const a = rnd(0, Math.PI * 2), v = rnd(r, r * 2.6);
+          this.parts.push({ kind: "star", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, life: rnd(0.4, 0.8), max: 0.8, size: rnd(4, 8), grow: 0, color: i % 2 ? "#ffffff" : "#9fd4e8" });
+        }
+        break;
       case "closecombat":
       case "dynamicpunch":
-      case "outrage":
       case "xscissor":
         if (e.fx === "xscissor") this.parts.push({ kind: "cross", x, y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: Math.max(70, r * 1.1), grow: 0, color: "#6dff7a" });
         for (let i = 0; i < 10; i++) {
@@ -603,6 +624,13 @@ export class ArenaRenderer {
         break;
       case "dracometeor":
       case "rockslide":
+        if (e.fx === "dracometeor") {
+          // a crater of embers, a purple-orange shock ring and glowing rubble
+          this.ring(x, y, "#ff9a3c", r * 1.3, 0.5);
+          this.ring(x, y, "#9a5cff", r * 0.9, 0.4);
+          this.parts.push({ kind: "glow", x, y, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: r, grow: r * 1.2, color: "#ffb04d" });
+          for (let i = 0; i < 14; i++) this.parts.push({ kind: "dot", x: x + rnd(-r * 0.5, r * 0.5), y, vx: rnd(-220, 220), vy: rnd(-380, -140), g: 800, life: rnd(0.6, 1.1), max: 1.1, size: rnd(3, 6), grow: 0, color: i % 3 ? "#ffb04d" : "#c9a0ff" });
+        }
         for (let i = 0; i < 12; i++) this.parts.push({ kind: "dot", x: x + rnd(-r * 0.6, r * 0.6), y, vx: rnd(-160, 160), vy: rnd(-300, -100), g: 700, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3.5, 7), grow: 0, color: e.fx === "rockslide" ? "#8a8f99" : "#ff8a3d" });
         this.shake = Math.max(this.shake, 8);
         this.shakeT = 0.35;
@@ -1847,10 +1875,29 @@ export class ArenaRenderer {
               g.lineTo(mx - 10, my - 46);
               g.stroke();
               g.restore();
-              g.fillStyle = (z.mv.fx ?? z.mv.id) === "dracometeor" ? "#ff9a3c" : "#8a8f99";
-              g.beginPath();
-              g.arc(mx, my, 10 + (i % 2) * 4, 0, Math.PI * 2);
-              g.fill();
+              if ((z.mv.fx ?? z.mv.id) === "dracometeor") {
+                // a comet: violet tail, orange fire, white-hot head
+                const rr = 10 + (i % 2) * 4;
+                g.save();
+                g.globalCompositeOperation = "lighter";
+                const tg = g.createLinearGradient(mx, my, mx - 18, my - 90);
+                tg.addColorStop(0, "rgba(255,170,70,.9)");
+                tg.addColorStop(0.5, "rgba(150,90,255,.55)");
+                tg.addColorStop(1, "rgba(120,80,255,0)");
+                g.strokeStyle = tg;
+                g.lineWidth = rr * 1.5;
+                g.lineCap = "round";
+                g.beginPath(); g.moveTo(mx, my); g.lineTo(mx - 18, my - 90); g.stroke();
+                const hg = g.createRadialGradient(mx, my, 0, mx, my, rr * 1.8);
+                hg.addColorStop(0, "#ffffff"); hg.addColorStop(0.4, "#ffb04d"); hg.addColorStop(1, "rgba(255,80,0,0)");
+                g.fillStyle = hg; g.beginPath(); g.arc(mx, my, rr * 1.8, 0, Math.PI * 2); g.fill();
+                g.restore();
+              } else {
+                g.fillStyle = "#8a8f99";
+                g.beginPath();
+                g.arc(mx, my, 10 + (i % 2) * 4, 0, Math.PI * 2);
+                g.fill();
+              }
             }
           }
           g.fillStyle = z.player ? `${c}55` : z.team === -1 ? "rgba(255,225,70,.4)" : "rgba(255,90,70,.35)";
@@ -2304,6 +2351,8 @@ export class ArenaRenderer {
       sludgewave: ["#5a2a86", "#9a4fd6", "#c6e86a", "#2b1048"],
       heatwave: ["#ff5a1a", "#ffa62e", "#fff0a8", "#8a1c08"],
       hypervoice: ["#e8e4d8", "#ffffff", "#ffffff", "#a9a395"],
+      outrage: ["#8a1030", "#ff4d5a", "#ffd0a0", "#2a0612"],
+      scales: ["#3d5a6c", "#9fd4e8", "#ffffff", "#16242d"],
     };
     for (const w of this.waves) {
       w.t += dt;
@@ -2314,8 +2363,8 @@ export class ArenaRenderer {
       const R = w.r * (0.25 + 1.0 * ease);
       const [c0, c1, c2, dk] = pal[w.kind] ?? pal.surf!;
       const fade = Math.min(1, (1 - k) * 2.2);
-      const N = w.kind === "hypervoice" ? 0 : w.kind === "heatwave" ? 16 : 11;
-      const amp = w.kind === "heatwave" ? 7 : 6 + R * 0.04;
+      const N = w.kind === "hypervoice" ? 0 : w.kind === "heatwave" ? 16 : w.kind === "outrage" ? 13 : w.kind === "scales" ? 28 : 11;
+      const amp = w.kind === "heatwave" ? 7 : w.kind === "outrage" ? 13 : w.kind === "scales" ? 3.5 : 6 + R * 0.04;
       const rad = (a: number, off: number) => R + off + (N ? Math.sin(a * N + this.t * 10) * amp * (1 - k * 0.4) : 0);
       const thick = Math.max(10, w.r * 0.3) * (1 - k * 0.5);
       g.save();
@@ -2356,6 +2405,10 @@ export class ArenaRenderer {
         for (let a = 0; a <= Math.PI * 2 + STEP; a += STEP) g.lineTo(Math.cos(a) * rad(a, off), Math.sin(a) * rad(a, off));
         g.stroke();
       }
+      if (w.kind === "scales") { // chiming rings
+        g.globalAlpha = fade; g.lineWidth = 2.5;
+        for (let k = 0; k < 4; k++) { const rr = R * (0.35 + k * 0.2) - ((this.t * 60) % 14); g.beginPath(); g.arc(0, 0, Math.max(2, rr), 0, Math.PI * 2); g.stroke(); }
+      }
       if (w.kind === "hypervoice") { // sound rings
         g.globalAlpha = fade; g.lineWidth = 3;
         for (const o of [0, -22, -44]) { g.beginPath(); g.arc(0, 0, Math.max(2, R + o), 0, Math.PI * 2); g.stroke(); }
@@ -2365,6 +2418,8 @@ export class ArenaRenderer {
         const a = Math.random() * Math.PI * 2;
         const px = w.x + Math.cos(a) * R, py = w.y + Math.sin(a) * R * 0.78;
         if (w.kind === "sludgewave") this.parts.push({ kind: "dot", x: px, y: py, vx: Math.cos(a) * 40, vy: rnd(-120, -40), g: 300, life: 0.5, max: 0.5, size: rnd(2.5, 5), grow: 0, color: Math.random() < 0.5 ? "#c6e86a" : "#9a4fd6" });
+        else if (w.kind === "outrage") this.parts.push({ kind: "puff", x: px, y: py, vx: Math.cos(a) * 30, vy: rnd(-130, -60), g: 0, life: 0.5, max: 0.5, size: rnd(5, 9), grow: 8, color: Math.random() < 0.5 ? "#ff5a5a" : "#b24dff", edge: "#3a0a2a", seed: Math.floor(Math.random() * 99) });
+        else if (w.kind === "scales") this.parts.push({ kind: "star", x: px, y: py, vx: Math.cos(a) * 60, vy: Math.sin(a) * 40, g: 0, life: 0.4, max: 0.4, size: rnd(3, 6), grow: 0, color: "#ffffff" });
         else if (w.kind === "heatwave") this.parts.push({ kind: "smoke", x: px, y: py, vx: Math.cos(a) * 30, vy: rnd(-90, -40), g: 0, life: 0.6, max: 0.6, size: rnd(6, 10), grow: 14, color: "#ffd9a0" });
         else this.parts.push({ kind: "dot", x: px, y: py, vx: Math.cos(a) * 50, vy: rnd(-140, -50), g: 340, life: 0.45, max: 0.45, size: rnd(1.8, 3.5), grow: 0, color: "#ffffff" });
       }
@@ -2374,6 +2429,7 @@ export class ArenaRenderer {
 
   /** A fancy beam for the big line attacks: pulsing glow, twin spiralling strands, travelling pulses, sparkles, a charge orb at the source and a flare where it lands. */
   private drawFancyBeam(g: CanvasRenderingContext2D, z: State["zones"][number], a: number) {
+    if (z.type === "Dragon" && this.drawDragonBeam(g, z, a)) return;
     const pal: Record<string, [string, string, string]> = {
       Grass: ["#7be04a", "#fff3a0", "#ffffff"],
       Water: ["#3aa0ff", "#bfe8ff", "#ffffff"],
@@ -2442,6 +2498,202 @@ export class ArenaRenderer {
     g.strokeStyle = c2; g.lineWidth = 2; g.globalAlpha = a * 0.8;
     for (let i = 0; i < 8; i++) { const aa = (i / 8) * Math.PI * 2 + t * 6; g.beginPath(); g.moveTo(L + Math.cos(aa) * W, Math.sin(aa) * W); g.lineTo(L + Math.cos(aa) * W * 2.6, Math.sin(aa) * W * 2.6); g.stroke(); }
     if (Math.random() < 0.8) { const d = Math.random() * L; this.parts.push({ kind: "dot", x: z.x + Math.cos(ang) * d + rnd(-6, 6), y: z.y + Math.sin(ang) * d + rnd(-6, 6), vx: rnd(-60, 60), vy: rnd(-80, -10), g: 0, life: 0.5, max: 0.5, size: rnd(2, 4), grow: 0, color: Math.random() < 0.5 ? c1 : c0 }); }
+  }
+
+  /** Each big dragon beam has its own look. Returns false for any other move. */
+  private drawDragonBeam(g: CanvasRenderingContext2D, z: State["zones"][number], a: number): boolean {
+    const id = z.mv.fx ?? z.mv.id;
+    if (!["spacialrend", "roaroftime", "coreenforcer", "eternabeam"].includes(id)) return false;
+    const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
+    const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
+    const t = this.t;
+    const grow = a > 0.8 ? 1 : 0.35 + a * 0.8;
+    g.translate(z.x, z.y);
+    g.rotate(ang);
+    g.lineCap = "round"; g.lineJoin = "round";
+    const hash = (n: number) => { const v = Math.sin(n * 91.7 + Math.floor(t * 18) * 3.1) * 43758.5453; return v - Math.floor(v); };
+    const star = (x: number, y: number, r: number, col: string) => {
+      g.fillStyle = col; g.beginPath();
+      g.moveTo(x, y - r); g.lineTo(x + r * 0.25, y - r * 0.25); g.lineTo(x + r, y); g.lineTo(x + r * 0.25, y + r * 0.25);
+      g.lineTo(x, y + r); g.lineTo(x - r * 0.25, y + r * 0.25); g.lineTo(x - r, y); g.lineTo(x - r * 0.25, y - r * 0.25);
+      g.closePath(); g.fill();
+    };
+    if (id === "spacialrend") {
+      // a tear in space: a black rift with jagged white-blue edges, light leaking out and shards drifting
+      const W = z.r * 1.15 * grow;
+      const edge = (side: number) => { const pts: [number, number][] = []; for (let d = 0; d <= L; d += 16) pts.push([d, side * (W * (0.55 + 0.45 * hash(d * 0.13 + side))) ]); return pts; };
+      const up = edge(-1), dn = edge(1).reverse();
+      g.globalCompositeOperation = "lighter";
+      g.globalAlpha = a * 0.5;
+      const gl = g.createLinearGradient(0, -W * 2.4, 0, W * 2.4);
+      gl.addColorStop(0, "rgba(0,0,0,0)"); gl.addColorStop(0.5, "#6fb0ff"); gl.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gl; g.fillRect(0, -W * 2.4, L, W * 4.8);
+      g.globalCompositeOperation = "source-over";
+      g.globalAlpha = a;
+      g.fillStyle = "#07021c";
+      g.beginPath(); up.forEach((p2, i) => (i ? g.lineTo(p2[0], p2[1]) : g.moveTo(p2[0], p2[1]))); dn.forEach((p2) => g.lineTo(p2[0], p2[1])); g.closePath(); g.fill();
+      g.globalCompositeOperation = "lighter";
+      for (const [pts, wd, cc] of [[up, 5, "#7fd0ff"], [dn, 5, "#7fd0ff"], [up, 1.8, "#ffffff"], [dn, 1.8, "#ffffff"]] as const) {
+        g.strokeStyle = cc; g.lineWidth = wd; g.beginPath(); pts.forEach((p2, i) => (i ? g.lineTo(p2[0], p2[1]) : g.moveTo(p2[0], p2[1]))); g.stroke();
+      }
+      // stars seen through the rift
+      for (let k = 0; k < 26; k++) star((k * 53 + t * 40) % Math.max(30, L), (hash(k) - 0.5) * W * 1.1, 1.5 + hash(k + 9) * 2.2, "#ffffff");
+      // shards peeling off the edges
+      g.fillStyle = "#bfe3ff";
+      for (let k = 0; k < 12; k++) { const d = (k * 79 + t * 120) % Math.max(30, L); const y = (k % 2 ? 1 : -1) * (W * 1.2 + Math.sin(k + t * 6) * 10); g.save(); g.translate(d, y); g.rotate(k + t * 3); g.fillRect(-4, -2, 8, 4); g.restore(); }
+    } else if (id === "roaroftime") {
+      // a golden-violet time beam with clock faces sliding down it
+      const W = z.r * 1.3 * grow;
+      g.globalCompositeOperation = "lighter";
+      const bg = g.createLinearGradient(0, -W * 2, 0, W * 2);
+      bg.addColorStop(0, "rgba(120,60,255,0)"); bg.addColorStop(0.35, "rgba(160,110,255,.7)"); bg.addColorStop(0.5, "#ffe9a0"); bg.addColorStop(0.65, "rgba(160,110,255,.7)"); bg.addColorStop(1, "rgba(120,60,255,0)");
+      g.globalAlpha = a; g.fillStyle = bg; g.fillRect(0, -W * 2, L, W * 4);
+      g.fillStyle = "#fff6d8"; g.fillRect(0, -W * 0.28, L, W * 0.56);
+      for (let d = (t * 260) % 120 + 30; d < L; d += 120) {
+        g.strokeStyle = "#ffe08a"; g.lineWidth = 3; g.beginPath(); g.arc(d, 0, W * 1.45, 0, Math.PI * 2); g.stroke();
+        g.lineWidth = 2;
+        for (let k = 0; k < 12; k++) { const aa = (k / 12) * Math.PI * 2; g.beginPath(); g.moveTo(d + Math.cos(aa) * W * 1.45, Math.sin(aa) * W * 1.45); g.lineTo(d + Math.cos(aa) * W * 1.2, Math.sin(aa) * W * 1.2); g.stroke(); }
+        g.strokeStyle = "#ffffff"; g.lineWidth = 3; // two hands, turning
+        g.beginPath(); g.moveTo(d, 0); g.lineTo(d + Math.cos(t * 7 + d) * W * 1.0, Math.sin(t * 7 + d) * W * 1.0); g.stroke();
+        g.beginPath(); g.moveTo(d, 0); g.lineTo(d + Math.cos(t * 1.4 + d) * W * 0.65, Math.sin(t * 1.4 + d) * W * 0.65); g.stroke();
+      }
+      for (let k = 0; k < 16; k++) star((k * 67 + t * 90) % Math.max(30, L), Math.sin(k * 3 + t * 4) * W * 1.7, 2 + (k % 3), k % 2 ? "#ffe9a0" : "#d9c2ff");
+    } else if (id === "coreenforcer") {
+      // Zygarde's green-and-black cell beam: hexagon rings sliding along a toxic-green beam
+      const W = z.r * 1.0 * grow;
+      g.globalAlpha = a; g.globalCompositeOperation = "source-over";
+      g.fillStyle = "#06180f"; g.fillRect(0, -W * 1.35, L, W * 2.7);
+      g.globalCompositeOperation = "lighter";
+      const bg = g.createLinearGradient(0, -W * 1.3, 0, W * 1.3);
+      bg.addColorStop(0, "rgba(40,255,140,0)"); bg.addColorStop(0.5, "#5dffa0"); bg.addColorStop(1, "rgba(40,255,140,0)");
+      g.fillStyle = bg; g.fillRect(0, -W * 1.3, L, W * 2.6);
+      g.fillStyle = "#e9ffe9"; g.fillRect(0, -W * 0.22, L, W * 0.44);
+      const hex = (cx: number, r: number) => { g.beginPath(); for (let k = 0; k < 6; k++) { const aa = (k / 6) * Math.PI * 2 + Math.PI / 6; const px = cx + Math.cos(aa) * r * 0.55, py = Math.sin(aa) * r; k ? g.lineTo(px, py) : g.moveTo(px, py); } g.closePath(); };
+      for (let d = (t * 340) % 70; d < L; d += 70) { g.strokeStyle = "#b8ffd8"; g.lineWidth = 3; hex(d, W * 1.35); g.stroke(); g.strokeStyle = "#2cdc78"; g.lineWidth = 1.5; hex(d, W * 0.9); g.stroke(); }
+      g.fillStyle = "#ffb04d"; // orange cell sparks
+      for (let k = 0; k < 14; k++) { g.globalAlpha = a * (0.4 + 0.6 * hash(k)); g.beginPath(); g.arc((k * 47 + t * 220) % Math.max(30, L), Math.sin(k * 5 + t * 8) * W * 1.5, 2.2, 0, Math.PI * 2); g.fill(); }
+    } else {
+      // Eternabeam: a vast beam of violet and crimson, two thick counter-turning ribbons, falling stars and a huge flare
+      const W = z.r * 1.8 * grow;
+      g.globalCompositeOperation = "lighter";
+      const bg = g.createLinearGradient(0, -W * 1.7, 0, W * 1.7);
+      bg.addColorStop(0, "rgba(120,40,255,0)"); bg.addColorStop(0.28, "rgba(150,60,255,.6)"); bg.addColorStop(0.5, "#ff6a8a"); bg.addColorStop(0.72, "rgba(150,60,255,.6)"); bg.addColorStop(1, "rgba(120,40,255,0)");
+      g.globalAlpha = a; g.fillStyle = bg; g.fillRect(0, -W * 1.7, L, W * 3.4);
+      g.fillStyle = "#ffd6e0"; g.fillRect(0, -W * 0.45, L, W * 0.9);
+      g.fillStyle = "#ffffff"; g.fillRect(0, -W * 0.2, L, W * 0.4);
+      for (const [ph, cc] of [[0, "#ff9ab8"], [Math.PI, "#b99cff"]] as const) {
+        g.strokeStyle = cc; g.lineWidth = 5; g.beginPath();
+        for (let d = 0; d <= L; d += 7) { const y = Math.sin(d * 0.03 - t * 18 + ph) * W * 1.1; d ? g.lineTo(d, y) : g.moveTo(d, y); }
+        g.stroke();
+      }
+      for (let k = 0; k < 22; k++) star((k * 41 + t * 260) % Math.max(30, L), Math.sin(k * 2.7 + t * 3) * W * 1.7, 2.5 + (k % 4), k % 2 ? "#ffffff" : "#ffb3c8");
+      g.strokeStyle = "#ffd6e0"; g.lineWidth = 2.5;
+      for (let d = (t * 200) % 90 + 20; d < L; d += 90) { g.beginPath(); g.ellipse(d, 0, W * 0.3, W * 1.5, 0, 0, Math.PI * 2); g.stroke(); }
+    }
+    // source orb and the flare at the end, in the beam's colours
+    const [c1, c2] = id === "spacialrend" ? ["#7fd0ff", "#ffffff"] : id === "roaroftime" ? ["#ffe08a", "#fff6d8"] : id === "coreenforcer" ? ["#5dffa0", "#e9ffe9"] : ["#ff6a8a", "#ffffff"];
+    g.globalCompositeOperation = "lighter"; g.globalAlpha = a;
+    for (const [x, rr] of [[0, z.r * 2.4], [L, z.r * 3.2]] as const) {
+      const rg = g.createRadialGradient(x, 0, 0, x, 0, rr);
+      rg.addColorStop(0, c2); rg.addColorStop(0.4, c1); rg.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = rg; g.beginPath(); g.arc(x, 0, rr, 0, Math.PI * 2); g.fill();
+    }
+    if (Math.random() < 0.9) { const d = Math.random() * L; this.parts.push({ kind: "dot", x: z.x + Math.cos(ang) * d + rnd(-8, 8), y: z.y + Math.sin(ang) * d + rnd(-8, 8), vx: rnd(-80, 80), vy: rnd(-90, -10), g: 0, life: 0.55, max: 0.55, size: rnd(2, 4.5), grow: 0, color: Math.random() < 0.5 ? c1 : c2 }); }
+    return true;
+  }
+
+  /** Dragon rushes with their own look: a roaring dragon head (Dragon Rush), triple claw slashes (Dragon Claw), a sweeping tail (Dragon Tail). */
+  private drawDragonDash(g: CanvasRenderingContext2D, f: Fighter) {
+    const d = f.dash;
+    if (!d) return;
+    const id = d.mv.fx ?? d.mv.id;
+    const ang = Math.atan2(d.dy, d.dx);
+    const p = Math.min(1, d.t / Math.max(0.01, d.total));
+    const t = this.t;
+    const s = f.r * 1.7;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round"; g.lineJoin = "round";
+    if (id === "dragonrush") {
+      g.translate(f.x + d.dx * f.r * 1.9, f.y - f.r * 0.35 + d.dy * f.r * 1.9);
+      g.rotate(ang);
+      const fade = 0.9 - p * 0.3;
+      g.globalAlpha = fade * 0.5;
+      const aura = g.createRadialGradient(0, 0, 0, 0, 0, s * 1.9);
+      aura.addColorStop(0, "rgba(120,200,255,.7)"); aura.addColorStop(1, "rgba(90,60,255,0)");
+      g.fillStyle = aura; g.beginPath(); g.arc(0, 0, s * 1.9, 0, Math.PI * 2); g.fill();
+      // the head: snout, jaw, horns and a glowing eye
+      g.globalAlpha = fade;
+      const gr = g.createLinearGradient(-s, 0, s, 0);
+      gr.addColorStop(0, "rgba(122,92,255,.2)"); gr.addColorStop(0.6, "#6f8bff"); gr.addColorStop(1, "#4fe3ff");
+      g.fillStyle = gr; g.strokeStyle = "#e8f7ff"; g.lineWidth = 2;
+      const jaw = 0.18 + Math.abs(Math.sin(t * 16)) * 0.2;
+      g.beginPath(); // upper head and horns
+      g.moveTo(s * 1.05, -s * 0.05); g.lineTo(s * 0.35, -s * 0.5); g.lineTo(-s * 0.1, -s * 0.62); g.lineTo(-s * 0.55, -s * 1.15); g.lineTo(-s * 0.55, -s * 0.45);
+      g.lineTo(-s * 1.1, -s * 0.5); g.lineTo(-s * 0.95, 0); g.lineTo(s * 0.2, 0); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); // lower jaw, opening and closing
+      g.moveTo(s * 0.9, s * jaw); g.lineTo(s * 0.15, s * (0.1 + jaw)); g.lineTo(-s * 0.9, s * 0.25); g.lineTo(-s * 0.5, s * 0.55); g.lineTo(s * 0.1, s * (0.5 + jaw)); g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = "#ffffff"; g.beginPath(); g.moveTo(s * 0.8, s * 0.02); g.lineTo(s * 0.7, s * 0.2); g.lineTo(s * 0.6, s * 0.02); g.fill();
+      g.beginPath(); g.arc(s * 0.1, -s * 0.28, s * 0.09, 0, Math.PI * 2); g.fill();
+      // streaming ribbons from the neck
+      for (const k of [-1, 1]) { g.strokeStyle = k > 0 ? "#7a5cff" : "#4fe3ff"; g.lineWidth = 4; g.beginPath(); for (let i = 0; i <= 8; i++) { const u = i / 8; const x = -s * (0.9 + u * 2.2), y = k * s * (0.25 + u * 0.35) + Math.sin(t * 20 + u * 6 + k) * 6; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+    } else if (id === "dragonclaw") {
+      // three crescent claw marks tear across the target's direction
+      g.translate(f.x + d.dx * f.r * 1.6, f.y - f.r * 0.2 + d.dy * f.r * 1.6);
+      g.rotate(ang);
+      const sw = Math.min(1, p * 2.2);
+      for (let i = -1; i <= 1; i++) {
+        const oy = i * s * 0.5;
+        g.globalAlpha = (1 - p * 0.6) * 0.9;
+        for (const [w, cc] of [[9, "rgba(122,92,255,.55)"], [5, "#4fe3ff"], [2, "#ffffff"]] as const) {
+          g.strokeStyle = cc; g.lineWidth = w;
+          g.beginPath();
+          g.moveTo(-s * 0.2, oy - s * 0.95 * sw);
+          g.quadraticCurveTo(s * 0.9 * sw, oy, -s * 0.2, oy + s * 0.95 * sw);
+          g.stroke();
+        }
+      }
+    } else if (id === "dragontail") {
+      // the tail sweeps round the body: a glowing crescent with a spiked tip
+      g.translate(f.x, f.y - f.r * 0.2);
+      const head = ang - 1.5 + p * 3.4;
+      for (let k = 0; k < 5; k++) {
+        g.globalAlpha = (1 - k * 0.2) * (1 - p * 0.4);
+        g.strokeStyle = k === 0 ? "#ffffff" : k < 3 ? "#4fe3ff" : "#7a5cff";
+        g.lineWidth = 11 - k * 2;
+        g.beginPath(); g.arc(0, 0, f.r * 2.2 + k * 1.5, head - 0.28 - k * 0.22, head - k * 0.22); g.stroke();
+      }
+      g.globalAlpha = 1; g.fillStyle = "#ffffff";
+      const tx = Math.cos(head) * f.r * 2.2, ty = Math.sin(head) * f.r * 2.2;
+      g.beginPath(); g.moveTo(tx + Math.cos(head) * 12, ty + Math.sin(head) * 12); g.lineTo(tx + Math.cos(head + 1.9) * 9, ty + Math.sin(head + 1.9) * 9); g.lineTo(tx + Math.cos(head - 1.9) * 9, ty + Math.sin(head - 1.9) * 9); g.closePath(); g.fill();
+      if (Math.random() < 0.6) this.parts.push({ kind: "star", x: f.x + tx, y: f.y + ty, vx: rnd(-60, 60), vy: rnd(-60, 60), g: 0, life: 0.35, max: 0.35, size: rnd(3, 6), grow: 0, color: Math.random() < 0.5 ? "#4fe3ff" : "#ffffff" });
+    }
+    g.restore();
+  }
+
+  /** Dragon Dance: two ribbons of cyan and violet flame spiral up around the dancer. */
+  private drawDance(g: CanvasRenderingContext2D, f: Fighter, until: number) {
+    const fade = Math.min(1, (until - this.t) / 0.8);
+    const t = this.t;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round";
+    g.globalAlpha = fade * 0.5;
+    g.strokeStyle = "#4fe3ff"; g.lineWidth = 2;
+    g.beginPath(); g.ellipse(f.x, f.y + f.r * 0.5, f.r * 2.1, f.r * 0.8, 0, 0, Math.PI * 2); g.stroke();
+    for (let rib = 0; rib < 2; rib++) {
+      for (let seg = 0; seg < 28; seg++) {
+        const u = seg / 28;
+        const an = t * 4.5 + u * 7 + rib * Math.PI;
+        const rad = f.r * (1.9 - u * 0.9) * (1 + Math.sin(t * 3 + seg) * 0.04);
+        const x = f.x + Math.cos(an) * rad, y = f.y + f.r * 0.6 - u * f.r * 3.2 + Math.sin(an) * rad * 0.35;
+        g.globalAlpha = fade * (1 - u) * (Math.sin(an) > 0 ? 1 : 0.45);
+        g.fillStyle = rib ? "#7a5cff" : "#4fe3ff";
+        g.beginPath(); g.arc(x, y, 5.5 * (1 - u * 0.7), 0, Math.PI * 2); g.fill();
+        if (seg % 6 === 0) { g.fillStyle = "#ffffff"; g.beginPath(); g.arc(x, y, 2, 0, Math.PI * 2); g.fill(); }
+      }
+    }
+    g.restore();
   }
 
   /** Rocks rising off the floor in a psychic pulse: they bob for a few seconds, then drop and crumble. */
@@ -3380,6 +3632,9 @@ export class ArenaRenderer {
     g.stroke();
     g.restore();
 
+    if (f.dash && !under && f.dash.mv.type === "Dragon") this.drawDragonDash(g, f);
+    const danceUntil = this.dances.get(f.id) ?? 0;
+    if (danceUntil > this.t) this.drawDance(g, f, danceUntil);
     // each type of rush leaves its own trail
     if ((f.dash && !under) || rolling) {
       const ty = f.dash?.mv.type ?? f.types[0] ?? "Normal";

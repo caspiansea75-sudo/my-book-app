@@ -470,6 +470,71 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
   }
 
   switch (p.mv) {
+    case "dragonpulse": {
+      // a shockwave in the shape of a dragon's roar: nested crescents opening backward, a bright core and a spinning ring
+      g.rotate(ang);
+      g.globalCompositeOperation = "lighter";
+      const halo = g.createRadialGradient(0, 0, 0, 0, 0, r * 3.4);
+      halo.addColorStop(0, "rgba(120,200,255,.55)");
+      halo.addColorStop(1, "rgba(90,60,255,0)");
+      g.fillStyle = halo;
+      g.beginPath();
+      g.arc(0, 0, r * 3.4, 0, Math.PI * 2);
+      g.fill();
+      g.lineCap = "round";
+      const cols = ["#7a5cff", "#4fe3ff", "#ffffff"];
+      for (let k = 0; k < 3; k++) {
+        g.strokeStyle = cols[k]!;
+        g.lineWidth = Math.max(2, r * (0.9 - k * 0.25));
+        g.globalAlpha = 1 - k * 0.12;
+        g.beginPath();
+        g.arc(-k * r * 1.1 - r * 0.2, 0, r * (1.5 + k * 0.7), -1.05, 1.05);
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+      const core = g.createRadialGradient(r * 0.3, 0, 0, r * 0.3, 0, r * 1.2);
+      core.addColorStop(0, "#ffffff");
+      core.addColorStop(0.5, "#7fe8ff");
+      core.addColorStop(1, "rgba(100,80,255,0)");
+      g.fillStyle = core;
+      g.beginPath();
+      g.arc(r * 0.3, 0, r * 1.2, 0, Math.PI * 2);
+      g.fill();
+      g.save();
+      g.translate(r * 0.3, 0);
+      g.rotate(t * 9);
+      g.strokeStyle = "#e8f7ff";
+      g.lineWidth = 1.6;
+      g.beginPath();
+      g.ellipse(0, 0, r * 0.45, r * 1.5, 0, 0, Math.PI * 2);
+      g.stroke();
+      g.restore();
+      break;
+    }
+    case "dragonbreath": {
+      // a licking teardrop of violet-cyan flame
+      g.rotate(ang);
+      g.globalCompositeOperation = "lighter";
+      const L = r * 4.2;
+      for (const [k, cc] of [[1, "rgba(122,92,255,.85)"], [0.7, "#4fe3ff"], [0.38, "#ffffff"]] as const) {
+        g.fillStyle = cc;
+        g.beginPath();
+        g.moveTo(r * 1.1 * k + r * 0.5, 0);
+        for (let i = 0; i <= 8; i++) {
+          const u = i / 8;
+          const w = Math.sin(u * Math.PI) * r * 1.15 * k * (1 - u * 0.4);
+          g.lineTo(-u * L * k - r * 0.2, -w + Math.sin(t * 40 + u * 7) * 1.5);
+        }
+        for (let i = 8; i >= 0; i--) {
+          const u = i / 8;
+          const w = Math.sin(u * Math.PI) * r * 1.15 * k * (1 - u * 0.4);
+          g.lineTo(-u * L * k - r * 0.2, w + Math.sin(t * 40 + u * 7 + 2) * 1.5);
+        }
+        g.closePath();
+        g.fill();
+      }
+      break;
+    }
     case "shadowball": {
       // a glossy dark sphere in a violet aura, as in the video
       const gr = g.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 2.6);
