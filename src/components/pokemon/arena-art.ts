@@ -470,6 +470,66 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
   }
 
   switch (p.mv) {
+    case "energyball": {
+      // a green orb of living energy, leaves circling it
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 2.6);
+      gr.addColorStop(0, "#f4ffd0"); gr.addColorStop(0.35, "#7be04a"); gr.addColorStop(1, "rgba(60,180,60,0)");
+      g.globalCompositeOperation = "lighter";
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r * 2.6, 0, Math.PI * 2); g.fill();
+      g.globalCompositeOperation = "source-over";
+      for (let k = 0; k < 4; k++) {
+        const an = t * 8 + k * 1.571; const rr = r * 1.9;
+        g.save(); g.translate(Math.cos(an) * rr, Math.sin(an) * rr); g.rotate(an + 1.2);
+        g.fillStyle = k % 2 ? "#9be05a" : "#4fbf4a"; g.beginPath(); g.ellipse(0, 0, r * 0.7, r * 0.3, 0, 0, Math.PI * 2); g.fill(); g.restore();
+      }
+      break;
+    }
+    case "gigadrain": {
+      // a sprouting green-gold orb with curling tendrils
+      g.rotate(ang);
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 2.4);
+      gr.addColorStop(0, "#fffbd0"); gr.addColorStop(0.4, "#a8e04a"); gr.addColorStop(1, "rgba(80,200,60,0)");
+      g.globalCompositeOperation = "lighter";
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r * 2.4, 0, Math.PI * 2); g.fill();
+      g.lineCap = "round"; g.strokeStyle = "#7be04a"; g.lineWidth = 2.2;
+      for (let k = 0; k < 4; k++) {
+        g.beginPath();
+        for (let i = 0; i <= 8; i++) { const u = i / 8; const x = -u * r * 4.2, y = Math.sin(u * 6 + t * 12 + k * 1.6) * r * (0.4 + u * 0.9) * (k % 2 ? 1 : -1); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+      }
+      break;
+    }
+    case "signalbeam": {
+      // a flickering bug-signal: a bright pod and stripes cycling through colours
+      g.rotate(ang);
+      g.globalCompositeOperation = "lighter";
+      const cs = ["#ff5a5a", "#ffe14d", "#7be04a", "#4fc3ff"];
+      for (let k = 0; k < 4; k++) {
+        g.fillStyle = cs[(k + Math.floor(t * 14)) % 4]!;
+        g.globalAlpha = 0.9 - k * 0.15;
+        g.beginPath(); g.ellipse(-k * r * 1.25, 0, r * (1.5 - k * 0.2), r * (0.9 - k * 0.12), 0, 0, Math.PI * 2); g.fill();
+      }
+      g.globalAlpha = 1; g.fillStyle = "#ffffff"; g.beginPath(); g.arc(r * 0.4, 0, r * 0.55, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case "willowisp": {
+      // three blue-violet ghost flames dancing round a pale core
+      g.globalCompositeOperation = "lighter";
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 3);
+      gr.addColorStop(0, "rgba(160,200,255,.7)"); gr.addColorStop(1, "rgba(110,80,255,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r * 3, 0, Math.PI * 2); g.fill();
+      for (let k = 0; k < 3; k++) {
+        const an = t * 5 + k * 2.094; const px = Math.cos(an) * r * 1.5, py = Math.sin(an) * r * 1.1;
+        for (const [sc, cc] of [[1, "#6a7cff"], [0.62, "#9fd4ff"], [0.3, "#ffffff"]] as const) {
+          g.fillStyle = cc; g.beginPath();
+          g.moveTo(px, py - r * 1.7 * sc * (1 + Math.sin(t * 22 + k) * 0.15));
+          g.quadraticCurveTo(px + r * 0.9 * sc, py, px, py + r * 0.7 * sc);
+          g.quadraticCurveTo(px - r * 0.9 * sc, py, px, py - r * 1.7 * sc);
+          g.fill();
+        }
+      }
+      break;
+    }
     case "dragonpulse": {
       // a shockwave in the shape of a dragon's roar: nested crescents opening backward, a bright core and a spinning ring
       g.rotate(ang);
