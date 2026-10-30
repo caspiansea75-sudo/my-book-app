@@ -580,7 +580,7 @@ export class ArenaRenderer {
       case "earthquake":
         for (let i = 0; i < 12; i++) {
           const a = (i / 12) * Math.PI * 2 + rnd(-0.15, 0.15);
-          this.parts.push({ kind: "crack", x, y, vx: 0, vy: 0, g: 0, life: 1.3, max: 1.3, size: 1, grow: 0, color: "#000", x2: x + Math.cos(a) * r * 1.15, y2: y + Math.sin(a) * r * 0.9, seed: 7 + i });
+          this.parts.push({ kind: "crack", x, y, vx: 0, vy: 0, g: 0, life: 1.3, max: 1.3, size: 1, grow: 0, color: "#000", x2: x + Math.cos(a) * r * 1.5, y2: y + Math.sin(a) * r * 1.15, seed: 7 + i });
         }
         for (let i = 0; i < 14; i++) this.parts.push({ kind: "dot", x: x + rnd(-r * 0.6, r * 0.6), y: y + rnd(-r * 0.4, r * 0.4), vx: rnd(-80, 80), vy: rnd(-260, -80), g: 600, life: rnd(0.5, 1.0), max: 1.0, size: rnd(3, 6), grow: 0, color: "#8a6a45" });
         this.shake = Math.max(this.shake, 11);
@@ -882,18 +882,26 @@ export class ArenaRenderer {
         const len = Math.hypot(p.x2 - p.x, p.y2 - p.y);
         const nx = -(p.y2 - p.y) / (len || 1);
         const ny = (p.x2 - p.x) / (len || 1);
-        for (const [lw, c] of [[5, "#1a1008"], [2, "#d9b98a"]] as const) {
-          g.strokeStyle = c;
-          g.lineWidth = lw;
-          g.beginPath();
-          g.moveTo(p.x, p.y);
-          for (let i = 1; i <= n; i++) {
-            const k = i / n;
-            const off = (((p.seed ?? 1) * (i * 9301 + 49297)) % 233) / 233 - 0.5;
-            g.lineTo(p.x + (p.x2 - p.x) * k * Math.min(1, (p.max - p.life) * 8) + nx * off * 18, p.y + (p.y2 - p.y) * k * Math.min(1, (p.max - p.life) * 8) + ny * off * 18);
-          }
-          g.stroke();
+        // a molten fissure: a dark gash with a glowing orange-yellow seam and a side branch that cools as it fades
+        const heat = Math.min(1, p.life / (p.max * 0.8));
+        const grow2 = Math.min(1, (p.max - p.life) * 8);
+        const pts: [number, number][] = [[p.x, p.y]];
+        for (let i = 1; i <= n; i++) {
+          const k = i / n;
+          const off = (((p.seed ?? 1) * (i * 9301 + 49297)) % 233) / 233 - 0.5;
+          pts.push([p.x + (p.x2 - p.x) * k * grow2 + nx * off * 26, p.y + (p.y2 - p.y) * k * grow2 + ny * off * 26]);
         }
+        const path = () => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); };
+        g.lineCap = "round"; g.lineJoin = "round";
+        g.strokeStyle = "#140a06"; g.lineWidth = 7; path(); g.stroke();
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.strokeStyle = `rgba(255,110,20,${0.35 + heat * 0.6})`; g.lineWidth = 4; path(); g.stroke();
+        g.strokeStyle = `rgba(255,220,110,${heat})`; g.lineWidth = 1.6; path(); g.stroke();
+        const m = pts[Math.min(3, pts.length - 1)]!;
+        g.strokeStyle = `rgba(255,150,40,${0.2 + heat * 0.6})`; g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(m[0], m[1]); g.lineTo(m[0] + nx * 26 * grow2 + (p.x2 - p.x) * 0.1, m[1] + ny * 26 * grow2 + (p.y2 - p.y) * 0.1); g.stroke();
+        g.restore();
       } else if (p.kind === "bolt" && p.x2 !== undefined && p.y2 !== undefined) {
         drawLightning(g, p.x, p.y, p.x2, p.y2, p.color, a, (p.seed ?? 1) + Math.floor(this.t * 22), 5);
       } else if (p.kind === "shard") {
@@ -1936,6 +1944,24 @@ export class ArenaRenderer {
           g.beginPath();
           g.arc(z.x, z.y, z.r * 1.2, 0, Math.PI * 2);
           g.fill();
+          if (z.mv.id === "rocktomb") {
+            // boulders heave up in a broken ring around the target
+            g.globalCompositeOperation = "source-over";
+            const up = Math.min(1, (1 - a) * 6 + 0.3);
+            for (let i = 0; i < 9; i++) {
+              const an = (i / 9) * Math.PI * 2 + 0.3;
+              const bx = z.x + Math.cos(an) * z.r * 0.9, by = z.y + Math.sin(an) * z.r * 0.7 - up * 8 * (1 + (i % 2));
+              const sz = 11 + (i % 3) * 3;
+              g.globalAlpha = a;
+              g.fillStyle = "rgba(0,0,0,.3)"; g.beginPath(); g.ellipse(bx, by + sz * 0.9, sz, sz * 0.4, 0, 0, Math.PI * 2); g.fill();
+              g.fillStyle = "#8d6e4c"; g.strokeStyle = "#3b2a18"; g.lineWidth = 2;
+              g.beginPath();
+              for (let k = 0; k < 6; k++) { const aa = (k / 6) * Math.PI * 2 + i; const rr = sz * (0.8 + ((i * 7 + k * 5) % 5) * 0.08); const px = bx + Math.cos(aa) * rr, py = by + Math.sin(aa) * rr * 0.85; k ? g.lineTo(px, py) : g.moveTo(px, py); }
+              g.closePath(); g.fill(); g.stroke();
+              g.fillStyle = "#b99a72"; g.beginPath(); g.moveTo(bx - sz * 0.4, by - sz * 0.5); g.lineTo(bx + sz * 0.1, by - sz * 0.6); g.lineTo(bx - sz * 0.1, by - sz * 0.1); g.closePath(); g.fill();
+            }
+            g.globalCompositeOperation = "lighter";
+          }
           if ((z.mv.fx ?? z.mv.id) === "fireblast") {
             // flames spiking out of the ground in a star
             g.fillStyle = "#ff8a1f";

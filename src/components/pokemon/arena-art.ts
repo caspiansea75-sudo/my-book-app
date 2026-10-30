@@ -536,6 +536,26 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
       break;
     }
     case "shadowball": {
+      // a purple vortex: a dark core with three spiral arms turning round a glowing eye, in a violet haze
+      const gr0 = g.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 3);
+      gr0.addColorStop(0, "rgba(168,85,247,.75)");
+      gr0.addColorStop(1, "rgba(168,85,247,0)");
+      g.globalCompositeOperation = "lighter";
+      g.fillStyle = gr0; g.beginPath(); g.arc(0, 0, r * 3, 0, Math.PI * 2); g.fill();
+      g.globalCompositeOperation = "source-over";
+      g.fillStyle = "#1d0a38"; g.beginPath(); g.arc(0, 0, r * 1.45, 0, Math.PI * 2); g.fill();
+      g.lineCap = "round";
+      for (let arm = 0; arm < 3; arm++) {
+        g.strokeStyle = arm % 2 ? "#c77dff" : "#8b4bff"; g.lineWidth = Math.max(2, r * 0.32);
+        g.beginPath();
+        for (let i = 0; i <= 14; i++) { const u = i / 14; const an = t * 7 + arm * 2.094 + u * 4.2; const rr = r * (0.2 + u * 1.45); i ? g.lineTo(Math.cos(an) * rr, Math.sin(an) * rr) : g.moveTo(Math.cos(an) * rr, Math.sin(an) * rr); }
+        g.stroke();
+      }
+      g.strokeStyle = "#e9c9ff"; g.lineWidth = 2; g.beginPath(); g.arc(0, 0, r * 1.5, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = "#ffffff"; g.globalCompositeOperation = "lighter"; g.beginPath(); g.arc(0, 0, r * 0.38, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case "shadowball_old": {
       // a glossy dark sphere in a violet aura, as in the video
       const gr = g.createRadialGradient(0, 0, r * 0.5, 0, 0, r * 2.6);
       gr.addColorStop(0, "rgba(168,85,247,.7)");
@@ -677,7 +697,24 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
       g.fill();
       break;
     }
-    case "airslash":
+    case "airslash": {
+      // a blue crescent of wind: thick glowing blade, a pale edge, and curling wind streaks behind it
+      g.rotate(ang);
+      g.globalCompositeOperation = "lighter";
+      g.lineCap = "round";
+      for (const [w, cc] of [[r * 1.7, "rgba(70,150,255,.45)"], [r * 1.0, "#6fb4ff"], [r * 0.4, "#eaf6ff"]] as const) {
+        g.strokeStyle = cc; g.lineWidth = w;
+        g.beginPath(); g.arc(-r * 0.6, 0, r * 2.3, -1.05, 1.05); g.stroke();
+      }
+      g.strokeStyle = "rgba(200,230,255,.8)"; g.lineWidth = 2;
+      for (let k = 0; k < 3; k++) {
+        const sw = (k - 1) * r * 1.2;
+        g.beginPath();
+        for (let i = 0; i <= 6; i++) { const u = i / 6; const x = -r * 1.2 - u * r * 4.5, y = sw + Math.sin(t * 22 + u * 5 + k) * r * 0.35; i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.stroke();
+      }
+      break;
+    }
     case "darkpulse": {
       g.rotate(ang);
       g.strokeStyle = p.mv === "airslash" ? "#eaf6ff" : "#8b5cf6";
