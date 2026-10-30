@@ -454,8 +454,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
 
   // a new perk screen needs a new pick
   useEffect(() => {
-    if (hud?.phase !== "perks") setPicked(false);
-  }, [hud?.phase]);
+    setPicked(false);
+  }, [hud?.phase, hud?.wave]);
 
   // royale match: after the results, the host starts the next round
   useEffect(() => {
@@ -500,6 +500,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const fidOfMember = new Map<number, number>();
     const picks = new Set<number>();
     let perkAt = 0;
+    let lastPW = "";
+    let perksSince = 0;
     let livePeers = new Set<string>();
     const hostPick = (fid: number, id: string) => {
       if (!S || S.phase !== "perks" || !S.perks.includes(id) || picks.has(fid)) return;
@@ -513,8 +515,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         const fid = fidOfMember.get(meId);
         if (fid !== undefined) hostPick(fid, id);
       } else {
-        // sent a few times: the host ignores repeats, and a dropped message must not leave everyone waiting
-        for (const d of [0, 600, 1500, 3000, 5000, 8000]) setTimeout(() => p2p.send({ k: "perk", id }, hostPeer), d);
+        // sent a few times: the host ignores repeats, and a dropped message must not leave everyone waiting.
+        // Tagged with the wave and dropped once that perk screen is over, so an old pick can never land on the next one.
+        const w = dec.S.wave;
+        for (const d of [0, 600, 1500, 3000, 5000, 8000]) setTimeout(() => { if (d === 0 || (dec.S.phase === "perks" && dec.S.wave === w)) p2p.send({ k: "perk", id, w }, hostPeer); }, d);
       }
     };
 
@@ -531,7 +535,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             if (S && started) p2p.send(enc.keyframe(S), from);
           } else if (d.k === "perk") {
             const fid = fidOfMember.get(member);
-            if (fid !== undefined) hostPick(fid, (d as unknown as { id: string }).id);
+            const pw = (d as unknown as { w?: number }).w;
+            if (fid !== undefined && (pw === undefined || !S || pw === S.wave)) hostPick(fid, (d as unknown as { id: string }).id);
           } else if (d.k === "in") {
             const fid = fidOfMember.get(member);
             if (fid !== undefined) recv.put(fid, d as InputMsg);
@@ -667,6 +672,13 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             lastKey = now;
             p2p.send(enc.keyframe(S));
           }
+          // every change of phase or wave (perk screen opens, next wave starts) goes out as a complete copy a few times,
+          // so nobody can stay on an old screen because a small update was lost
+          const pw = `${S.phase}:${S.wave}`;
+          if (pw !== lastPW) {
+            lastPW = pw;
+            for (const d of [0, 300, 900, 2000]) setTimeout(() => { if (S) p2p.send(enc.keyframe(S)); }, d);
+          }
           V = S;
         }
       } else {
@@ -685,6 +697,14 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           V = dec.S;
           localEvents(dec.takeEvents(), V.fighters.find((f) => f.member === meId));
           if (now - lastHeard > 8000) setStatus("lost");
+          // sitting on the perk screen for long: ask the host for a fresh complete copy in case the next wave's news got lost
+          if (dec.S.phase === "perks") {
+            if (!perksSince) perksSince = now;
+            else if (now - perksSince > 5000 && now - lastHello > 2500) {
+              lastHello = now;
+              p2p.send({ k: "hello", member: meId }, hostPeer);
+            }
+          } else perksSince = 0;
         }
       }
 
