@@ -8,7 +8,7 @@ import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageB
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -327,6 +327,7 @@ export class ArenaRenderer {
           this.ring(e.x, e.y, c, e.r * 1.1, 0.45);
           this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.4, max: 0.4, size: e.r, grow: e.r * 0.8, color: c });
           this.burst(e.x, e.y, c, Math.round(8 + e.r / 8), 120 + e.r * 2.2);
+          this.elementBurst(e.x, e.y, e.type, e.r);
           if (e.r >= 100) {
             this.shake = Math.max(this.shake, 8);
             this.shakeT = 0.3;
@@ -965,6 +966,43 @@ export class ArenaRenderer {
         }
         g.closePath();
         g.fill();
+        g.restore();
+      } else if (p.kind === "spark") {
+        // a glowing point with a short streak behind it
+        g.globalCompositeOperation = "lighter";
+        const sp = Math.hypot(p.vx, p.vy) || 1;
+        g.strokeStyle = p.color; g.lineWidth = Math.max(1, p.size * 0.9); g.lineCap = "round";
+        g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - (p.vx / sp) * p.size * 3.2, p.y - (p.vy / sp) * p.size * 3.2); g.stroke();
+        const sg = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 2.4);
+        sg.addColorStop(0, "#ffffff"); sg.addColorStop(0.4, p.color); sg.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = sg; g.beginPath(); g.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2); g.fill();
+        g.globalCompositeOperation = "source-over";
+      } else if (p.kind === "flame") {
+        // a little tongue of fire: bright core, coloured body, flickering as it rises and shrinks
+        g.globalCompositeOperation = "lighter";
+        const k = Math.max(0, p.life / p.max), sz = p.size * (0.4 + k * 0.8);
+        for (const [sc, cc] of [[1, p.color], [0.6, "#ffd24d"], [0.3, "#ffffff"]] as const) {
+          g.fillStyle = cc; g.globalAlpha = a * 0.85;
+          g.beginPath(); g.moveTo(p.x, p.y - sz * 1.8 * sc);
+          g.quadraticCurveTo(p.x + sz * 0.9 * sc + Math.sin(this.t * 30 + (p.seed ?? 0)) * 1.5, p.y, p.x, p.y + sz * 0.6 * sc);
+          g.quadraticCurveTo(p.x - sz * 0.9 * sc, p.y, p.x, p.y - sz * 1.8 * sc); g.fill();
+        }
+        g.globalCompositeOperation = "source-over";
+      } else if (p.kind === "leaf") {
+        p.rot = (p.rot ?? 0) + (p.vr ?? 0) * dt;
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot);
+        g.fillStyle = p.color; g.strokeStyle = "rgba(20,70,20,.7)"; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(-p.size * 1.6, 0); g.quadraticCurveTo(0, -p.size * 1.1, p.size * 1.6, 0); g.quadraticCurveTo(0, p.size * 1.1, -p.size * 1.6, 0); g.fill(); g.stroke();
+        g.strokeStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.moveTo(-p.size * 1.3, 0); g.lineTo(p.size * 1.3, 0); g.stroke();
+        g.restore();
+      } else if (p.kind === "bubble") {
+        g.strokeStyle = p.color; g.lineWidth = 1.6; g.fillStyle = "rgba(255,255,255,.12)";
+        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill(); g.stroke();
+        g.fillStyle = "rgba(255,255,255,.9)"; g.beginPath(); g.arc(p.x - p.size * 0.35, p.y - p.size * 0.35, Math.max(0.8, p.size * 0.22), 0, Math.PI * 2); g.fill();
+      } else if (p.kind === "flake") {
+        p.rot = (p.rot ?? 0) + (p.vr ?? 0) * dt;
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.strokeStyle = p.color; g.lineWidth = 1.5; g.lineCap = "round";
+        for (let k = 0; k < 3; k++) { const aa = (k / 3) * Math.PI; g.beginPath(); g.moveTo(Math.cos(aa) * p.size, Math.sin(aa) * p.size); g.lineTo(-Math.cos(aa) * p.size, -Math.sin(aa) * p.size); g.stroke(); }
         g.restore();
       } else if (p.kind === "text" && p.text) {
         const pop = Math.min(1, (p.max - p.life) * 9);
@@ -2847,6 +2885,96 @@ export class ArenaRenderer {
     g.restore();
   }
 
+  /** What a shot leaves behind it, in the manner of its element. */
+  private trail(p: Proj, c: string) {
+    const bx = p.x + rnd(-3, 3), by = p.y + rnd(-3, 3);
+    const bvx = -p.vx * 0.1, bvy = -p.vy * 0.1;
+    const r = Math.random();
+    switch (p.type) {
+      case "Fire":
+        if (r < 0.6) this.parts.push({ kind: "flame", x: bx, y: by, vx: bvx + rnd(-30, 30), vy: bvy + rnd(-70, -20), g: -40, life: 0.45, max: 0.45, size: rnd(4, 8), grow: 0, color: "#ff6a1a", seed: Math.floor(rnd(0, 99)) });
+        if (r < 0.5) this.parts.push({ kind: "spark", x: bx, y: by, vx: bvx + rnd(-90, 90), vy: bvy + rnd(-120, -20), g: -30, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.5, 3), grow: 0, color: Math.random() < 0.5 ? "#ffd84d" : "#ff8a3d" });
+        if (r < 0.15) this.parts.push({ kind: "smoke", x: bx, y: by, vx: rnd(-20, 20), vy: -40, g: 0, life: 0.8, max: 0.8, size: rnd(6, 10), grow: 16, color: "#6b5a50" });
+        break;
+      case "Water":
+        if (r < 0.5) this.parts.push({ kind: "bubble", x: bx, y: by, vx: bvx + rnd(-30, 30), vy: bvy + rnd(-50, -10), g: -30, life: 0.7, max: 0.7, size: rnd(2.5, 5), grow: 0, color: "#bfe6ff" });
+        if (r < 0.7) this.parts.push({ kind: "spark", x: bx, y: by, vx: bvx + rnd(-60, 60), vy: bvy + rnd(-30, 60), g: 260, life: 0.5, max: 0.5, size: rnd(1.4, 2.6), grow: 0, color: "#7fc8ff" });
+        break;
+      case "Grass":
+        if (r < 0.45) this.parts.push({ kind: "leaf", x: bx, y: by, vx: bvx + rnd(-50, 50), vy: bvy + rnd(-40, 40), g: 60, life: 0.8, max: 0.8, size: rnd(3, 5), grow: 0, color: Math.random() < 0.5 ? "#6fcf4a" : "#a8e86a", rot: rnd(0, 6), vr: rnd(-8, 8) });
+        if (r < 0.4) this.parts.push({ kind: "spark", x: bx, y: by, vx: bvx + rnd(-30, 30), vy: bvy + rnd(-30, 30), g: 0, life: 0.5, max: 0.5, size: rnd(1.5, 2.5), grow: 0, color: "#d8ff8a" });
+        break;
+      case "Ice":
+        if (r < 0.4) this.parts.push({ kind: "flake", x: bx, y: by, vx: bvx + rnd(-40, 40), vy: bvy + rnd(-20, 40), g: 40, life: 0.8, max: 0.8, size: rnd(3, 5), grow: 0, color: "#e8fbff", rot: rnd(0, 3), vr: rnd(-6, 6) });
+        if (r < 0.5) this.parts.push({ kind: "spark", x: bx, y: by, vx: bvx + rnd(-50, 50), vy: bvy + rnd(-50, 50), g: 0, life: 0.4, max: 0.4, size: rnd(1.5, 2.5), grow: 0, color: "#bff0ff" });
+        break;
+      case "Electric":
+        if (r < 0.8) this.parts.push({ kind: "spark", x: bx, y: by, vx: rnd(-220, 220), vy: rnd(-220, 220), g: 0, life: 0.22, max: 0.22, size: rnd(1.5, 3), grow: 0, color: Math.random() < 0.5 ? "#ffe14d" : "#ffffff" });
+        break;
+      case "Poison":
+        if (r < 0.5) this.parts.push({ kind: "bubble", x: bx, y: by, vx: bvx + rnd(-25, 25), vy: bvy + rnd(-45, -5), g: -25, life: 0.8, max: 0.8, size: rnd(2.5, 5), grow: 0, color: "#d28bff" });
+        break;
+      case "Ghost":
+      case "Dark":
+        if (r < 0.5) this.parts.push({ kind: "smoke", x: bx, y: by, vx: rnd(-25, 25), vy: rnd(-40, 0), g: 0, life: 0.7, max: 0.7, size: rnd(6, 10), grow: 14, color: p.type === "Ghost" ? "#7a3fc0" : "#1d1230" });
+        if (r < 0.3) this.parts.push({ kind: "spark", x: bx, y: by, vx: rnd(-50, 50), vy: rnd(-50, 50), g: 0, life: 0.45, max: 0.45, size: rnd(1.5, 2.5), grow: 0, color: "#e1a8ff" });
+        break;
+      case "Psychic":
+      case "Fairy":
+        if (r < 0.45) this.parts.push({ kind: "star", x: bx, y: by, vx: rnd(-40, 40), vy: rnd(-40, 40), g: 0, life: 0.5, max: 0.5, size: rnd(3, 5.5), grow: 0, color: p.type === "Psychic" ? "#ffb0ec" : "#ffd6f2", rot: rnd(0, 3), vr: rnd(-5, 5) });
+        break;
+      case "Dragon":
+        if (r < 0.6) this.parts.push({ kind: "spark", x: bx, y: by, vx: bvx + rnd(-70, 70), vy: bvy + rnd(-70, 70), g: 0, life: 0.5, max: 0.5, size: rnd(1.8, 3.2), grow: 0, color: Math.random() < 0.5 ? "#4fe3ff" : "#9a7cff" });
+        break;
+      default:
+        if (r < 0.7) this.parts.push({ kind: "dot", x: bx, y: by, vx: bvx + rnd(-24, 24), vy: bvy + rnd(-20, 20), g: 0, life: 0.3, max: 0.3, size: rnd(2, 4), grow: 0, color: c });
+    }
+  }
+
+  /** The burst when something lands, shaped by its element. */
+  private elementBurst(x: number, y: number, type: string, r: number) {
+    const n = Math.round(6 + r / 12);
+    const P = (o: Partial<Parti> & { kind: Parti["kind"]; color: string }) => this.parts.push({ x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: 3, grow: 0, ...o } as Parti);
+    switch (type) {
+      case "Fire":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(30, r * 1.6); P({ kind: "flame", x: x + Math.cos(a) * r * 0.3, y: y + Math.sin(a) * r * 0.2, vx: Math.cos(a) * v * 0.5, vy: rnd(-140, -50), g: -30, life: rnd(0.5, 0.9), max: 0.9, size: rnd(6, 12), color: i % 2 ? "#ff6a1a" : "#ff9a2e", seed: i }); }
+        for (let i = 0; i < n * 2; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 3); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, g: 200, life: rnd(0.5, 1.0), max: 1.0, size: rnd(1.5, 3), color: i % 2 ? "#ffd84d" : "#ff8a3d" }); }
+        break;
+      case "Water":
+        for (let i = 0; i < n * 2; i++) { const a = rnd(-Math.PI, 0) , v = rnd(80, r * 3); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, g: 520, life: rnd(0.5, 0.9), max: 0.9, size: rnd(1.6, 3), color: i % 3 ? "#8fd3ff" : "#ffffff" }); }
+        for (let i = 0; i < Math.round(n / 2); i++) { const a = rnd(0, Math.PI * 2); P({ kind: "bubble", x: x + Math.cos(a) * r * 0.5, y: y + Math.sin(a) * r * 0.3, vy: rnd(-70, -20), g: -20, life: 0.9, max: 0.9, size: rnd(3, 7), color: "#cfeaff" }); }
+        break;
+      case "Grass":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 2.2); P({ kind: "leaf", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, g: 140, life: rnd(0.7, 1.2), max: 1.2, size: rnd(3.5, 6), color: i % 2 ? "#6fcf4a" : "#b4f06a", rot: rnd(0, 6), vr: rnd(-10, 10) }); }
+        break;
+      case "Ice":
+        for (let i = 0; i < Math.round(n / 1.5); i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 2.4); P({ kind: "shard", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, g: 260, life: rnd(0.5, 0.9), max: 0.9, size: rnd(2.5, 4.5), color: "#bff0ff", rot: rnd(0, 6), vr: rnd(-10, 10) }); }
+        for (let i = 0; i < n; i++) P({ kind: "flake", vx: rnd(-60, 60), vy: rnd(-80, -10), g: 30, life: 1.0, max: 1.0, size: rnd(3, 5), color: "#ffffff", rot: rnd(0, 3), vr: rnd(-5, 5) });
+        break;
+      case "Electric":
+        for (let i = 0; i < Math.round(n / 2); i++) { const a = rnd(0, Math.PI * 2); P({ kind: "bolt", life: 0.28, max: 0.28, color: "#ffe14d", x2: x + Math.cos(a) * r * 1.2, y2: y + Math.sin(a) * r * 0.9, seed: Math.floor(rnd(1, 99)) }); }
+        for (let i = 0; i < n * 2; i++) { const a = rnd(0, Math.PI * 2), v = rnd(100, r * 4); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.2, 0.4), max: 0.4, size: rnd(1.4, 2.6), color: i % 2 ? "#ffe14d" : "#ffffff" }); }
+        break;
+      case "Poison":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(30, r * 1.4); P({ kind: "bubble", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 50, g: -10, life: rnd(0.7, 1.2), max: 1.2, size: rnd(3, 7), color: i % 2 ? "#d28bff" : "#9be07a" }); }
+        break;
+      case "Ghost":
+      case "Dark":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(30, r * 1.2); P({ kind: "smoke", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, life: rnd(0.7, 1.2), max: 1.2, size: rnd(8, 14), grow: 18, color: type === "Ghost" ? "#7a3fc0" : "#1d1230" }); }
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 2); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6, max: 0.6, size: rnd(1.5, 2.6), color: "#e1a8ff" }); }
+        break;
+      case "Psychic":
+      case "Fairy":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 2.2); P({ kind: "star", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.5, 0.9), max: 0.9, size: rnd(4, 8), color: type === "Psychic" ? "#ffb0ec" : "#ffd6f2", rot: rnd(0, 3), vr: rnd(-6, 6) }); }
+        break;
+      case "Dragon":
+        for (let i = 0; i < n * 2; i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 3); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.5, 0.9), max: 0.9, size: rnd(1.6, 3), color: i % 2 ? "#4fe3ff" : "#9a7cff" }); }
+        break;
+      default:
+        break;
+    }
+  }
+
   /** Rocks rising off the floor in a psychic pulse: they bob for a few seconds, then drop and crumble. */
   private drawRocks(g: CanvasRenderingContext2D, dt: number) {
     if (!this.rocks.length) return;
@@ -3279,11 +3407,7 @@ export class ArenaRenderer {
       }
       const c = col(p.type);
       drawShot(g, p, S.time - p.born, this.t);
-      // a trail of the shot's own colour: embers for fire, droplets for water, sparks for the rest
-      if (Math.random() < 0.7) {
-        const ember = p.type === "Fire";
-        this.parts.push({ kind: "dot", x: p.x + rnd(-3, 3), y: p.y + rnd(-3, 3), vx: -p.vx * 0.08 + rnd(-24, 24), vy: -p.vy * 0.08 + rnd(ember ? -50 : -20, 20), g: ember ? -60 : 0, life: ember ? 0.5 : 0.3, max: ember ? 0.5 : 0.3, size: rnd(2, ember ? 5 : 4), grow: 0, color: ember && Math.random() < 0.5 ? "#ffd84d" : c });
-      }
+      this.trail(p, c);
     }
     for (const [owner, list] of streams) {
       const f = S.fighters.find((x) => x.id === owner);
@@ -3312,6 +3436,10 @@ export class ArenaRenderer {
     g.save();
     if (type === "Water") {
       // a thick wavy jet: tapered body with a dark rim, scrolling white wave crests, foam on the edges and a white swirl splash at the tip
+      g.save(); g.globalCompositeOperation = "lighter"; g.lineCap = "round";
+      g.strokeStyle = "rgba(60,150,255,.18)"; g.lineWidth = 46; g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      g.strokeStyle = "rgba(140,220,255,.16)"; g.lineWidth = 28; g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      g.restore();
       const half = (d: number) => (7 + Math.min(1, d / 90) * 8) * (0.9 + Math.sin(d * 0.05 - t * 14) * 0.1);
       const edge = (side: number) => {
         const pts: [number, number][] = [];
@@ -3366,29 +3494,44 @@ export class ArenaRenderer {
       g.fillStyle = "#ffffff";
       g.beginPath(); g.arc(last.x, last.y, 6, 0, 6.3); g.fill();
         } else if (type === "Fire") {
-      // a rolling tube of flame: stacked blobs, wider toward the end
-      for (let d = 0; d <= len; d += 11) {
+      // a roaring jet: a wide heat glow, rolling additive fireballs from red to white-hot, flame tongues peeling off and a roaring muzzle
+      g.globalCompositeOperation = "lighter"; g.lineCap = "round";
+      g.strokeStyle = "rgba(255,80,10,.14)"; g.lineWidth = 56; g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      g.strokeStyle = "rgba(255,150,30,.18)"; g.lineWidth = 34; g.beginPath(); g.moveTo(mx, my); g.lineTo(last.x, last.y); g.stroke();
+      const ball = (x: number, y: number, rr: number, c0: string, c1: string) => {
+        const gr = g.createRadialGradient(x, y, 0, x, y, rr);
+        gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+        g.fillStyle = gr; g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.fill();
+      };
+      for (let d = len; d >= 0; d -= 9) {
         const k = d / Math.max(1, len);
-        const r = 7 + k * 17;
-        const wob = Math.sin(d * 0.09 - t * 16) * 4;
-        const x = mx + ux * d + nx * wob;
-        const y = my + uy * d + ny * wob;
-        blob(g, x, y, r, Math.floor(d / 11) + Math.floor(t * 10), "#ff6a1a", "#a82a08");
+        const wob = Math.sin(d * 0.07 - t * 18) * (3 + k * 6);
+        const x = mx + ux * d + nx * wob, y = my + uy * d + ny * wob;
+        const rr = 8 + k * 22;
+        ball(x, y, rr * 1.5, "rgba(255,70,10,.5)", "rgba(120,10,0,0)");
+        ball(x + nx * Math.sin(d * 0.2 + t * 12) * 3, y, rr, "rgba(255,150,30,.75)", "rgba(255,60,0,0)");
+        ball(x, y, rr * 0.55, "rgba(255,235,140,.9)", "rgba(255,170,40,0)");
       }
-      for (let d = 0; d <= len; d += 14) {
-        const k = d / Math.max(1, len);
-        const x = mx + ux * d + nx * Math.sin(d * 0.11 - t * 20) * 3;
-        const y = my + uy * d + ny * Math.sin(d * 0.11 - t * 20) * 3;
-        blob(g, x, y, 4 + k * 10, Math.floor(d / 14) + 40 + Math.floor(t * 12), "#ffd84d", "#ff9a2e");
+      // the white-hot core, flickering along the line
+      g.strokeStyle = "rgba(255,250,220,.9)"; g.lineWidth = 5 + Math.sin(t * 40) * 1.5; g.beginPath();
+      for (let d = 0; d <= len; d += 10) { const w = Math.sin(d * 0.1 - t * 25) * 2.2; const x = mx + ux * d + nx * w, y = my + uy * d + ny * w; d ? g.lineTo(x, y) : g.moveTo(x, y); }
+      g.stroke();
+      // tongues of flame licking off the sides
+      for (let d = (t * 120) % 28; d < len; d += 28) {
+        const k = d / Math.max(1, len), sd = (Math.floor(d / 28) % 2) ? 1 : -1;
+        const bx = mx + ux * d, by = my + uy * d, h = 14 + k * 26 * (0.7 + 0.3 * Math.sin(t * 20 + d));
+        g.fillStyle = sd > 0 ? "rgba(255,120,20,.8)" : "rgba(255,190,50,.8)";
+        g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx + nx * sd * h * 0.7 + ux * 6, by + ny * sd * h * 0.7 + uy * 6, bx + nx * sd * h + ux * 18, by + ny * sd * h + uy * 18); g.quadraticCurveTo(bx + nx * sd * h * 0.4 + ux * 14, by + ny * sd * h * 0.4 + uy * 14, bx + ux * 10, by + uy * 10); g.fill();
       }
-      g.globalCompositeOperation = "lighter";
-      const gl = g.createRadialGradient(last.x, last.y, 0, last.x, last.y, 40);
-      gl.addColorStop(0, "rgba(255,200,80,.8)");
-      gl.addColorStop(1, "rgba(255,80,0,0)");
-      g.fillStyle = gl;
-      g.beginPath();
-      g.arc(last.x, last.y, 40, 0, Math.PI * 2);
-      g.fill();
+      // impact fireball
+      ball(last.x, last.y, 54, "rgba(255,235,150,.9)", "rgba(255,80,0,0)");
+      ball(last.x, last.y, 30, "rgba(255,255,255,.7)", "rgba(255,200,80,0)");
+      if (Math.random() < 0.9) {
+        const dd = Math.random() * len, k2 = dd / Math.max(1, len);
+        this.parts.push({ kind: "flame", x: mx + ux * dd + nx * rnd(-10, 10), y: my + uy * dd + ny * rnd(-10, 10), vx: nx * rnd(-60, 60), vy: rnd(-90, -30), g: -50, life: 0.5, max: 0.5, size: 6 + k2 * 8, grow: 0, color: "#ff6a1a", seed: Math.floor(rnd(0, 99)) });
+        this.parts.push({ kind: "spark", x: mx + ux * dd, y: my + uy * dd, vx: ux * 120 + nx * rnd(-150, 150), vy: uy * 120 + ny * rnd(-150, 150) - 40, g: -20, life: rnd(0.4, 0.9), max: 0.9, size: rnd(1.5, 3), grow: 0, color: Math.random() < 0.5 ? "#ffd84d" : "#ff8a3d" });
+      }
+      if (Math.random() < 0.8) this.parts.push({ kind: "spark", x: last.x, y: last.y, vx: rnd(-200, 200), vy: rnd(-220, 60), g: 260, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.5, 3), grow: 0, color: "#ffcf4d" });
     } else if (type === "Ice") {
       g.globalCompositeOperation = "lighter";
       g.lineCap = "round";
@@ -3502,6 +3645,24 @@ export class ArenaRenderer {
       g.fill();
     }
     g.restore();
+    // element particles along the whole jet
+    {
+      const dd = Math.random() * len;
+      const px = mx + ux * dd, py = my + uy * dd;
+      if (type === "Water") {
+        if (Math.random() < 0.9) this.parts.push({ kind: "spark", x: px + nx * rnd(-8, 8), y: py + ny * rnd(-8, 8), vx: nx * rnd(-130, 130) + ux * 60, vy: ny * rnd(-130, 130) + uy * 60 - 30, g: 280, life: rnd(0.35, 0.7), max: 0.7, size: rnd(1.4, 2.8), grow: 0, color: Math.random() < 0.5 ? "#ffffff" : "#8fd3ff" });
+        if (Math.random() < 0.35) this.parts.push({ kind: "bubble", x: px + nx * rnd(-12, 12), y: py + ny * rnd(-12, 12), vx: nx * rnd(-40, 40), vy: -30 + ny * rnd(-40, 40), g: -20, life: 0.8, max: 0.8, size: rnd(2.5, 5.5), grow: 0, color: "#cfeaff" });
+        if (Math.random() < 0.7) this.parts.push({ kind: "spark", x: last.x, y: last.y, vx: rnd(-220, 220), vy: rnd(-260, -40), g: 560, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.6, 3), grow: 0, color: "#bfe6ff" });
+      } else if (type === "Ice") {
+        if (Math.random() < 0.6) this.parts.push({ kind: "flake", x: px + nx * rnd(-14, 14), y: py + ny * rnd(-14, 14), vx: nx * rnd(-50, 50), vy: rnd(-20, 40), g: 30, life: 0.9, max: 0.9, size: rnd(3, 5.5), grow: 0, color: "#ffffff", rot: rnd(0, 3), vr: rnd(-6, 6) });
+        if (Math.random() < 0.5) this.parts.push({ kind: "spark", x: px, y: py, vx: nx * rnd(-100, 100), vy: ny * rnd(-100, 100), g: 0, life: 0.4, max: 0.4, size: rnd(1.5, 2.8), grow: 0, color: "#bff0ff" });
+        if (Math.random() < 0.3) this.parts.push({ kind: "shard", x: last.x, y: last.y, vx: rnd(-160, 160), vy: rnd(-200, 40), g: 300, life: 0.6, max: 0.6, size: rnd(2.5, 4), grow: 0, color: "#bff0ff", rot: rnd(0, 6), vr: rnd(-12, 12) });
+      } else if (type === "Electric") {
+        if (Math.random() < 0.9) this.parts.push({ kind: "spark", x: px, y: py, vx: nx * rnd(-240, 240), vy: ny * rnd(-240, 240), g: 0, life: 0.2, max: 0.2, size: rnd(1.5, 3), grow: 0, color: Math.random() < 0.5 ? "#ffe14d" : "#ffffff" });
+      } else if (type === "Grass") {
+        if (Math.random() < 0.6) this.parts.push({ kind: "leaf", x: px + nx * rnd(-10, 10), y: py + ny * rnd(-10, 10), vx: nx * rnd(-80, 80), vy: ny * rnd(-80, 80) - 20, g: 60, life: 0.9, max: 0.9, size: rnd(3, 5.5), grow: 0, color: Math.random() < 0.5 ? "#6fcf4a" : "#b4f06a", rot: rnd(0, 6), vr: rnd(-9, 9) });
+      }
+    }
     // steam rises where water, fire and ice end (the white plume in the video); sparks for the rest
     if (Math.random() < 0.55) {
       if (type === "Water" || type === "Fire" || type === "Ice") this.parts.push({ kind: "smoke", x: last.x + rnd(-8, 8), y: last.y + rnd(-6, 6), vx: rnd(-18, 18), vy: rnd(-110, -60), g: 0, life: rnd(0.8, 1.2), max: 1.2, size: rnd(9, 15), grow: 26, color: type === "Fire" ? "#ffe9c8" : "#f2f8ff" });
