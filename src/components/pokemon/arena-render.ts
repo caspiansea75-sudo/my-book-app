@@ -4,6 +4,7 @@
  */
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
+import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
@@ -356,7 +357,7 @@ export class ArenaRenderer {
         case "crate": {
           if (e.kind && e.kind !== "crate") {
             // a rock, pillar or crystal crumbles: a heavy cloud of dust, chunks, and rubble that stays
-            const chunk = e.kind === "crystal" ? "#a98bff" : "#8a8f99";
+            const chunk = ({ crystal: "#a98bff", tree: "#5a8a3a", palm: "#7fb04a", pine: "#2f7a56", cactus: "#4aa05a", iceboulder: "#bfe8ff", basalt: "#3a3234" } as Record<string, string>)[e.kind] ?? "#8a8f99";
             for (let i = 0; i < 16; i++) {
               const a = rnd(0, Math.PI * 2);
               const v = rnd(120, 360);
@@ -403,7 +404,7 @@ export class ArenaRenderer {
           }
           break;
         case "stage":
-          this.say({ grass: "GRASS PITCH", stone: "STONE ARENA", dirt: "DIRT FIELD", crystal: "CRYSTAL CAVE" }[e.kind], "#ffffff");
+          this.say({ grass: "FOREST PITCH", stone: "STONE ARENA", dirt: "CANYON FLOOR", crystal: "CRYSTAL CAVE", ice: "FROSTPEAK SUMMIT", lava: "CINDER CRATER", coast: "AZURE COAST" }[e.kind], "#ffffff");
           break;
         case "dodge":
           for (let i = 0; i < 8; i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-8, 8), y: e.y + rnd(0, 14), vx: rnd(-40, 40), vy: rnd(-30, 10), g: 0, life: 0.5, max: 0.5, size: rnd(8, 14), grow: 22, color: "#cfd8e8" });
@@ -773,7 +774,7 @@ export class ArenaRenderer {
       if (pool.base) drawFoam(g, pool, this.t);
     }
     for (const hole of S.holes) (S.stage === "lava" ? drawLavaPit : drawHole)(g, hole, this.t);
-    if (S.mode === "quick") drawArenaFx(g, S, this.t);
+    drawArenaFx(g, S, this.t);
     // blast marks: a dark patch with a glowing rim that cools
     for (const sc of this.scorch) {
       const k = sc.t / sc.max;
@@ -1067,6 +1068,8 @@ export class ArenaRenderer {
         g.fillText(p.text, p.x, p.y);
       }
     }
+    g.globalAlpha = 1;
+    drawAmbient(g, S, this.t);
     g.globalAlpha = 1;
     this.parts = this.parts.filter((p) => p.life > 0);
     if (this.parts.length > 950) this.parts.splice(0, this.parts.length - 950);

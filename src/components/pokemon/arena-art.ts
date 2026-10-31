@@ -5,6 +5,7 @@
  */
 import { ARENA, type Obstacle, type Patch, type Proj, type StageKind } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
+import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
 
 const { W, H } = ARENA;
 export const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
@@ -324,6 +325,7 @@ export function stageBackground(kind: StageKind): HTMLCanvasElement {
   let c = bgCache.get(kind);
   if (!c) {
     c = { grass: buildGrass, stone: buildStone, dirt: buildDirt, crystal: buildCrystal, ice: buildIce, lava: buildLava, coast: buildCoast }[kind]();
+    dressBackground(kind, c);
     bgCache.set(kind, c);
   }
   return c;
@@ -394,6 +396,7 @@ export function drawHole(g: CanvasRenderingContext2D, h: Patch, t: number) {
 /* ------------------------------------------------------------------ obstacles */
 
 export function drawObstacle(g: CanvasRenderingContext2D, o: Obstacle, t: number) {
+  if (drawSceneObstacle(g, o, t)) return;
   g.save();
   g.translate(o.x, o.y);
   // shadow
@@ -1073,7 +1076,7 @@ export function drawLavaPit(g: CanvasRenderingContext2D, h: Patch, t: number) {
   gr.addColorStop(1, "#a81d08");
   g.fillStyle = gr;
   g.fillRect(h.x - h.rx, h.y - h.ry, h.rx * 2, h.ry * 2);
-  g.fillStyle = "rgba(60,10,0,.55)";
+  g.fillStyle = "rgba(90,20,0,.22)";
   for (let i = 0; i < 9; i++) {
     const a = i * 2.4 + t * 0.15;
     g.beginPath();

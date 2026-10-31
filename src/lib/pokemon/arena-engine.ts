@@ -16,7 +16,7 @@ export type Mode = "survival" | "royale" | "quick";
 export type Level = "easy" | "normal" | "hard";
 
 export type StageKind = "grass" | "stone" | "dirt" | "crystal" | "ice" | "lava" | "coast";
-export type ObsKind = "crate" | "pillar" | "crystal" | "rock";
+export type ObsKind = "crate" | "pillar" | "crystal" | "rock" | "tree" | "pine" | "iceboulder" | "basalt" | "palm" | "cactus";
 /** Something standing in the arena: crates break, the rest do not. */
 export type Obstacle = { id: number; kind: ObsKind; x: number; y: number; r: number; hp: number; hit: number };
 /** An oval patch of the floor: a bottomless pit or a pool of water. */
@@ -283,7 +283,7 @@ const emptyStatus = () => ({ brn: 0, psn: 0, par: 0, frz: 0, cnf: 0, slp: 0, frz
 
 /* ----------------------------------------------------------------- the arena floor */
 
-const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, rock: 24 };
+const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, rock: 24, tree: 27, pine: 24, iceboulder: 28, basalt: 26, palm: 20, cactus: 18 };
 
 /** An explosion, which also splinters any crates it reaches. */
 function boom(S: State, x: number, y: number, r: number, type: string, fx?: string) {
@@ -321,6 +321,9 @@ export function buildStage(S: State, kind: StageKind) {
   S.obs = [];
   S.holes = [];
   S.pools = [];
+  S.vents = undefined;
+  S.gust = null;
+  S.spot = null;
   const free = (x: number, y: number, r: number) =>
     x > MARGIN + r + 10 && x < W - MARGIN - r - 10 && y > MARGIN + r + 10 && y < H - MARGIN - r - 10 &&
     S.obs.every((o) => len(o.x - x, o.y - y) > o.r + r + 46) &&
@@ -343,15 +346,17 @@ export function buildStage(S: State, kind: StageKind) {
   switch (kind) {
     case "grass":
       patch(S.pools, rnd(80, 110), rnd(55, 75), rnd(300, 660), rnd(190, 410));
-      scatter("crate", 6);
-      scatter("rock", 3);
+      scatter("tree", 6);
+      scatter("crate", 4);
+      scatter("rock", 2);
       break;
     case "stone":
       scatter("crate", 5);
       scatter("pillar", 3);
       break;
     case "dirt":
-      scatter("crate", 4);
+      scatter("cactus", 4);
+      scatter("crate", 3);
       scatter("rock", 5);
       break;
     case "crystal":
@@ -360,8 +365,9 @@ export function buildStage(S: State, kind: StageKind) {
       scatter("pillar", 1);
       break;
     case "ice":
-      scatter("crystal", 6);
-      scatter("rock", 3);
+      scatter("pine", 4);
+      scatter("iceboulder", 4);
+      scatter("crystal", 2);
       scatter("crate", 3);
       break;
     case "lava":
@@ -370,15 +376,16 @@ export function buildStage(S: State, kind: StageKind) {
         { x: 250, y: 150 }, { x: W - 250, y: 150 }, { x: 250, y: H - 150 }, { x: W - 250, y: H - 150 },
         { x: CX, y: 120 }, { x: CX, y: H - 120 },
       ];
-      scatter("rock", 5);
-      scatter("pillar", 2);
+      scatter("basalt", 5);
+      scatter("rock", 2);
       scatter("crate", 3);
       break;
     case "coast": {
       const a = rnd(150, 190), b = rnd(80, 100);
       S.pools.push({ id: S.nextId++, x: 250, y: H - 190, rx: a, ry: b, base: a });
       S.pools.push({ id: S.nextId++, x: W - 250, y: 190, rx: a, ry: b, base: a });
-      scatter("crate", 5);
+      scatter("palm", 4);
+      scatter("crate", 4);
       scatter("rock", 3);
       break;
     }
@@ -555,7 +562,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   if (player.gimmick === "mega" && !player.megaForm) player.gimmick = "awaken";
   if (opts.tera && TERA_TYPES.includes(opts.tera)) player.teraType = opts.tera;
   S.fighters.push(player);
-  buildStage(S, mode === "royale" ? (["grass", "stone", "dirt", "crystal"] as StageKind[])[Math.floor(Math.random() * 4)]! : "grass");
+  buildStage(S, mode === "royale" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : "grass");
   if (mode === "royale") {
     const pool = ROSTER.filter((s) => s.id !== speciesId && !s.unlock);
     for (let i = 0; i < 4; i++) {
@@ -657,7 +664,7 @@ function spawnWave(S: State) {
     }
   }
   // each wave has its own floor: grass, stone, dirt — and the boss comes with the crystal cave and its pit
-  const order: StageKind[] = ["grass", "stone", "dirt", "stone"];
+  const order: StageKind[] = ["grass", "ice", "stone", "coast", "dirt", "lava"];
   buildStage(S, boss ? "crystal" : order[(w - 1) % order.length]!);
   unstick(S);
   S.events.push({ t: "stage", kind: S.stage });
@@ -1956,6 +1963,9 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     return;
   }
 
+  // ---- the themed arenas' own events (solo runs; a shared match keeps the floors calm)
+  if (!S.mp && S.phase === "fight") arenaEvents(S, dt, false);
+
   // ---- end of a co-op wave, or of the co-op run
   if (S.mp && S.mode === "survival") {
     const humans = S.fighters.filter((f) => f.isPlayer);
@@ -2116,25 +2126,8 @@ export function swapTo(S: State, team: number, idx: number): boolean {
   return true;
 }
 
-function quickStep(S: State, dt: number) {
-  const sq = S.squads!;
-  for (const t of [0, 1]) S.swapCd![t] = Math.max(0, S.swapCd![t]! - dt);
-  // a downed fighter is replaced by the next one that is still standing
-  for (const t of [0, 1]) {
-    const cur = S.fighters.find((f) => f.team === t);
-    if (cur && !cur.alive && cur.koT > 1.0) {
-      const nxt = sq[t]!.find((f) => f.alive);
-      if (nxt) sendOut(S, t, cur, nxt);
-    }
-  }
-  // the computer pulls back a hurt fighter (never on Easy)
-  const cpu = S.fighters.find((f) => f.team === 1);
-  if (cpu && cpu.alive && S.level !== "easy" && S.swapCd![1]! <= 0 && !swapBusy(cpu) && cpu.hp < cpu.maxHp * (S.level === "hard" ? 0.3 : 0.18)) {
-    const best = sq[1]!.filter((f) => f.alive && f !== cpu && f.hp > f.maxHp * 0.5).sort((a, b) => b.hp / b.maxHp - a.hp / a.maxHp)[0];
-    if (best && Math.random() < dt * (S.level === "hard" ? 1.2 : 0.5)) sendOut(S, 1, cpu, best);
-  }
-
-  // ---- arena events
+/** Live events of the themed arenas: wind gusts on the ice, lava vents, tides, and (in Quick Battle) the supply spotlight. */
+function arenaEvents(S: State, dt: number, spot: boolean) {
   if (S.stage === "ice") {
     const g = S.gust;
     if (g) {
@@ -2176,6 +2169,7 @@ function quickStep(S: State, dt: number) {
     if (before <= 0 && after > 0) S.events.push({ t: "arena", kind: "tide", x: CX, y: CY, dx: 1 });
     else if (before > 0 && after <= 0) S.events.push({ t: "arena", kind: "tide", x: CX, y: CY, dx: -1 });
   }
+  if (!spot) return;
   // a supply spotlight: hold it alone for a moment to get healed and powered up
   const sp = S.spot;
   if (sp) {
@@ -2219,6 +2213,28 @@ function quickStep(S: State, dt: number) {
       S.spotT = 2;
     }
   }
+
+}
+
+function quickStep(S: State, dt: number) {
+  const sq = S.squads!;
+  for (const t of [0, 1]) S.swapCd![t] = Math.max(0, S.swapCd![t]! - dt);
+  // a downed fighter is replaced by the next one that is still standing
+  for (const t of [0, 1]) {
+    const cur = S.fighters.find((f) => f.team === t);
+    if (cur && !cur.alive && cur.koT > 1.0) {
+      const nxt = sq[t]!.find((f) => f.alive);
+      if (nxt) sendOut(S, t, cur, nxt);
+    }
+  }
+  // the computer pulls back a hurt fighter (never on Easy)
+  const cpu = S.fighters.find((f) => f.team === 1);
+  if (cpu && cpu.alive && S.level !== "easy" && S.swapCd![1]! <= 0 && !swapBusy(cpu) && cpu.hp < cpu.maxHp * (S.level === "hard" ? 0.3 : 0.18)) {
+    const best = sq[1]!.filter((f) => f.alive && f !== cpu && f.hp > f.maxHp * 0.5).sort((a, b) => b.hp / b.maxHp - a.hp / a.maxHp)[0];
+    if (best && Math.random() < dt * (S.level === "hard" ? 1.2 : 0.5)) sendOut(S, 1, cpu, best);
+  }
+
+  arenaEvents(S, dt, true);
 
   // ---- the end: a whole squad is down
   const up = (t: number) => sq[t]!.some((f) => f.alive);
