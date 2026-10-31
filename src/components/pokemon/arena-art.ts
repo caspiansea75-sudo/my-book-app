@@ -199,11 +199,131 @@ function buildCrystal(): HTMLCanvasElement {
   return c;
 }
 
+function buildIce(): HTMLCanvasElement {
+  const c = canvas();
+  const g = c.getContext("2d")!;
+  const r = rng(71);
+  stands(g, r, false);
+  const gr = g.createLinearGradient(0, 30, 0, H - 30);
+  gr.addColorStop(0, "#9fd6f0");
+  gr.addColorStop(1, "#5a9fcc");
+  g.fillStyle = gr;
+  g.fillRect(30, 30, W - 60, H - 60);
+  // frozen plates and hairline cracks
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = r() < 0.5 ? "rgba(255,255,255,.12)" : "rgba(40,90,150,.10)";
+    g.beginPath();
+    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 30 + r() * 90, 16 + r() * 40, r() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.strokeStyle = "rgba(255,255,255,.5)";
+  g.lineWidth = 1.2;
+  for (let i = 0; i < 34; i++) {
+    let x = 30 + r() * (W - 60), y = 30 + r() * (H - 60);
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 5; k++) {
+      x += (r() - 0.5) * 70;
+      y += (r() - 0.5) * 50;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // snowdrifts along the edges
+  g.fillStyle = "rgba(255,255,255,.85)";
+  for (let i = 0; i < 70; i++) {
+    const side = Math.floor(r() * 4);
+    const x = side < 2 ? 30 + r() * (W - 60) : side === 2 ? 30 + r() * 26 : W - 30 - r() * 26;
+    const y = side === 0 ? 30 + r() * 20 : side === 1 ? H - 30 - r() * 20 : 30 + r() * (H - 60);
+    g.beginPath();
+    g.ellipse(x, y, 16 + r() * 28, 8 + r() * 12, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  pitchLines(g, "rgba(255,255,255,.55)", 3);
+  g.strokeStyle = "rgba(200,240,255,.8)";
+  g.lineWidth = 4;
+  g.strokeRect(30, 30, W - 60, H - 60);
+  vignette(g, 0.4);
+  return c;
+}
+
+function buildLava(): HTMLCanvasElement {
+  const c = canvas();
+  const g = c.getContext("2d")!;
+  const r = rng(83);
+  stands(g, r, false);
+  g.fillStyle = "#241512";
+  g.fillRect(30, 30, W - 60, H - 60);
+  for (let i = 0; i < 120; i++) {
+    const v = 28 + Math.floor(r() * 24);
+    g.fillStyle = `rgb(${v + 14} ${v} ${v - 6})`;
+    g.beginPath();
+    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 20 + r() * 70, 12 + r() * 40, r() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  // glowing fissures
+  g.lineCap = "round";
+  for (let i = 0; i < 22; i++) {
+    let x = 40 + r() * (W - 80), y = 40 + r() * (H - 80);
+    const pts: [number, number][] = [[x, y]];
+    for (let k = 0; k < 6; k++) {
+      x += (r() - 0.5) * 90;
+      y += (r() - 0.5) * 60;
+      pts.push([x, y]);
+    }
+    for (const [w, col2] of [[7, "rgba(255,80,20,.25)"], [3.5, "rgba(255,150,40,.8)"], [1.4, "rgba(255,240,170,.95)"]] as const) {
+      g.strokeStyle = col2;
+      g.lineWidth = w;
+      g.beginPath();
+      pts.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.stroke();
+    }
+  }
+  pitchLines(g, "rgba(255,170,80,.28)", 3);
+  g.strokeStyle = "rgba(255,120,40,.6)";
+  g.lineWidth = 4;
+  g.strokeRect(30, 30, W - 60, H - 60);
+  vignette(g, 0.55);
+  return c;
+}
+
+function buildCoast(): HTMLCanvasElement {
+  const c = canvas();
+  const g = c.getContext("2d")!;
+  const r = rng(97);
+  stands(g, r, false);
+  g.fillStyle = "#e3cf9b";
+  g.fillRect(30, 30, W - 60, H - 60);
+  for (let i = 0; i < 180; i++) {
+    g.fillStyle = r() < 0.5 ? "rgba(190,160,100,.28)" : "rgba(255,245,210,.3)";
+    g.beginPath();
+    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 14 + r() * 50, 6 + r() * 20, r() * 0.6, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 500; i++) {
+    g.fillStyle = r() < 0.5 ? "rgba(120,90,50,.45)" : "rgba(255,255,255,.55)";
+    g.fillRect(30 + r() * (W - 60), 30 + r() * (H - 60), 2, 2);
+  }
+  // shells and driftwood
+  g.strokeStyle = "rgba(120,80,40,.6)";
+  g.lineWidth = 4;
+  for (let i = 0; i < 6; i++) {
+    const x = 60 + r() * (W - 120), y = 60 + r() * (H - 120), a = r() * 3;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + Math.cos(a) * 34, y + Math.sin(a) * 34);
+    g.stroke();
+  }
+  pitchLines(g, "rgba(255,255,255,.5)", 3);
+  vignette(g, 0.4);
+  return c;
+}
+
 const bgCache = new Map<StageKind, HTMLCanvasElement>();
 export function stageBackground(kind: StageKind): HTMLCanvasElement {
   let c = bgCache.get(kind);
   if (!c) {
-    c = { grass: buildGrass, stone: buildStone, dirt: buildDirt, crystal: buildCrystal }[kind]();
+    c = { grass: buildGrass, stone: buildStone, dirt: buildDirt, crystal: buildCrystal, ice: buildIce, lava: buildLava, coast: buildCoast }[kind]();
     bgCache.set(kind, c);
   }
   return c;
@@ -938,4 +1058,135 @@ export function drawLightning(g: CanvasRenderingContext2D, x1: number, y1: numbe
     g.fill();
   }
   g.restore();
+}
+
+
+/** A pit filled with molten rock (the crater arena). */
+export function drawLavaPit(g: CanvasRenderingContext2D, h: Patch, t: number) {
+  g.save();
+  g.beginPath();
+  g.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
+  g.clip();
+  const gr = g.createRadialGradient(h.x, h.y, 5, h.x, h.y, h.rx);
+  gr.addColorStop(0, "#fff0a0");
+  gr.addColorStop(0.35, "#ff9a1f");
+  gr.addColorStop(1, "#a81d08");
+  g.fillStyle = gr;
+  g.fillRect(h.x - h.rx, h.y - h.ry, h.rx * 2, h.ry * 2);
+  g.fillStyle = "rgba(60,10,0,.55)";
+  for (let i = 0; i < 9; i++) {
+    const a = i * 2.4 + t * 0.15;
+    g.beginPath();
+    g.ellipse(h.x + Math.cos(a) * h.rx * 0.55, h.y + Math.sin(a * 1.3) * h.ry * 0.5, 16 + (i % 3) * 8, 7 + (i % 2) * 4, a, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+  g.strokeStyle = "rgba(255,190,90,.9)";
+  g.lineWidth = 4;
+  g.shadowColor = "#ff6a1a";
+  g.shadowBlur = 18;
+  g.beginPath();
+  g.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.shadowBlur = 0;
+}
+
+/** A tide pool: the water on the coast arena gets bigger and smaller with the tide, with a foam edge. */
+export function drawFoam(g: CanvasRenderingContext2D, p: Patch, t: number) {
+  g.save();
+  g.strokeStyle = "rgba(255,255,255,.75)";
+  g.lineWidth = 5;
+  g.setLineDash([14, 10]);
+  g.lineDashOffset = -t * 18;
+  g.beginPath();
+  g.ellipse(p.x, p.y, p.rx + 4, p.ry + 4, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.restore();
+}
+
+/** Live arena events: lava vents, wind streaks and the supply spotlight. */
+export function drawArenaFx(g: CanvasRenderingContext2D, S: import("@/lib/pokemon/arena-engine").State, t: number) {
+  if (S.vents) {
+    for (const v of S.vents) {
+      const hot = S.zones.some((z) => !z.struck && Math.hypot(z.x - v.x, z.y - v.y) < 4);
+      g.save();
+      g.translate(v.x, v.y);
+      g.scale(1, 0.6);
+      const k = hot ? 1 : 0.55 + 0.15 * Math.sin(t * 3 + v.x);
+      const gr = g.createRadialGradient(0, 0, 3, 0, 0, 34 * (hot ? 1.5 : 1));
+      gr.addColorStop(0, `rgba(255,230,120,${0.9 * k})`);
+      gr.addColorStop(0.5, `rgba(255,110,30,${0.7 * k})`);
+      gr.addColorStop(1, "rgba(255,60,10,0)");
+      g.fillStyle = gr;
+      g.beginPath();
+      g.arc(0, 0, 36 * (hot ? 1.5 : 1), 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+    }
+  }
+  const w = S.gust;
+  if (w) {
+    const live = w.warn <= 0;
+    g.save();
+    g.strokeStyle = live ? "rgba(255,255,255,.75)" : "rgba(255,255,255,.28)";
+    g.lineWidth = live ? 2.5 : 1.5;
+    g.lineCap = "round";
+    const nx = -w.dy, ny = w.dx;
+    for (let i = 0; i < 46; i++) {
+      const ph = ((t * (live ? 1.6 : 0.5) + i * 0.173) % 1 + 1) % 1;
+      const lane = ((i * 97) % 1000) / 1000 - 0.5;
+      const cx = ARENA.CX + nx * lane * 1100 + w.dx * (ph - 0.5) * 1200;
+      const cy = ARENA.CY + ny * lane * 800 + w.dy * (ph - 0.5) * 900;
+      g.globalAlpha = Math.sin(ph * Math.PI);
+      g.beginPath();
+      g.moveTo(cx, cy);
+      g.lineTo(cx + w.dx * 46, cy + w.dy * 46);
+      g.stroke();
+    }
+    g.restore();
+  }
+  const sp = S.spot;
+  if (sp) {
+    const prog = Math.max(sp.prog[0]!, sp.prog[1]!) / 1.5;
+    const fade = Math.min(1, sp.life / 1.5);
+    g.save();
+    g.globalAlpha = fade;
+    g.translate(sp.x, sp.y);
+    // a column of light
+    const lg = g.createLinearGradient(0, -170, 0, 0);
+    lg.addColorStop(0, "rgba(255,244,170,0)");
+    lg.addColorStop(1, "rgba(255,244,170,.35)");
+    g.fillStyle = lg;
+    g.beginPath();
+    g.moveTo(-sp.r * 0.8, 0);
+    g.lineTo(-sp.r * 0.5, -170);
+    g.lineTo(sp.r * 0.5, -170);
+    g.lineTo(sp.r * 0.8, 0);
+    g.closePath();
+    g.fill();
+    g.scale(1, 0.62);
+    const rg = g.createRadialGradient(0, 0, 4, 0, 0, sp.r);
+    rg.addColorStop(0, "rgba(255,244,170,.55)");
+    rg.addColorStop(1, "rgba(255,230,120,.12)");
+    g.fillStyle = rg;
+    g.beginPath();
+    g.arc(0, 0, sp.r, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = "rgba(255,240,150,.95)";
+    g.lineWidth = 4;
+    g.setLineDash([16, 10]);
+    g.lineDashOffset = -t * 22;
+    g.beginPath();
+    g.arc(0, 0, sp.r, 0, Math.PI * 2);
+    g.stroke();
+    g.setLineDash([]);
+    if (prog > 0) {
+      g.strokeStyle = "#7dff9a";
+      g.lineWidth = 7;
+      g.beginPath();
+      g.arc(0, 0, sp.r + 8, -Math.PI / 2, -Math.PI / 2 + Math.min(1, prog) * Math.PI * 2);
+      g.stroke();
+    }
+    g.restore();
+  }
 }

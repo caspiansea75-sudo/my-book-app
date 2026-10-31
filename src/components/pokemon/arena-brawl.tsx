@@ -8,7 +8,7 @@ import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-pick
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { FIELDS, GIMMICKS, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
-import { ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, playerOf, step, type Ev, type Input, type Mode, type State } from "@/lib/pokemon/arena-engine";
+import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, step, swapTo, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
@@ -33,7 +33,10 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string };
+type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind };
+const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["ঘাসের মাঠ", "Grass Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["ধুলোর মাঠ", "Dirt Field"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"] };
+const ARENA_INFO: Record<StageKind, string> = { grass: "A pond to wade through", stone: "Pillars to hide behind", dirt: "Rocks and crates", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water" };
+const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
 const KEYS = ["1", "2", "3", "4"];
 
 type Runtime = {
@@ -52,6 +55,7 @@ type Runtime = {
   raf: number;
   hudAt: number;
   endT: number;
+  swapQ: number;
   mode: Mode;
   zoom: number;
   pointers: Map<number, { x: number; y: number }>;
@@ -77,15 +81,20 @@ export function ArenaBrawl() {
   const [zoom, setZoomState] = useState(1);
   const [fs, setFs] = useState(false);
   const [portraitHint, setPortraitHint] = useState(false);
-  const [result, setResult] = useState<{ win: boolean; wave: number; score: number; place: number; kos: number; combo: number; perfects: number; best: boolean } | null>(null);
+  const [result, setResult] = useState<{ win: boolean; wave: number; score: number; place: number; kos: number; combo: number; perfects: number; best: boolean; left?: number } | null>(null);
   const [perkIds, setPerkIds] = useState<string[]>([]);
+  const [team, setTeam] = useState<string[]>(["charizard", "blastoise", "venusaur"]);
+  const [slot, setSlot] = useState(0);
+  const [arena, setArena] = useState<StageKind | "random">("random");
+  const [level, setLevel] = useState<Level>("normal");
+  const cfgRef = useRef<Record<string, { g: GimmickKind; m: string; t: string }>>({});
   const canvas = useRef<HTMLCanvasElement>(null);
   const shell = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
 
   useEffect(() => {
     setSave(loadSave());
@@ -100,11 +109,15 @@ export function ArenaBrawl() {
   const avail = gimmicksFor(pick);
   const forms = MEGAS[pick] ?? [];
   useEffect(() => {
-    setGimmick((g) => (gimmicksFor(pick).includes(g) ? g : "awaken"));
-    setMegaId((MEGAS[pick] ?? [])[0]?.id ?? "");
-    setTeraType(speciesOf(pick).types[0] ?? "Normal");
+    const saved = cfgRef.current[pick];
+    setGimmick(saved ? saved.g : (g) => (gimmicksFor(pick).includes(g) ? g : "awaken"));
+    setMegaId(saved ? saved.m : (MEGAS[pick] ?? [])[0]?.id ?? "");
+    setTeraType(saved ? saved.t : speciesOf(pick).types[0] ?? "Normal");
     setMoves(loadMoves(pick));
   }, [pick]);
+  useEffect(() => {
+    cfgRef.current[pick] = { g: gimmick, m: megaId, t: teraType };
+  }, [pick, gimmick, megaId, teraType]);
   const inGame = screen !== "menu";
 
   /* ------------------------------------------------------------ zoom */
@@ -201,12 +214,25 @@ export function ArenaBrawl() {
   const start = useCallback(() => {
     sfx.unlock();
     void enterFs(true);
-    const S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves });
+    let S: State;
+    if (mode === "quick") {
+      cfgRef.current[pick] = { g: gimmick, m: megaId, t: teraType };
+      S = newQuickGame(
+        team.map((id) => {
+          const c = cfgRef.current[id];
+          const g = c && gimmicksFor(id).includes(c.g) ? c.g : "awaken";
+          return { species: id, moves: id === pick ? moves : loadMoves(id), gimmick: g, mega: c?.m ?? (MEGAS[id] ?? [])[0]?.id ?? "", tera: c?.t ?? speciesOf(id).types[0] };
+        }),
+        arena,
+        level,
+      );
+    } else S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves });
     begin(S);
     const r = rt.current;
     r.S = S;
     r.mode = mode;
     r.endT = 0;
+    r.swapQ = -1;
     r.queue = [false, false, false, false];
     r.held = [false, false, false, false];
     r.paused = false;
@@ -215,7 +241,7 @@ export function ArenaBrawl() {
     setResult(null);
     setHud(null);
     setScreen("play");
-  }, [mode, pick, gimmick, megaId, teraType, moves, enterFs]);
+  }, [mode, pick, gimmick, megaId, teraType, moves, enterFs, team, arena, level]);
 
   /* ----------------------------------------------------------- the loop */
 
@@ -244,6 +270,14 @@ export function ArenaBrawl() {
           r.R?.say(e.boss ? t("বস!", "BOSS!") : r.mode === "royale" ? t("শুরু!", "FIGHT!") : `${t("ওয়েভ", "WAVE")} ${e.n}`, e.boss ? "#ff6a6a" : "#ffffff");
           break;
         case "storm": r.R?.say(t("ঝড় আসছে!", "THE STORM CLOSES IN!"), "#d28bff"); break;
+        case "swap": if (e.team === 0) { sfx.mega(); r.R?.say(e.faint ? `${e.name}, ${t("যাও!", "go!")}` : `${e.name}!`, "#9fe8ff"); } break;
+        case "arena":
+          if (e.kind === "gust") r.R?.say(t("দমকা হাওয়া আসছে!", "WIND GUST!"), "#cfeaff");
+          else if (e.kind === "vent") r.R?.say(t("লাভা ফুটছে!", "LAVA VENTS!"), "#ff9a4a");
+          else if (e.kind === "tide") r.R?.say(e.dx! > 0 ? t("জোয়ার আসছে", "TIDE RISING") : t("ভাটা", "TIDE FALLING"), "#7fd0ff");
+          else if (e.kind === "spot") r.R?.say(t("সাপ্লাই স্পটলাইট!", "SUPPLY SPOTLIGHT!"), "#fff2a0");
+          else if (e.kind === "spotget" && e.team === 0) { sfx.combo(3, true); r.R?.say(t("বোনাস!", "BONUS!"), "#7dff9a"); }
+          break;
         default: break;
       }
     }
@@ -256,7 +290,9 @@ export function ArenaBrawl() {
     const prev = loadSave();
     const next = { ...prev };
     let best = false;
-    if (S.mode === "survival") {
+    if (S.mode === "quick") {
+      /* Quick Battle is not part of the saved records */
+    } else if (S.mode === "survival") {
       if (S.score > prev.bestScore) {
         next.bestScore = S.score;
         best = true;
@@ -270,7 +306,9 @@ export function ArenaBrawl() {
     setSave(next);
     if (S.winner) sfx.win();
     else sfx.lose();
-    setResult({ win: S.winner, wave: S.wave, score: S.score, place: S.place, kos: p.kos, combo: p.combo.best, perfects: S.perfects, best });
+    const quickLeft = S.squads ? S.squads[0]!.filter((f) => f.alive).length : 0;
+    const quickDown = S.squads ? S.squads[1]!.filter((f) => !f.alive).length : 0;
+    setResult({ win: S.winner, wave: S.wave, score: S.score, place: S.place, kos: S.mode === "quick" ? quickDown : p.kos, combo: S.mode === "quick" ? Math.max(...S.squads![0]!.map((f) => f.combo.best)) : p.combo.best, perfects: S.perfects, best, left: quickLeft });
     setScreen("over");
   }, []);
 
@@ -316,6 +354,10 @@ export function ArenaBrawl() {
       const dt = Math.max(0, Math.min(0.05, (now - r.last) / 1000));
       r.last = now;
       if (!r.paused) {
+        if (r.swapQ >= 0) {
+          if (S.mode === "quick") swapTo(S, 0, r.swapQ);
+          r.swapQ = -1;
+        }
         step(S, build(), dt);
         if (S.events.length) {
           onEvents(S, S.events);
@@ -365,6 +407,15 @@ export function ArenaBrawl() {
           foes: S.fighters.filter((f) => f.alive && f.team !== 0).length,
           field: S.field,
           name: p.sp.name,
+          ...(S.squads
+            ? {
+                squad: S.squads[0]!.map((f) => ({ name: f.sp.name, hp: f.hp, max: f.maxHp, alive: f.alive, active: f === p })),
+                foeSquad: S.squads[1]!.map((f) => ({ hp: f.hp, max: f.maxHp, alive: f.alive, active: S.fighters.includes(f) })),
+                swapCd: S.swapCd![0]!,
+                level: S.level,
+                arena: S.stage,
+              }
+            : {}),
         });
       }
 
@@ -403,6 +454,7 @@ export function ArenaBrawl() {
       if (e.repeat) return;
       if (k === " " || k === "shift") r.dodge = true;
       else if (k === "q") r.ult = true;
+      else if (r.mode === "quick" && (k === "z" || k === "x" || k === "c")) r.swapQ = "zxc".indexOf(k);
       else if (k === "p" || (k === "escape" && !document.fullscreenElement)) setPausedBoth(!r.paused);
       else if (k === "f") (fs ? exitFs : () => enterFs(false))();
       else if (k === "+" || k === "=") setZoom(r.zoom + 0.15);
@@ -553,13 +605,49 @@ export function ArenaBrawl() {
             <b>{t("সারভাইভাল", "Survival")}</b>
             <span>{t("ওয়েভের পর ওয়েভ। প্রতি ওয়েভের পর একটি পার্ক বেছে নিন। বস: ৫ম ওয়েভে মিউটু, ১০ম ওয়েভে রেকুয়াজা।", "Wave after wave. Pick a perk after each one. Bosses: Mewtwo on wave 5, Rayquaza on wave 10.")}</span>
           </button>
+          <button type="button" className={`ab-mode ${mode === "quick" ? "on" : ""}`} onClick={() => setMode("quick")}>
+            <b>{t("কুইক ব্যাটল ৩ভি৩", "Quick Battle 3v3")}</b>
+            <span>{t("তিনটি পোকেমন বেছে নিন, লড়াইয়ের মাঝে বদলান। প্রত্যেকের নিজের HP; পড়ে গেলে আর ওঠে না। তিনটিই হারালে হার।", "Pick three Pokémon and switch between them mid-fight. Each keeps its own health; a downed one stays down. Knock out all three of theirs to win.")}</span>
+          </button>
           <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => setMode("royale")}>
             <b>{t("ব্যাটল রয়্যাল", "Battle Royale")}</b>
             <span>{t("৫টি পোকেমন, একটি মাঠ, সবাই সবার শত্রু। ঝড় ধীরে ধীরে মাঠ ছোট করে।", "Five Pokémon, one arena, everyone against everyone. A storm slowly shrinks the floor.")}</span>
           </button>
         </div>
 
-        <RosterPicker pick={pick} onPick={(id) => setPick(id)} isLocked={(s) => !unlocked(s.unlock)} />
+        {mode === "quick" ? (
+          <div className="ab-quick">
+            <div className="ab-team">
+              {team.map((id, i) => (
+                <button key={i} type="button" className={`ab-slot ${slot === i ? "on" : ""}`} onClick={() => { sfx.pick(); setSlot(i); setPick(team[i]!); }}>
+                  <Sprite id={speciesOf(id).num} size={44} />
+                  <b>{i + 1}. {speciesOf(id).name}</b>
+                  <small>{slot === i ? t("এখন বাছাই হচ্ছে ↓", "choosing below ↓") : t("চাপুন বদলাতে", "tap to change")}</small>
+                </button>
+              ))}
+            </div>
+            <div className="ab-opt">
+              <b>{t("মাঠ", "Arena")}</b>
+              <div className="ab-chips">
+                <button type="button" className={`ab-chip ${arena === "random" ? "on" : ""}`} onClick={() => setArena("random")}>{t("যেকোনো", "Random")}</button>
+                {ARENAS.map((a) => (
+                  <button key={a} type="button" className={`ab-chip ${arena === a ? "on" : ""}`} onClick={() => setArena(a)} title={ARENA_INFO[a]}>{t(ARENA_NAME[a][0], ARENA_NAME[a][1])}</button>
+                ))}
+              </div>
+              <small>{arena === "random" ? t("প্রতিবার একটি মাঠ বাছা হবে।", "A different arena each time.") : ARENA_INFO[arena]}</small>
+            </div>
+            <div className="ab-opt">
+              <b>{t("কঠিনতা", "CPU difficulty")}</b>
+              <div className="ab-chips">
+                {(["easy", "normal", "hard"] as Level[]).map((l) => (
+                  <button key={l} type="button" className={`ab-chip ${level === l ? "on" : ""}`} onClick={() => setLevel(l)}>{t(LEVEL_NAME[l][0], LEVEL_NAME[l][1])}</button>
+                ))}
+              </div>
+              <small>{level === "easy" ? t("দুর্বল ও ধীর শত্রু, কম ড্যামেজ, বদলায় না।", "Weaker, slower foes that hit softer and never swap.") : level === "normal" ? t("সমান সমান লড়াই।", "An even fight.") : t("শক্ত, চটপটে, পাল্টা ডজ করে ও আহত হলে বদলে নেয়।", "Tougher, quicker foes that dodge and pull back when hurt.")}</small>
+            </div>
+          </div>
+        ) : null}
+        <RosterPicker pick={pick} onPick={(id) => { setPick(id); if (mode === "quick") setTeam((tm) => tm.map((x, i) => (i === slot ? id : x))); }} isLocked={(s) => !unlocked(s.unlock) || (mode === "quick" && team.some((x, i) => i !== slot && x === s.id))} />
 
         <div className="ab-detail">
           <h3>{sp.name}</h3>
@@ -695,11 +783,28 @@ export function ArenaBrawl() {
             </div>
             {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
-              {rt.current.mode === "survival" ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("ব্যাটল রয়্যাল", "Battle Royale")}</>}
+              {rt.current.mode === "survival" ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : rt.current.mode === "quick" ? <>{t("৩ভি৩", "3v3")} · {hud.arena ? t(ARENA_NAME[hud.arena][0], ARENA_NAME[hud.arena][1]) : ""} · {hud.level ? t(LEVEL_NAME[hud.level][0], LEVEL_NAME[hud.level][1]) : ""}</> : <>{t("ব্যাটল রয়্যাল", "Battle Royale")}</>}
               <span>{t("শত্রু", "Foes")} {hud.foes}</span>
               <span className="sc">★ {hud.score}</span>
               {fld ? <span title={t(fld.bn, fld.name)}>{fld.icon}<i className="wx"> {t(fld.bn, fld.name)}</i></span> : null}
             </div>
+            {hud.squad ? (
+              <div className="ab-squad">
+                <div className="ab-foes">
+                  {hud.foeSquad!.map((f, i) => (
+                    <i key={i} className={`${f.alive ? "" : "dead"} ${f.active ? "act" : ""}`}><u style={{ width: `${f.alive ? Math.max(0, (f.hp / f.max) * 100) : 0}%` }} /></i>
+                  ))}
+                </div>
+                {hud.squad.map((m, i) => (
+                  <button key={i} type="button" disabled={!m.alive || m.active || (hud.swapCd ?? 0) > 0} className={`ab-sq ${m.active ? "act" : ""} ${m.alive ? "" : "dead"}`} onPointerDown={(e) => { e.preventDefault(); rt.current.swapQ = i; }} aria-label={m.name}>
+                    <Sprite id={speciesOf(team[i] ?? "").num} size={30} />
+                    <span className="sq-bar"><u style={{ width: `${m.alive ? Math.max(0, (m.hp / m.max) * 100) : 0}%`, background: hpColor(m.hp / m.max) }} /></span>
+                    <span className="sq-ky">{"ZXC"[i]}</span>
+                  </button>
+                ))}
+                {(hud.swapCd ?? 0) > 0 ? <small className="sq-cd">{hud.swapCd!.toFixed(1)}s</small> : null}
+              </div>
+            ) : null}
             {hud.combo > 1 ? <div className="ab-combo pulse">{t("কম্বো", "COMBO")} ×{hud.combo}</div> : null}
 
             <div className="ab-tools">
@@ -787,11 +892,12 @@ export function ArenaBrawl() {
           <div className="ab-ov">
             <div>
               <h2 style={{ color: result.win ? "#ffd54a" : "#ff8a8a" }}>
-                {rt.current.mode === "royale" ? (result.win ? t("চ্যাম্পিয়ন!", "Champion!") : `${t("স্থান", "Place")} #${result.place}`) : t("হেরে গেছেন", "Defeated")}
+                {rt.current.mode === "royale" ? (result.win ? t("চ্যাম্পিয়ন!", "Champion!") : `${t("স্থান", "Place")} #${result.place}`) : rt.current.mode === "quick" ? (result.win ? t("জয়!", "Victory!") : t("হেরে গেছেন", "Defeated")) : t("হেরে গেছেন", "Defeated")}
               </h2>
               {result.best ? <p style={{ color: "#ffd54a" }}>{t("নতুন সেরা স্কোর!", "New best score!")}</p> : null}
               <div className="ab-stats">
                 {rt.current.mode === "survival" ? <><span>{t("ওয়েভ", "Wave")}</span><b>{result.wave}</b></> : null}
+                {rt.current.mode === "quick" ? <><span>{t("বেঁচে আছে", "Pokémon left")}</span><b>{result.left}/3</b></> : null}
                 <span>{t("স্কোর", "Score")}</span><b>{result.score}</b>
                 <span>{t("নক-আউট", "KOs")}</span><b>{result.kos}</b>
                 <span>{t("সেরা কম্বো", "Best combo")}</span><b>×{result.combo}</b>
@@ -808,7 +914,7 @@ export function ArenaBrawl() {
 
       {portraitHint && !fs ? <div className="ab-tip">{t("ফোন আড়াআড়ি ঘোরালে ফুল স্ক্রিনে খেলা যাবে ↻", "Turn your phone sideways to play full screen ↻")}</div> : null}
       <div className="ab-help">
-        {t("চাল: ১–৪ · গড়ান: Space · জিমিক: Q · জুম: + − বা মাউস হুইল / দুই আঙুল · ফুল স্ক্রিন: F", "Moves 1–4 · Roll: Space · Gimmick: Q · Zoom: + − or mouse wheel / two fingers · Full screen: F")}
+        {rt.current.mode === "quick" ? t("বদল: Z X C · ", "Swap: Z X C · ") : ""}{t("চাল: ১–৪ · গড়ান: Space · জিমিক: Q · জুম: + − বা মাউস হুইল / দুই আঙুল · ফুল স্ক্রিন: F", "Moves 1–4 · Roll: Space · Gimmick: Q · Zoom: + − or mouse wheel / two fingers · Full screen: F")}
       </div>
     </div>
   );

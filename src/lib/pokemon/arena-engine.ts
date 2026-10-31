@@ -12,14 +12,15 @@ const MARGIN = 46;
 const CX = W / 2;
 const CY = H / 2;
 
-export type Mode = "survival" | "royale";
+export type Mode = "survival" | "royale" | "quick";
+export type Level = "easy" | "normal" | "hard";
 
-export type StageKind = "grass" | "stone" | "dirt" | "crystal";
+export type StageKind = "grass" | "stone" | "dirt" | "crystal" | "ice" | "lava" | "coast";
 export type ObsKind = "crate" | "pillar" | "crystal" | "rock";
 /** Something standing in the arena: crates break, the rest do not. */
 export type Obstacle = { id: number; kind: ObsKind; x: number; y: number; r: number; hp: number; hit: number };
 /** An oval patch of the floor: a bottomless pit or a pool of water. */
-export type Patch = { id: number; x: number; y: number; rx: number; ry: number };
+export type Patch = { id: number; x: number; y: number; rx: number; ry: number; base?: number };
 
 export type Fighter = {
   id: number;
@@ -198,6 +199,8 @@ export type Ev =
   | { t: "item"; x: number; y: number; kind: ItemKind; byPlayer: boolean }
   | { t: "field"; kind: FieldKind }
   | { t: "hazard"; x: number; y: number }
+  | { t: "swap"; team: number; x: number; y: number; name: string; faint: boolean }
+  | { t: "arena"; kind: "gust" | "vent" | "tide" | "spot" | "spotget"; x: number; y: number; dx?: number; dy?: number; team?: number }
   | { t: "clash"; x: number; y: number }
   | { t: "over"; win: boolean };
 
@@ -251,6 +254,18 @@ export type State = {
   winnerId?: number;
   /** When two beams last met (so the steam is not spawned every frame). */
   clashT?: number;
+  /** Quick Battle (3v3): computer difficulty, both squads (index = team), swap cool-down per team. */
+  level?: Level;
+  squads?: Fighter[][];
+  swapCd?: number[];
+  /** Arena events (Quick Battle). */
+  gust?: { warn: number; t: number; dx: number; dy: number } | null;
+  gustT?: number;
+  vents?: { x: number; y: number }[];
+  ventT?: number;
+  tideT?: number;
+  spot?: { x: number; y: number; r: number; life: number; prog: number[] } | null;
+  spotT?: number;
 };
 
 /** The move in a slot (Tera Blast takes over the fourth one for a while). */
@@ -344,6 +359,29 @@ export function buildStage(S: State, kind: StageKind) {
       scatter("crystal", 8);
       scatter("pillar", 1);
       break;
+    case "ice":
+      scatter("crystal", 6);
+      scatter("rock", 3);
+      scatter("crate", 3);
+      break;
+    case "lava":
+      patch(S.holes, 120, 70, CX, CY);
+      S.vents = [
+        { x: 250, y: 150 }, { x: W - 250, y: 150 }, { x: 250, y: H - 150 }, { x: W - 250, y: H - 150 },
+        { x: CX, y: 120 }, { x: CX, y: H - 120 },
+      ];
+      scatter("rock", 5);
+      scatter("pillar", 2);
+      scatter("crate", 3);
+      break;
+    case "coast": {
+      const a = rnd(150, 190), b = rnd(80, 100);
+      S.pools.push({ id: S.nextId++, x: 250, y: H - 190, rx: a, ry: b, base: a });
+      S.pools.push({ id: S.nextId++, x: W - 250, y: 190, rx: a, ry: b, base: a });
+      scatter("crate", 5);
+      scatter("rock", 3);
+      break;
+    }
   }
 }
 
@@ -1303,11 +1341,12 @@ function aiStep(S: State, f: Fighter, dt: number) {
   f.vy = mny * f.speed * (len(mx, my) > 0.01 ? 1 : 0) * walk * (f.boss ? 0.8 : 0.9);
 
   if (f.think > 0) return;
-  f.think = rnd(0.12, 0.28);
+  f.think = rnd(0.12, 0.28) * (S.mode === "quick" ? { easy: 1.6, normal: 1, hard: 0.7 }[S.level ?? "normal"] : 1);
 
   // dodge incoming shots (the later the wave, the more often)
-  const skill = clamp(0.25 + S.wave * 0.07, 0.25, 0.8);
-  if (f.dodge.cd <= 0 && f.dodge.t <= 0 && (S.wave >= 3 || S.mode === "royale")) {
+  const quick = S.mode === "quick";
+  const skill = quick ? { easy: 0.1, normal: 0.35, hard: 0.7 }[S.level ?? "normal"] : clamp(0.25 + S.wave * 0.07, 0.25, 0.8);
+  if (f.dodge.cd <= 0 && f.dodge.t <= 0 && (S.wave >= 3 || S.mode === "royale" || quick)) {
     for (const p of S.projs) {
       if (p.team === f.team) continue;
       const px = f.x - p.x;
@@ -1363,7 +1402,7 @@ function aiStep(S: State, f: Fighter, dt: number) {
   }
   if (options.length) {
     const slot = options[Math.floor(Math.random() * options.length)]!;
-    if (tryCast(S, f, slot, null)) f.gcd = (f.boss ? rnd(0.5, 1.0) : rnd(0.9, 1.7)) * (S.mode === "royale" ? 0.9 : 1);
+    if (tryCast(S, f, slot, null)) f.gcd = (f.boss ? rnd(0.5, 1.0) : rnd(0.9, 1.7)) * (S.mode === "royale" ? 0.9 : 1) * (S.mode === "quick" ? { easy: 1.5, normal: 1, hard: 0.75 }[S.level ?? "normal"] : 1);
   }
 }
 
@@ -1411,6 +1450,12 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     f.mvy += (f.vy * k - f.mvy) * a;
     sx = f.mvx;
     sy = f.mvy;
+  }
+  // wind gusts shove everyone who is not flying (flyers only a little)
+  if (S.gust && S.gust.warn <= 0 && S.gust.t > 0) {
+    const w = f.canFly ? 55 : 150;
+    sx += S.gust.dx * w;
+    sy += S.gust.dy * w;
   }
   // knock-back decays quickly
   sx += f.kx;
@@ -1905,6 +1950,12 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     }
   }
 
+  // ---- Quick Battle: arena events, swaps, and the end of the match
+  if (S.mode === "quick") {
+    quickStep(S, dt);
+    return;
+  }
+
   // ---- end of a co-op wave, or of the co-op run
   if (S.mp && S.mode === "survival") {
     const humans = S.fighters.filter((f) => f.isPlayer);
@@ -1967,9 +2018,226 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
   }
 }
 
+/* ------------------------------------------------------------- Quick Battle (3v3) */
+
+export type QuickPick = { species: string; moves?: string[]; gimmick?: GimmickKind; mega?: string; tera?: string };
+export const ARENAS: StageKind[] = ["grass", "stone", "dirt", "crystal", "ice", "lava", "coast"];
+const LEVEL_SCALE: Record<Level, { hp: number; dmg: number; cd: number }> = {
+  easy: { hp: 0.8, dmg: 0.7, cd: 1.3 },
+  normal: { hp: 1, dmg: 0.95, cd: 1 },
+  hard: { hp: 1.25, dmg: 1.1, cd: 0.85 },
+};
+
+/** Three against three: the person's squad is S.squads[0], the computer's S.squads[1]; only the fighter in the ring is in S.fighters. */
+export function newQuickGame(picks: QuickPick[], arena: StageKind | "random", level: Level): State {
+  const first = picks[0]!;
+  const S = newGame("quick", first.species, {});
+  S.fighters = [];
+  S.nextId = 1;
+  S.level = level;
+  S.swapCd = [0, 0];
+  S.wave = 1;
+  const mine: Fighter[] = picks.slice(0, 3).map((pk) => {
+    const f = makeFighter(S, speciesOf(pk.species), 0, true, 230, CY);
+    f.auto = false;
+    f.gimmick = pk.gimmick ?? "awaken";
+    f.megaForm = (MEGAS[pk.species] ?? []).find((m) => m.id === pk.mega) ?? MEGAS[pk.species]?.[0] ?? null;
+    if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
+    if (pk.tera && TERA_TYPES.includes(pk.tera)) f.teraType = pk.tera;
+    f.loadout = cleanMoves(pk.species, pk.moves);
+    f.face = 0;
+    return f;
+  });
+  const sc = LEVEL_SCALE[level];
+  const taken = new Set(picks.map((p) => p.species));
+  const pool = ROSTER.filter((x) => !taken.has(x.id) && !x.unlock);
+  const theirs: Fighter[] = [];
+  for (let i = 0; i < 3; i++) {
+    const sp = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
+    const f = makeFighter(S, sp, 1, false, W - 230, CY, { hp: sc.hp, dmg: sc.dmg });
+    f.cdMul = sc.cd;
+    f.face = Math.PI;
+    const kinds = gimmicksFor(sp.id);
+    f.cpuGimmick = level !== "easy";
+    f.gimmick = kinds[Math.floor(Math.random() * kinds.length)]!;
+    const forms = MEGAS[sp.id] ?? [];
+    f.megaForm = forms[Math.floor(Math.random() * forms.length)] ?? null;
+    f.teraType = TERA_TYPES[Math.floor(Math.random() * TERA_TYPES.length)]!;
+    theirs.push(f);
+  }
+  S.squads = [mine, theirs];
+  S.fighters = [mine[0]!, theirs[0]!];
+  const kind = arena === "random" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : arena;
+  buildStage(S, kind);
+  S.gustT = rnd(6, 9);
+  S.ventT = 5;
+  S.spotT = rnd(8, 11);
+  S.tideT = 0;
+  S.field = "none";
+  unstick(S);
+  return S;
+}
+
+const swapBusy = (f: Fighter) => !!(f.cast || f.channel || f.dash || f.grabT > 0 || f.stun > 0 || f.mega > 0 || f.dyna > 0 || f.tera || f.awaken > 0);
+
+function sendOut(S: State, team: number, cur: Fighter, nxt: Fighter) {
+  const i = S.fighters.indexOf(cur);
+  if (i < 0) return;
+  const faint = !cur.alive;
+  if (cur.alive) {
+    cur.status = emptyStatus();
+    cur.vx = cur.vy = 0;
+    cur.mvx = cur.mvy = 0;
+  }
+  nxt.x = cur.x;
+  nxt.y = cur.y;
+  nxt.face = cur.face;
+  nxt.vx = nxt.vy = 0;
+  nxt.mvx = nxt.mvy = 0;
+  nxt.kx = nxt.ky = 0;
+  nxt.invuln = Math.max(nxt.invuln, 0.9);
+  nxt.flash = 0.4;
+  nxt.gcd = 0.6;
+  S.fighters[i] = nxt;
+  S.swapCd![team] = faint ? 0 : 3.5;
+  S.events.push({ t: "explode", x: nxt.x, y: nxt.y, r: 54, type: nxt.sp.types[0]!, fx: undefined });
+  S.events.push({ t: "swap", team, x: nxt.x, y: nxt.y, name: nxt.sp.name, faint });
+}
+
+/** Swap the fighter in the ring for squad member `idx`. Not possible while casting, grabbed or in a gimmick, or inside the cool-down. */
+export function swapTo(S: State, team: number, idx: number): boolean {
+  const sq = S.squads?.[team];
+  if (S.mode !== "quick" || !sq || S.phase !== "fight") return false;
+  const cur = S.fighters.find((f) => f.team === team);
+  const nxt = sq[idx];
+  if (!cur || !nxt || nxt === cur || !nxt.alive) return false;
+  if (cur.alive && ((S.swapCd?.[team] ?? 0) > 0 || swapBusy(cur))) return false;
+  sendOut(S, team, cur, nxt);
+  return true;
+}
+
+function quickStep(S: State, dt: number) {
+  const sq = S.squads!;
+  for (const t of [0, 1]) S.swapCd![t] = Math.max(0, S.swapCd![t]! - dt);
+  // a downed fighter is replaced by the next one that is still standing
+  for (const t of [0, 1]) {
+    const cur = S.fighters.find((f) => f.team === t);
+    if (cur && !cur.alive && cur.koT > 1.0) {
+      const nxt = sq[t]!.find((f) => f.alive);
+      if (nxt) sendOut(S, t, cur, nxt);
+    }
+  }
+  // the computer pulls back a hurt fighter (never on Easy)
+  const cpu = S.fighters.find((f) => f.team === 1);
+  if (cpu && cpu.alive && S.level !== "easy" && S.swapCd![1]! <= 0 && !swapBusy(cpu) && cpu.hp < cpu.maxHp * (S.level === "hard" ? 0.3 : 0.18)) {
+    const best = sq[1]!.filter((f) => f.alive && f !== cpu && f.hp > f.maxHp * 0.5).sort((a, b) => b.hp / b.maxHp - a.hp / a.maxHp)[0];
+    if (best && Math.random() < dt * (S.level === "hard" ? 1.2 : 0.5)) sendOut(S, 1, cpu, best);
+  }
+
+  // ---- arena events
+  if (S.stage === "ice") {
+    const g = S.gust;
+    if (g) {
+      if (g.warn > 0) g.warn -= dt;
+      else {
+        g.t -= dt;
+        if (g.t <= 0) S.gust = null;
+      }
+    } else {
+      S.gustT = (S.gustT ?? 6) - dt;
+      if (S.gustT <= 0) {
+        const a = Math.floor(Math.random() * 8) * (Math.PI / 4);
+        S.gust = { warn: 1.6, t: 2.6, dx: Math.cos(a), dy: Math.sin(a) };
+        S.gustT = rnd(7, 10);
+        S.events.push({ t: "arena", kind: "gust", x: CX, y: CY, dx: S.gust.dx, dy: S.gust.dy });
+      }
+    }
+  }
+  if (S.stage === "lava" && S.vents) {
+    S.ventT = (S.ventT ?? 5) - dt;
+    if (S.ventT <= 0) {
+      S.ventT = rnd(4, 6);
+      const vs = [...S.vents].sort(() => Math.random() - 0.5).slice(0, 2);
+      for (const v of vs) {
+        S.zones.push({ id: S.nextId++, owner: 0, team: -1, shape: "circle", x: v.x, y: v.y, x2: v.x, y2: v.y, r: 62, delay: 1.3, total: 1.3, life: 0.35, dmg: 0, type: "Fire", kb: 230, struck: false, mv: MOVES.eruption!, player: false });
+      }
+      S.events.push({ t: "arena", kind: "vent", x: vs[0]!.x, y: vs[0]!.y });
+    }
+  }
+  if (S.stage === "coast") {
+    const before = Math.sin((S.tideT ?? 0) * 0.45);
+    S.tideT = (S.tideT ?? 0) + dt;
+    const after = Math.sin(S.tideT * 0.45);
+    const k = 1 + 0.34 * after;
+    for (const p of S.pools) if (p.base) {
+      p.rx = p.base * k;
+      p.ry = p.base * 0.55 * k;
+    }
+    if (before <= 0 && after > 0) S.events.push({ t: "arena", kind: "tide", x: CX, y: CY, dx: 1 });
+    else if (before > 0 && after <= 0) S.events.push({ t: "arena", kind: "tide", x: CX, y: CY, dx: -1 });
+  }
+  // a supply spotlight: hold it alone for a moment to get healed and powered up
+  const sp = S.spot;
+  if (sp) {
+    sp.life -= dt;
+    const inside = [0, 1].map((t) => {
+      const f = S.fighters.find((x) => x.team === t && x.alive);
+      return !!f && len(f.x - sp.x, f.y - sp.y) <= sp.r + f.r * 0.4;
+    });
+    for (const t of [0, 1]) sp.prog[t] = inside[t] && !inside[1 - t] ? sp.prog[t]! + dt : Math.max(0, sp.prog[t]! - dt * 0.5);
+    for (const t of [0, 1]) {
+      if (sp.prog[t]! < 1.5) continue;
+      const f = S.fighters.find((x) => x.team === t && x.alive);
+      if (f) {
+        f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.3);
+        f.buffT = 8;
+        f.buffMul = Math.max(f.buffMul, 1.4);
+        gainUlt(f, 35);
+        S.events.push({ t: "heal", x: f.x, y: f.y, amt: Math.round(f.maxHp * 0.3) });
+        S.events.push({ t: "arena", kind: "spotget", x: sp.x, y: sp.y, team: t });
+      }
+      S.spot = null;
+      S.spotT = rnd(13, 18);
+      break;
+    }
+    if (S.spot && sp.life <= 0) {
+      S.spot = null;
+      S.spotT = rnd(9, 12);
+    }
+  } else {
+    S.spotT = (S.spotT ?? 9) - dt;
+    if (S.spotT <= 0) {
+      for (let k = 0; k < 24; k++) {
+        const x = rnd(MARGIN + 140, W - MARGIN - 140);
+        const y = rnd(MARGIN + 110, H - MARGIN - 110);
+        if (S.obs.every((o) => o.hp <= 0 || len(o.x - x, o.y - y) > o.r + 80) && S.holes.every((h) => !inPatch(h, x, y, 80))) {
+          S.spot = { x, y, r: 68, life: 11, prog: [0, 0] };
+          S.events.push({ t: "arena", kind: "spot", x, y });
+          break;
+        }
+      }
+      S.spotT = 2;
+    }
+  }
+
+  // ---- the end: a whole squad is down
+  const up = (t: number) => sq[t]!.some((f) => f.alive);
+  if ((!up(0) || !up(1)) && S.phase === "fight") {
+    S.phase = "over";
+    S.winner = up(0);
+    const downed = sq[1]!.filter((f) => !f.alive).length;
+    const lost = sq[0]!.filter((f) => !f.alive).length;
+    S.score += downed * 300 + (S.winner ? 1000 + (3 - lost) * 300 : 0);
+    S.events.push({ t: "over", win: S.winner });
+  }
+}
+
 /** Begin the first wave of a survival run. */
 export function begin(S: State) {
-  if (S.mode === "survival" && S.wave === 0) spawnWave(S);
+  if (S.mode === "quick") {
+    S.phase = "intro";
+    S.introT = 1.8;
+  } else if (S.mode === "survival" && S.wave === 0) spawnWave(S);
   else if (S.mode === "royale") {
     S.phase = "intro";
     S.introT = 1.6;

@@ -4,7 +4,7 @@
  */
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { ARENA, type Ev, type Fighter, type Proj, type State } from "@/lib/pokemon/arena-engine";
-import { blob, drawHole, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
+import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
@@ -739,8 +739,12 @@ export class ArenaRenderer {
     g.scale(zoom, zoom);
     g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
     g.drawImage(stageBackground(S.stage), 0, 0);
-    for (const pool of S.pools) drawPool(g, pool, this.t);
-    for (const hole of S.holes) drawHole(g, hole, this.t);
+    for (const pool of S.pools) {
+      drawPool(g, pool, this.t);
+      if (pool.base) drawFoam(g, pool, this.t);
+    }
+    for (const hole of S.holes) (S.stage === "lava" ? drawLavaPit : drawHole)(g, hole, this.t);
+    if (S.mode === "quick") drawArenaFx(g, S, this.t);
     // blast marks: a dark patch with a glowing rim that cools
     for (const sc of this.scorch) {
       const k = sc.t / sc.max;
