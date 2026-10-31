@@ -8,9 +8,11 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dot" | "streak" | "ring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
+/** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
+const ORB_LOBS = new Set(["sludgebomb", "seedbomb", "gunkshot", "moonblast", "focusblast", "iciclecrash", "photongeyser", "lightofruin"]);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const easeOutBack = (k: number) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
 const smooth = (a: number, b: number, x: number) => {
@@ -302,6 +304,12 @@ export class ArenaRenderer {
             this.poses.set(e.id, ps);
           }
           this.burst(e.x, e.y, c, e.heavy ? 18 : 9, e.heavy ? 280 : 190);
+          if (e.dmg > 0) {
+            this.elementBurst(e.x, e.y, e.type, e.heavy ? 56 : 30);
+            this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.22, max: 0.22, size: e.heavy ? 26 : 16, grow: e.heavy ? 150 : 90, color: c });
+            if (e.crit || e.heavy) this.parts.push({ kind: "cross", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.24, max: 0.24, size: e.crit ? 56 : 40, grow: 0, color: e.crit ? "#ffe08a" : "#ffffff" });
+            if (e.heavy) this.groundImpact(e.x, e.y + 8, c, 38);
+          }
           for (let i = 0; i < (e.heavy ? 8 : 3); i++) {
             const a = Math.atan2(e.dy, e.dx) + rnd(-0.6, 0.6);
             const v = rnd(200, 420);
@@ -333,6 +341,7 @@ export class ArenaRenderer {
             this.shakeT = 0.3;
           }
           this.moveFx(e);
+          if (e.r >= 36) this.groundImpact(e.x, e.y, c, e.r);
           if (e.r >= 55) {
             // dust, rubble and a dark scorch mark, as in the video
             for (let i = 0; i < Math.round(3 + e.r / 28); i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-e.r * 0.4, e.r * 0.4), y: e.y + rnd(-e.r * 0.25, e.r * 0.25), vx: rnd(-40, 40), vy: rnd(-70, -20), g: 0, life: rnd(0.7, 1.2), max: 1.2, size: rnd(9, 16), grow: 30, color: i % 2 ? "#cfc2aa" : "#9a8f80" });
@@ -464,6 +473,16 @@ export class ArenaRenderer {
           this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: 20, grow: 120, color: "#ffffff" });
           for (let i = 0; i < 5; i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-10, 10), y: e.y + rnd(-6, 6), vx: rnd(-40, 40), vy: rnd(-110, -50), g: 0, life: rnd(0.7, 1.1), max: 1.1, size: rnd(9, 14), grow: 30, color: "#e8f1ff" });
           this.burst(e.x, e.y, "#ffffff", 5, 220, "streak");
+          // a proper collision: a starburst, shockwaves along the floor and a spray of sparks
+          this.parts.push({ kind: "cross", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: 96, grow: 0, color: "#ffffff" });
+          this.parts.push({ kind: "gring", x: e.x, y: e.y + 6, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 8, grow: 260, color: "#ffe9a0" });
+          this.parts.push({ kind: "gring", x: e.x, y: e.y + 6, vx: 0, vy: 0, g: 0, life: 0.35, max: 0.35, size: 4, grow: 190, color: "#ffffff" });
+          for (let i = 0; i < 22; i++) {
+            const a = rnd(0, Math.PI * 2), v = rnd(120, 420);
+            this.parts.push({ kind: "spark", x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, g: 380, life: rnd(0.4, 0.9), max: 0.9, size: rnd(1.5, 3.2), grow: 0, color: i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? "#ffd84d" : "#8fd3ff" });
+          }
+          this.shake = Math.max(this.shake, 5);
+          this.shakeT = 0.2;
           break;
         }
         case "zhit": {
@@ -551,6 +570,14 @@ export class ArenaRenderer {
           this.parts.push({ kind: "puff", x: x + Math.cos(a) * 8, y: y + Math.sin(a) * 8, vx: Math.cos(a) * r * 2.4, vy: Math.sin(a) * r * 2.4, g: 0, life: 0.65, max: 0.65, size: 9, grow: 8, color: "#ff9a2e", edge: "#b8360d", seed: i });
         }
         this.parts.push({ kind: "puff", x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: r * 0.5, grow: 40, color: "#ffd84d", edge: "#ff8a1f", seed: 4 });
+        // a roaring pillar of flame, embers thrown into the air and small fires left burning on the floor
+        for (let i = 0; i < 26; i++) this.parts.push({ kind: "flame", x: x + rnd(-r * 0.45, r * 0.45), y: y + rnd(-r * 0.2, r * 0.2), vx: rnd(-40, 40), vy: rnd(-300, -110), g: 60, life: rnd(0.6, 1.1), max: 1.1, size: rnd(9, 20), grow: -6, color: i % 3 === 0 ? "#ffd84d" : i % 3 === 1 ? "#ff8a1f" : "#e63a1e", seed: i });
+        for (let i = 0; i < 34; i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 3.4); this.parts.push({ kind: "spark", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - rnd(120, 340), g: 420, life: rnd(0.7, 1.4), max: 1.4, size: rnd(1.6, 3.4), grow: 0, color: i % 2 ? "#ffd84d" : "#ff7a2a" }); }
+        for (let i = 0; i < 14; i++) { const a = rnd(0, Math.PI * 2), d = rnd(0, r * 0.95); this.parts.push({ kind: "flame", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, vx: rnd(-8, 8), vy: rnd(-50, -20), g: -10, life: rnd(1.0, 1.7), max: 1.7, size: rnd(6, 11), grow: -3, color: i % 2 ? "#ff6a1a" : "#ff9a2e", seed: 40 + i }); }
+        for (let i = 0; i < 7; i++) this.parts.push({ kind: "smoke", x: x + rnd(-r * 0.4, r * 0.4), y: y - rnd(0, 20), vx: rnd(-25, 25), vy: rnd(-120, -60), g: 0, life: rnd(1.0, 1.6), max: 1.6, size: rnd(14, 22), grow: 34, color: i % 2 ? "#4a3a34" : "#2b211e" });
+        this.flashT = Math.max(this.flashT, 0.1);
+        this.shake = Math.max(this.shake, 6);
+        this.shakeT = Math.max(this.shakeT, 0.25);
         // a column of red fireballs piling upward
         for (let i = 0; i < 5; i++) this.parts.push({ kind: "puff", x: x + rnd(-10, 10), y: y - i * 12, vx: rnd(-14, 14), vy: -70 - i * 18, g: 0, life: 0.8, max: 0.8, size: 14 + i * 3, grow: 14, color: i % 2 ? "#e63a1e" : "#ff6a2a", edge: "#7a1408", seed: 10 + i });
         break;
@@ -869,6 +896,24 @@ export class ArenaRenderer {
         g.beginPath();
         g.arc(p.x, p.y, Math.max(1, p.size), 0, Math.PI * 2);
         g.stroke();
+      } else if (p.kind === "gring") {
+        // a shockwave running out along the floor (flattened, with a bright inner edge)
+        const R = Math.max(2, p.size);
+        g.save();
+        g.translate(p.x, p.y);
+        g.scale(1, 0.42);
+        g.strokeStyle = p.color;
+        g.lineWidth = 8 * a + 1.5;
+        g.beginPath();
+        g.arc(0, 0, R, 0, Math.PI * 2);
+        g.stroke();
+        g.strokeStyle = "#ffffff";
+        g.globalAlpha = a * 0.85;
+        g.lineWidth = 2.5 * a + 0.5;
+        g.beginPath();
+        g.arc(0, 0, R * 0.93, 0, Math.PI * 2);
+        g.stroke();
+        g.restore();
       } else if (p.kind === "glow") {
         const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(2, p.size));
         gr.addColorStop(0, "rgba(255,255,255,.9)");
@@ -1022,7 +1067,7 @@ export class ArenaRenderer {
     }
     g.globalAlpha = 1;
     this.parts = this.parts.filter((p) => p.life > 0);
-    if (this.parts.length > 700) this.parts.splice(0, this.parts.length - 700);
+    if (this.parts.length > 950) this.parts.splice(0, this.parts.length - 950);
     g.restore();
 
     // screen tints (not shaken)
@@ -1874,10 +1919,12 @@ export class ArenaRenderer {
           g.arc(z.x, z.y, z.r, 0, Math.PI * 2);
           g.fill();
           g.stroke();
+          if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.orbFall(g, z, prog);
           if ((z.mv.fx ?? z.mv.id) === "fireblast") {
             // the big blast comes down as a burning "大" of five flames, as in the video
             const sy = z.y - (1 - prog) * 320 - 20;
             const sz = z.r * (0.6 + prog * 0.5);
+            this.blastFall(g, z, prog, sy, sz);
             g.save();
             g.translate(z.x, sy);
             g.rotate(Math.sin(this.t * 6) * 0.06);
@@ -2936,6 +2983,91 @@ export class ArenaRenderer {
   }
 
   /** The burst when something lands, shaped by its element. */
+  /** A shockwave along the floor, a ring of dust and a few pebbles: for anything that lands hard. */
+  private groundImpact(x: number, y: number, color: string, r: number) {
+    const big = r >= 70;
+    this.parts.push({ kind: "gring", x, y: y + 4, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 6, grow: r * 2.6, color });
+    if (r >= 55) this.parts.push({ kind: "gring", x, y: y + 4, vx: 0, vy: 0, g: 0, life: 0.34, max: 0.34, size: 4, grow: r * 2.1, color: "#ffffff" });
+    const n = Math.round(6 + r / 9);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rnd(-0.2, 0.2);
+      this.parts.push({ kind: "smoke", x: x + Math.cos(a) * r * 0.35, y: y + Math.sin(a) * r * 0.18, vx: Math.cos(a) * r * 1.3, vy: Math.sin(a) * r * 0.5 - 14, g: 0, life: rnd(0.6, 1.0), max: 1.0, size: rnd(7, 12) * (big ? 1.4 : 1), grow: 24, color: i % 2 ? "#d4c7b0" : "#a89b86" });
+    }
+    for (let i = 0; i < Math.round(4 + r / 14); i++) this.parts.push({ kind: "dot", x: x + rnd(-r * 0.3, r * 0.3), y, vx: rnd(-r * 2, r * 2), vy: rnd(-r * 3.2, -r), g: 900, life: rnd(0.45, 0.85), max: 0.85, size: rnd(2, 4.5), grow: 0, color: i % 2 ? "#7d6b55" : "#a38f74" });
+  }
+
+  /** The big blast falling: a hot glow around the flaming symbol, a tail of fire, smoke and sparks, and embers gathering around the target ring. */
+  private blastFall(g: CanvasRenderingContext2D, z: State["zones"][number], prog: number, sy: number, sz: number) {
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    const gl = g.createRadialGradient(z.x, sy, 0, z.x, sy, sz * 2.3);
+    gl.addColorStop(0, "rgba(255,235,150,.8)");
+    gl.addColorStop(0.45, "rgba(255,110,30,.42)");
+    gl.addColorStop(1, "rgba(255,60,0,0)");
+    g.fillStyle = gl;
+    g.beginPath();
+    g.arc(z.x, sy, sz * 2.3, 0, Math.PI * 2);
+    g.fill();
+    const gg = g.createRadialGradient(z.x, z.y, 0, z.x, z.y, z.r * 1.1);
+    gg.addColorStop(0, `rgba(255,190,80,${0.18 + prog * 0.42})`);
+    gg.addColorStop(1, "rgba(255,70,0,0)");
+    g.fillStyle = gg;
+    g.beginPath();
+    g.ellipse(z.x, z.y, z.r * 1.1, z.r * 0.77, 0, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = `rgba(255,${150 + Math.sin(this.t * 16) * 60},60,.8)`;
+    g.lineWidth = 3;
+    g.setLineDash([12, 8]);
+    g.lineDashOffset = -this.t * 40;
+    g.beginPath();
+    g.ellipse(z.x, z.y, z.r * (1 - prog * 0.18), z.r * 0.7 * (1 - prog * 0.18), 0, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+    for (let i = 0; i < 4; i++) this.parts.push({ kind: "flame", x: z.x + rnd(-sz * 0.8, sz * 0.8), y: sy + rnd(-sz * 0.3, sz * 0.9), vx: rnd(-30, 30), vy: rnd(-150, -50), g: -20, life: rnd(0.35, 0.65), max: 0.65, size: rnd(7, 13), grow: -6, color: i % 2 ? "#ff7a1a" : "#ffb02e", seed: Math.floor(rnd(0, 99)) });
+    for (let i = 0; i < 3; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "spark", x: z.x + rnd(-sz * 0.6, sz * 0.6), y: sy + rnd(-sz * 0.3, sz * 0.6), vx: Math.cos(a) * 90, vy: Math.sin(a) * 60 - 110, g: 160, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.5, 3), grow: 0, color: i % 2 ? "#ffe08a" : "#ff8a3d" }); }
+    if (Math.random() < 0.55) this.parts.push({ kind: "smoke", x: z.x + rnd(-sz * 0.5, sz * 0.5), y: sy - sz * 0.3, vx: rnd(-20, 20), vy: -50, g: 0, life: 0.9, max: 0.9, size: rnd(9, 15), grow: 22, color: "#3c2a24" });
+    if (prog > 0.25) for (let i = 0; i < 2; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "flame", x: z.x + Math.cos(a) * z.r, y: z.y + Math.sin(a) * z.r * 0.7, vx: -Math.cos(a) * 26, vy: rnd(-90, -40), g: 0, life: 0.5, max: 0.5, size: rnd(4, 7), grow: -4, color: "#ff8a2a", seed: Math.floor(rnd(0, 99)) }); }
+  }
+
+  /** Other falling blasts (Sludge Bomb, Moonblast, Focus Blast…): a glowing orb with a tail in its element, coming down on the ring. */
+  private orbFall(g: CanvasRenderingContext2D, z: State["zones"][number], prog: number) {
+    const c = col(z.type);
+    const oy = z.y - (1 - prog) * 300 - 24;
+    const rr = 9 + z.r * 0.16;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    const tg = g.createLinearGradient(z.x, oy, z.x, oy - 100);
+    tg.addColorStop(0, `${c}cc`);
+    tg.addColorStop(1, `${c}00`);
+    g.strokeStyle = tg;
+    g.lineWidth = rr * 1.5;
+    g.lineCap = "round";
+    g.beginPath();
+    g.moveTo(z.x, oy);
+    g.lineTo(z.x, oy - 100);
+    g.stroke();
+    const gr = g.createRadialGradient(z.x, oy, 0, z.x, oy, rr * 2.4);
+    gr.addColorStop(0, "#ffffff");
+    gr.addColorStop(0.3, c);
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(z.x, oy, rr * 2.4, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = c;
+    g.globalAlpha = 0.8;
+    g.lineWidth = 2.5;
+    g.setLineDash([10, 8]);
+    g.lineDashOffset = this.t * 36;
+    g.beginPath();
+    g.ellipse(z.x, z.y, z.r * (1 - prog * 0.15), z.r * 0.7 * (1 - prog * 0.15), 0, 0, Math.PI * 2);
+    g.stroke();
+    g.restore();
+    const fake = { x: z.x, y: oy, vx: 0, vy: -260, type: z.type } as unknown as Proj;
+    this.trail(fake, c);
+    this.trail(fake, c);
+  }
+
   private elementBurst(x: number, y: number, type: string, r: number) {
     const n = Math.round(6 + r / 12);
     const P = (o: Partial<Parti> & { kind: Parti["kind"]; color: string }) => this.parts.push({ x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: 3, grow: 0, ...o } as Parti);
@@ -2973,6 +3105,26 @@ export class ArenaRenderer {
         break;
       case "Dragon":
         for (let i = 0; i < n * 2; i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 3); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.5, 0.9), max: 0.9, size: rnd(1.6, 3), color: i % 2 ? "#4fe3ff" : "#9a7cff" }); }
+        break;
+      case "Rock":
+      case "Ground":
+        for (let i = 0; i < Math.round(n * 0.8); i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 2.6); P({ kind: "plank", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 200, g: 800, life: rnd(0.5, 0.9), max: 0.9, size: rnd(2.5, 5.5), color: type === "Rock" ? "#9a9186" : "#9b7a4e", rot: rnd(0, 6), vr: rnd(-14, 14) }); }
+        for (let i = 0; i < Math.round(n / 2); i++) { const a = rnd(0, Math.PI * 2); P({ kind: "smoke", x: x + Math.cos(a) * r * 0.3, y: y + Math.sin(a) * r * 0.2, vx: Math.cos(a) * 50, vy: -30, life: 0.9, max: 0.9, size: rnd(8, 13), grow: 24, color: "#b8a98e" }); }
+        break;
+      case "Steel":
+        for (let i = 0; i < n * 2; i++) { const a = rnd(0, Math.PI * 2), v = rnd(120, r * 4); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, g: 300, life: rnd(0.3, 0.7), max: 0.7, size: rnd(1.4, 2.8), color: i % 2 ? "#ffffff" : "#c7d0dc" }); }
+        break;
+      case "Fighting":
+        for (let i = 0; i < Math.round(n / 1.5); i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 2.6); P({ kind: "star", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.35, 0.7), max: 0.7, size: rnd(4, 8), color: i % 2 ? "#ffb066" : "#ff6a4a", rot: rnd(0, 3), vr: rnd(-8, 8) }); }
+        break;
+      case "Flying":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 2.2); P({ kind: "leaf", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, g: 40, life: rnd(0.7, 1.2), max: 1.2, size: rnd(3, 5.5), color: i % 2 ? "#ffffff" : "#cfe6ff", rot: rnd(0, 6), vr: rnd(-8, 8) }); }
+        break;
+      case "Bug":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 2.4); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v - 30, g: 200, life: rnd(0.5, 0.9), max: 0.9, size: rnd(1.8, 3.2), color: i % 2 ? "#b6e04a" : "#7fbf2a" }); }
+        break;
+      case "Normal":
+        for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), v = rnd(60, r * 2.2); P({ kind: "star", vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(0.3, 0.6), max: 0.6, size: rnd(3, 6), color: i % 2 ? "#ffffff" : "#e6dcc8", rot: rnd(0, 3), vr: rnd(-8, 8) }); }
         break;
       default:
         break;
