@@ -936,7 +936,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const R = ctl.current.R;
     if (!cv || !R || e.pointerType !== "mouse") return;
     const b = cv.getBoundingClientRect();
-    ctl.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * ARENA.W, ((e.clientY - b.top) / b.height) * ARENA.H);
+    ctl.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * R.viewW, ((e.clientY - b.top) / b.height) * ARENA.H);
   }
   /** The stick is floating: it appears under the thumb anywhere in the wide area, and steers by how far the thumb moves from there. */
   const joyOrigin = useRef<{ x: number; y: number } | null>(null);

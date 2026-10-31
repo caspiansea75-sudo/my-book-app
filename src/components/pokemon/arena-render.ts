@@ -5,7 +5,7 @@
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
 import { drawAmbient } from "./arena-scenery";
-import { ARENA, type Ev, type Fighter, type Proj, type State } from "@/lib/pokemon/arena-engine";
+import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
@@ -45,6 +45,53 @@ const defaultSources: SpriteSource = (id, num) => {
 };
 
 /** One colour per seat in a multiplayer fight, so every name can be told apart. */
+/** How far the ground continues past the arena's edges, so a wide screen or a tilted view never shows black. */
+const PAD = { l: 420, r: 420, t: 70, b: 300 };
+const groundCache = new Map<string, HTMLCanvasElement>();
+/** The floor plus a margin around it: the floor mirrored outward and dimmed, so it reads as the arena's surroundings. */
+function extendedGround(stage: StageKind): HTMLCanvasElement {
+  let c = groundCache.get(stage);
+  if (c) return c;
+  const bg = stageBackground(stage);
+  const W = ARENA.W, H = ARENA.H;
+  c = document.createElement("canvas");
+  c.width = W + PAD.l + PAD.r;
+  c.height = H + PAD.t + PAD.b;
+  const x = c.getContext("2d")!;
+  x.translate(PAD.l, PAD.t);
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      x.save();
+      x.translate(i === 0 ? 0 : i < 0 ? 0 : 2 * W, j === 0 ? 0 : j < 0 ? 0 : 2 * H);
+      x.scale(i === 0 ? 1 : -1, j === 0 ? 1 : -1);
+      x.drawImage(bg, 0, 0);
+      x.restore();
+    }
+  }
+  // outside the arena everything is darker, fading out toward the far edges
+  x.save();
+  x.beginPath();
+  x.rect(-PAD.l, -PAD.t, c.width, c.height);
+  x.rect(0, 0, W, H);
+  x.fillStyle = "rgba(4,8,16,.58)";
+  x.fill("evenodd");
+  x.restore();
+  // a soft shadow where the arena wall meets the outside
+  for (const [gx0, gy0, gx1, gy1, rx, ry, rw, rh] of [
+    [0, 0, -34, 0, -34, 0, 34, H],
+    [W, 0, W + 34, 0, W, 0, 34, H],
+    [0, 0, 0, -34, 0, -34, W, 34],
+    [0, H, 0, H + 34, 0, H, W, 34],
+  ] as const) {
+    const gr = x.createLinearGradient(gx0, gy0, gx1, gy1);
+    gr.addColorStop(0, "rgba(0,0,0,.45)");
+    gr.addColorStop(1, "rgba(0,0,0,0)");
+    x.fillStyle = gr;
+    x.fillRect(rx, ry, rw, rh);
+  }
+  groundCache.set(stage, c);
+  return c;
+}
 const NAME_COLORS = ["#ff8a8a", "#74c0fc", "#ffe066", "#d0bfff", "#69dbb2"];
 
 export class ArenaRenderer {
@@ -90,6 +137,15 @@ export class ArenaRenderer {
   private camY = ARENA.CY;
 
   private tilt = 90;
+  /** Width of the screen in arena units (960 on a 16:10 box, more on a wide phone or monitor) and the extra zoom that fills it. */
+  private sw = ARENA.W;
+  private fit = 1;
+  get viewW() {
+    return this.sw;
+  }
+  private get cx() {
+    return this.sw / 2;
+  }
   private teamMode = false;
   private youTeam = -1;
   private gc: HTMLCanvasElement | null = null;
@@ -127,11 +183,12 @@ export class ArenaRenderer {
   private get tp() {
     // fv / ov: how tall Pokémon / scenery look next to the floor (higher camera = more foreshortened, lower = taller)
     // sh: how round the shadows and rings under things are (they are drawn for a low camera; seen from higher they open up)
+    const f = this.fit;
     switch (this.tilt) {
-      case 60: return { s: 0.866, c: 0.2, tz: 1.1, fv: 0.9, ov: 0.93, sh: 2.0 };
-      case 45: return { s: 0.707, c: 0.38, tz: 1.25, fv: 1.0, ov: 1.08, sh: 1.65 };
-      case 30: return { s: 0.5, c: 0.6, tz: 1.5, fv: 1.15, ov: 1.24, sh: 1.2 };
-      default: return { s: 1, c: 0, tz: 1, fv: 1, ov: 1, sh: 1 };
+      case 60: return { s: 0.866, c: 0.2, tz: 1.1 * f, fv: 0.9, ov: 0.93, sh: 2.0 };
+      case 45: return { s: 0.707, c: 0.38, tz: 1.25 * f, fv: 1.0, ov: 1.08, sh: 1.65 };
+      case 30: return { s: 0.5, c: 0.6, tz: 1.5 * f, fv: 1.15, ov: 1.24, sh: 1.2 };
+      default: return { s: 1, c: 0, tz: f, fv: 1, ov: 1, sh: 1 };
     }
   }
   private get tilted() {
@@ -147,7 +204,7 @@ export class ArenaRenderer {
     const Z = this.zoom * tz;
     const dy = y - this.camY;
     const f = 1 + (c * dy) / ARENA.H;
-    return { x: ARENA.CX + (x - this.camX) * Z * f, y: ARENA.CY + Z * s * (dy + (c * dy * dy) / (2 * ARENA.H)), f, Z };
+    return { x: this.cx + (x - this.camX) * Z * f, y: ARENA.CY + Z * s * (dy + (c * dy * dy) / (2 * ARENA.H)), f, Z };
   }
   /** Run a drawing at a world point: "bb" stands upright there (a billboard), "fl" lies flat on the floor. */
   private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix", fn: () => void, kind: "f" | "o" | "p" = "p") {
@@ -167,24 +224,28 @@ export class ArenaRenderer {
   private blit(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number) {
     const { s, c, tz } = this.tp;
     const Z = this.zoom * tz;
-    const W = ARENA.W, H = ARENA.H;
+    // the picture covers the arena plus a margin (PAD) on every side; `ext` tells how much
+    const ext = src === this.gc ? PAD : { l: 0, r: 0, t: 0, b: 0 };
+    const W = ARENA.W + ext.l + ext.r, H = ARENA.H + ext.t + ext.b;
     const kx = src.width / W;
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     for (let y = 0; y < H; y += step) {
       const yb = Math.min(H, y + step);
-      const d0 = y - this.camY, d1 = yb - this.camY;
+      const d0 = y - ext.t - this.camY, d1 = yb - ext.t - this.camY;
       const fm = 1 + (c * (d0 + d1)) / 2 / H;
       if (fm < 0.1) continue;
       const y0 = Z * s * (d0 + (c * d0 * d0) / (2 * H));
       const y1 = Z * s * (d1 + (c * d1 * d1) / (2 * H));
-      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, ARENA.CX - this.camX * Z * fm + this.shx, ARENA.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
+      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, this.cx + (-ext.l - this.camX) * Z * fm + this.shx, ARENA.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
     }
     g.restore();
   }
   private layer(which: "gc" | "ac") {
-    const w = Math.round(ARENA.W * Math.min(this.scale, 1.5));
-    const h = Math.round(ARENA.H * Math.min(this.scale, 1.5));
+    const big = which === "gc";
+    const kk = Math.min(this.scale, big ? 1.1 : 1.5);
+    const w = Math.round((ARENA.W + (big ? PAD.l + PAD.r : 0)) * kk);
+    const h = Math.round((ARENA.H + (big ? PAD.t + PAD.b : 0)) * kk);
     let c = this[which];
     if (!c) {
       c = document.createElement("canvas");
@@ -197,8 +258,8 @@ export class ArenaRenderer {
     const x = c.getContext("2d")!;
     x.setTransform(1, 0, 0, 1, 0, 0);
     x.clearRect(0, 0, w, h);
-    const k = w / ARENA.W;
-    x.setTransform(k, 0, 0, k, 0, 0);
+    const k = w / (ARENA.W + (big ? PAD.l + PAD.r : 0));
+    x.setTransform(k, 0, 0, k, big ? PAD.l * k : 0, big ? PAD.t * k : 0);
     return x;
   }
   /** What lies beyond the far edge of the floor when the camera is tilted: a sky for the place and distant hills. */
@@ -213,18 +274,18 @@ export class ArenaRenderer {
       coast: ["#2e86c1", "#bfe6f5", "#e6c78c"],
     };
     const [top, hor, hill] = SKY[S.stage] ?? SKY.stone!;
-    const far = this.proj(ARENA.CX, 0);
+    const far = this.proj(ARENA.CX, -PAD.t);
     const horizon = Math.max(0, far.y + this.shy);
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.fillStyle = "#04070d";
-    g.fillRect(0, 0, ARENA.W, ARENA.H);
+    g.fillRect(0, 0, this.sw, ARENA.H);
     if (horizon > 4) {
       const sky = g.createLinearGradient(0, 0, 0, horizon);
       sky.addColorStop(0, top);
       sky.addColorStop(1, hor);
       g.fillStyle = sky;
-      g.fillRect(0, 0, ARENA.W, horizon + 2);
+      g.fillRect(0, 0, this.sw, horizon + 2);
       // distant hills, drifting slightly against the camera
       const sh = Math.min(70, horizon * 0.55);
       const drift = -this.camX * 0.05;
@@ -232,11 +293,11 @@ export class ArenaRenderer {
         g.fillStyle = layer === 0 ? hill + "88" : hill;
         g.beginPath();
         g.moveTo(0, horizon + 2);
-        for (let x = 0; x <= ARENA.W; x += 12) {
+        for (let x = 0; x <= this.sw; x += 12) {
           const w = Math.sin((x + drift * (1 + layer)) * 0.011 + layer * 2.1) * 0.5 + Math.sin((x + drift) * 0.027 + layer) * 0.3;
           g.lineTo(x, horizon - sh * (0.35 + 0.5 * (w + 0.8) / 1.6) * (layer === 0 ? 1 : 0.6));
         }
-        g.lineTo(ARENA.W, horizon + 2);
+        g.lineTo(this.sw, horizon + 2);
         g.closePath();
         g.fill();
       }
@@ -248,7 +309,7 @@ export class ArenaRenderer {
     void G;
     this.drawAim(this.gcx());
     this.blit(g, this.gc!, 2);
-    const far = this.proj(ARENA.CX, 0);
+    const far = this.proj(ARENA.CX, -PAD.t);
     const len = 150 * this.tp.s * this.zoom;
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
@@ -256,7 +317,7 @@ export class ArenaRenderer {
     hz.addColorStop(0, "rgba(10,18,34,.62)");
     hz.addColorStop(1, "rgba(10,18,34,0)");
     g.fillStyle = hz;
-    g.fillRect(0, Math.max(0, far.y + this.shy - 2), ARENA.W, len + 4);
+    g.fillRect(0, Math.max(0, far.y + this.shy - 2), this.sw, len + 4);
     g.restore();
   }
   private gcx() {
@@ -267,9 +328,14 @@ export class ArenaRenderer {
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = this.canvas.clientWidth || ARENA.W;
+    const h = this.canvas.clientHeight || w * (ARENA.H / ARENA.W);
+    // the screen may be wider than the arena's 16:10 (a phone on its side, a monitor): the view then shows more, instead of black bars
+    const aspect = Math.max(1.25, Math.min(2.6, w / h));
+    this.sw = Math.max(ARENA.W, ARENA.H * aspect);
+    this.fit = Math.min(1.35, Math.max(1, (this.sw / ARENA.W) * 0.82));
     this.canvas.width = Math.round(w * dpr);
-    this.canvas.height = Math.round(w * (ARENA.H / ARENA.W) * dpr);
-    this.scale = this.canvas.width / ARENA.W;
+    this.canvas.height = Math.round(h * dpr);
+    this.scale = this.canvas.height / ARENA.H;
   }
 
   /** How close the view is: 1 shows the whole floor, more follows the player, less shows the stands around it. */
@@ -286,16 +352,17 @@ export class ArenaRenderer {
       const Z = this.zoom * tz;
       const u = (py - ARENA.CY) / (Z * s);
       const dy = c > 0 ? (ARENA.H * (Math.sqrt(Math.max(0, 1 + (2 * c * u) / ARENA.H)) - 1)) / c : u;
-      return { x: this.camX + (px - ARENA.CX) / (Z * (1 + (c * dy) / ARENA.H)), y: this.camY + dy };
+      return { x: this.camX + (px - this.cx) / (Z * (1 + (c * dy) / ARENA.H)), y: this.camY + dy };
     }
-    return { x: this.camX + (px - ARENA.CX) / this.zoom, y: this.camY + (py - ARENA.CY) / this.zoom };
+    const Z0 = this.zoom * this.fit;
+    return { x: this.camX + (px - this.cx) / Z0, y: this.camY + (py - ARENA.CY) / Z0 };
   }
   private toCanvas(x: number, y: number) {
     if (this.tilted) {
       const q = this.proj(x, y);
       return { x: q.x, y: q.y };
     }
-    return { x: (x - this.camX) * this.zoom + ARENA.CX, y: (y - this.camY) * this.zoom + ARENA.CY };
+    return { x: (x - this.camX) * this.zoom * this.fit + this.cx, y: (y - this.camY) * this.zoom * this.fit + ARENA.CY };
   }
   private followCamera(you: Fighter | undefined, dt: number) {
     let tx = ARENA.CX;
@@ -303,7 +370,7 @@ export class ArenaRenderer {
     const { s, tz } = this.tp;
     const Ze = this.zoom * tz;
     if (Ze > 1 && you) {
-      const hw = ARENA.W / (2 * Ze);
+      const hw = this.sw / (2 * Ze);
       const hh = ARENA.H / (2 * Ze * s);
       if (hw < ARENA.W / 2) tx = Math.max(hw, Math.min(ARENA.W - hw, you.x));
       if (hh < ARENA.H / 2) ty = Math.max(hh, Math.min(ARENA.H - hh, you.y));
@@ -946,9 +1013,9 @@ export class ArenaRenderer {
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.fillStyle = "#04070d";
-    g.fillRect(0, 0, ARENA.W, ARENA.H);
+    g.fillRect(0, 0, this.sw, ARENA.H);
     const k = this.shakeT > 0 ? this.shake * (this.shakeT / 0.3) : 0;
-    const zoom = this.zoom * (1 + this.zoomPulse * 0.025);
+    const zoom = this.zoom * this.fit * (1 + this.zoomPulse * 0.025);
     const T = this.tilted;
     this.shx = T ? rnd(-k, k) : 0;
     this.shy = T ? rnd(-k, k) : 0;
@@ -958,11 +1025,11 @@ export class ArenaRenderer {
       this.drawBackdrop(g, S);
       G = this.layer("gc");
     } else {
-      g.translate(ARENA.CX, ARENA.CY);
+      g.translate(this.cx, ARENA.CY);
       g.scale(zoom, zoom);
       g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
     }
-    G.drawImage(stageBackground(S.stage), 0, 0);
+    G.drawImage(extendedGround(S.stage), -PAD.l, -PAD.t);
     for (const pool of S.pools) {
       drawPool(G, pool, this.t);
       if (pool.base) drawFoam(G, pool, this.t);
@@ -1285,9 +1352,10 @@ export class ArenaRenderer {
     if (this.parts.length > 950) this.parts.splice(0, this.parts.length - 950);
     g.restore();
 
-    // screen tints (not shaken)
+    // screen tints (not shaken): the HUD-style layer keeps its 960x600 layout, centred on a wider screen
+    const ox = (this.sw - ARENA.W) / 2;
     g.save();
-    g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    g.setTransform(this.scale, 0, 0, this.scale, ox * this.scale, 0);
     this.drawField(g, S);
     this.drawZ(g);
     if (this.perfectT > 0) {
@@ -1296,11 +1364,11 @@ export class ArenaRenderer {
       gr.addColorStop(0, "rgba(80,200,255,0)");
       gr.addColorStop(1, `rgba(60,170,255,${0.4 * a})`);
       g.fillStyle = gr;
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     }
     if (this.flashT > 0) {
       g.fillStyle = `rgba(255,255,255,${this.flashT * 1.6})`;
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     }
     // the player is in danger: the edges glow red
     if (you && you.alive && you.hp < you.maxHp * 0.25) {
@@ -1309,7 +1377,7 @@ export class ArenaRenderer {
       gr.addColorStop(0, "rgba(255,40,40,0)");
       gr.addColorStop(1, `rgba(255,40,40,${0.18 + pulse * 0.16})`);
       g.fillStyle = gr;
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     }
     // short notices sit in a small tag near the top, out of the way of the fight
     let ty = ARENA.H * 0.125;
@@ -1538,7 +1606,7 @@ export class ArenaRenderer {
     const at = this.toCanvas(z.x, z.y);
     g.save();
     g.fillStyle = `rgba(0,0,8,${0.72 * a})`;
-    g.fillRect(0, 0, ARENA.W, ARENA.H);
+    g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     g.restore();
     // each type has its own show; Normal keeps the turning rays
     g.save();

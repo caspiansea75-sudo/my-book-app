@@ -289,6 +289,7 @@ const emptyStatus = () => ({ brn: 0, psn: 0, par: 0, frz: 0, cnf: 0, slp: 0, frz
 
 /* ----------------------------------------------------------------- the arena floor */
 
+const TALL_OBS = new Set<ObsKind>(["pillar", "tree", "pine", "palm", "crystal", "basalt"]);
 const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, rock: 24, tree: 27, pine: 24, iceboulder: 28, basalt: 26, palm: 20, cactus: 18 };
 
 /** An explosion, which also splinters any crates it reaches. */
@@ -1581,7 +1582,8 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     // things standing in the way: pillars stop everyone; crates, rocks and crystals stop whoever cannot fly over them
     for (const o of S.obs) {
       if (o.hp <= 0) continue;
-      if (!(o.kind === "pillar" || !f.canFly)) continue;
+      // tall things (trees, pines, palms, pillars, crystals, basalt) stop everyone, even fliers; low ones only stop what walks
+      if (!(TALL_OBS.has(o.kind) || !f.canFly)) continue;
       const min = f.r * 0.85 + o.r;
       const d = len(f.x - o.x, f.y - o.y);
       if (d >= min) continue;
@@ -1589,6 +1591,7 @@ function moveFighter(S: State, f: Fighter, dt: number) {
         breakCrate(S, o);
         continue;
       }
+      if (len(f.mvx, f.mvy) > 60) o.hit = Math.max(o.hit, 0.18); // the thing shakes when something runs into it
       const [nx, ny] = norm(f.x - o.x, f.y - o.y);
       f.x = o.x + nx * min;
       f.y = o.y + ny * min;

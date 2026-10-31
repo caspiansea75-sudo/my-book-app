@@ -523,7 +523,7 @@ export function ArenaBrawl() {
     const R = rt.current.R;
     if (!cv || !R || e.pointerType !== "mouse") return;
     const b = cv.getBoundingClientRect();
-    rt.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * ARENA.W, ((e.clientY - b.top) / b.height) * ARENA.H);
+    rt.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * R.viewW, ((e.clientY - b.top) / b.height) * ARENA.H);
   }
 
   // two fingers pinch to zoom
