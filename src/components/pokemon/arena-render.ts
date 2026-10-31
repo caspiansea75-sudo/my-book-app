@@ -3,6 +3,7 @@
  * extras that make it feel good: sparks, rings, floating numbers, screen shake, a slow-motion tint.
  */
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
+import { MeleeFx } from "./arena-melee";
 import { ARENA, type Ev, type Fighter, type Proj, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
@@ -60,6 +61,7 @@ export class ArenaRenderer {
   private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number } }>();
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
+  private meleeFx = new MeleeFx();
   private clones = new Map<number, number>();
   private dances = new Map<number, { until: number; kind: string }>();
   /** Rocks lifted off the floor by a psychic pulse. */
@@ -4114,6 +4116,8 @@ export class ArenaRenderer {
     g.restore();
 
     if (f.dash && !under && (f.dash.mv.type === "Dragon" || ["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"].includes(f.dash.mv.id))) this.drawDragonDash(g, f);
+    this.meleeFx.watch(f, this.t);
+    this.meleeFx.draw(g, f, this.t, (q) => this.parts.push(q as unknown as Parti), (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); });
     const dn = this.dances.get(f.id);
     if (dn && dn.until > this.t) this.drawDance(g, f, dn.until, dn.kind);
     // each type of rush leaves its own trail
