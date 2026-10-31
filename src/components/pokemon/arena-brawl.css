@@ -287,3 +287,11 @@
 .am-team.t1 { background: rgba(255, 90, 80, 0.1); border: 1px solid rgba(255, 130, 120, 0.35); }
 .am-team.t1 h4 { color: #ff8a8a; }
 @media (max-width: 520px) { .am-teams { grid-template-columns: 1fr; } }
+
+/* online Quick Battle squad picker */
+.am-squad { display: grid; gap: 6px; }
+.am-squad-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.am-sq { position: relative; display: grid; justify-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); color: inherit; cursor: pointer; font-size: 12px; }
+.am-sq.on { border-color: #ffd54a; background: rgba(255, 213, 74, 0.12); }
+.am-sq img, .am-sq canvas { width: 48px; height: 48px; }
+.am-sq small { position: absolute; top: 4px; left: 8px; opacity: 0.6; }

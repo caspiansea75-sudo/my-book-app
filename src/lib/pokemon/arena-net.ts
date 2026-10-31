@@ -6,7 +6,7 @@
  * now and then (and to anybody who just arrived), so a lost message heals itself within a second or two.
  */
 import { speciesOf } from "@/lib/pokemon/arena-data";
-import type { Ev, Fighter, Input, State } from "@/lib/pokemon/arena-engine";
+import { squadView, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
 
 /* ------------------------------------------------------------------ diff */
 
@@ -78,7 +78,7 @@ export type Snap = {
 };
 
 type Keyed = { id: number };
-const HEADER_KEYS = ["time", "phase", "introT", "wave", "score", "slow", "zPending", "storm", "field", "stage", "winnerId", "place", "perks"] as const;
+const HEADER_KEYS = ["time", "phase", "introT", "wave", "score", "slow", "zPending", "storm", "field", "stage", "winnerId", "place", "perks", "winner", "swapCd"] as const;
 
 function fighterWire(f: Fighter): J {
   const { sp, ...rest } = f;
@@ -130,7 +130,7 @@ export class SnapshotEncoder {
       this.prevHeader = {};
     }
     const header: J = {};
-    const whole = plain(Object.fromEntries(HEADER_KEYS.map((k) => [k, S[k]])));
+    const whole = plain({ ...Object.fromEntries(HEADER_KEYS.map((k) => [k, S[k]])), sq: squadView(S) });
     const dh = diff(this.prevHeader, whole);
     if (dh !== NONE) Object.assign(header, dh);
     this.prevHeader = whole;
@@ -266,6 +266,9 @@ export type InputMsg = {
   c: [number, number, number, number];
   d: number;
   u: number;
+  /** Quick Battle: the squad member asked for, and how many requests so far (so a lost message cannot lose a swap). */
+  sw?: number;
+  sn?: number;
 };
 
 /** Client side: remembers presses and builds the next message. */
@@ -274,6 +277,8 @@ export class InputSender {
   private c: [number, number, number, number] = [0, 0, 0, 0];
   private d = 0;
   private u = 0;
+  private sw = -1;
+  private sn = 0;
   /**
    * Call once per frame with the controls as built for a single-player game and which move buttons are being held.
    * (`inp.cast` mixes "pressed this frame" with "held", so a press is whatever is not a hold.)
@@ -282,6 +287,10 @@ export class InputSender {
     for (let i = 0; i < 4; i++) if (inp.cast[i] && !held[i]) this.c[i]!++;
     if (inp.dodge) this.d++;
     if (inp.ult) this.u++;
+    if (inp.swap !== undefined && inp.swap >= 0) {
+      this.sw = inp.swap;
+      this.sn++;
+    }
     return {
       k: "in",
       q: ++this.q,
@@ -292,13 +301,15 @@ export class InputSender {
       c: [...this.c] as InputMsg["c"],
       d: this.d,
       u: this.u,
+      sw: this.sw,
+      sn: this.sn,
     };
   }
 }
 
 /** Host side: turns the newest message of a member into the controls for the next step. */
 export class InputReceiver {
-  private last = new Map<number, { q: number; c: number[]; d: number; u: number }>();
+  private last = new Map<number, { q: number; c: number[]; d: number; u: number; sn: number }>();
   private latest = new Map<number, InputMsg>();
   put(fid: number, m: InputMsg) {
     const cur = this.latest.get(fid);
@@ -312,10 +323,10 @@ export class InputReceiver {
   take(fid: number): Input {
     const m = this.latest.get(fid);
     if (!m) return { mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false };
-    const prev = this.last.get(fid) ?? { q: 0, c: [...m.c], d: m.d, u: m.u }; // first message: no phantom presses
+    const prev = this.last.get(fid) ?? { q: 0, c: [...m.c], d: m.d, u: m.u, sn: m.sn ?? 0 }; // first message: no phantom presses
     const cast = [0, 1, 2, 3].map((i) => m.c[i]! > prev.c[i]! || !!(m.held & (1 << i))) as [boolean, boolean, boolean, boolean];
-    const inp: Input = { mx: m.mx, my: m.my, aim: m.aim, cast, dodge: m.d > prev.d, ult: m.u > prev.u };
-    this.last.set(fid, { q: m.q, c: [...m.c], d: m.d, u: m.u });
+    const inp: Input = { mx: m.mx, my: m.my, aim: m.aim, cast, dodge: m.d > prev.d, ult: m.u > prev.u, swap: (m.sn ?? 0) > prev.sn ? m.sw : undefined };
+    this.last.set(fid, { q: m.q, c: [...m.c], d: m.d, u: m.u, sn: m.sn ?? 0 });
     return inp;
   }
 }

@@ -10,7 +10,8 @@ import { Sprite, useT } from "@/components/pokemon/ui";
 import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
 import { PERK_BN } from "@/components/pokemon/arena-brawl";
 import { GIMMICKS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
-import { ARENA, applyPerk, begin, moveOf, newMpGame, nextWave, noInput, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
+import type { QuickPick } from "@/lib/pokemon/arena-engine";
+import { ARENA, applyPerk, begin, moveOf, newMpGame, newMpQuick, nextWave, noInput, squadView, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
 import { InputReceiver, InputSender, SnapshotDecoder, SnapshotEncoder, type InputMsg, type Snap } from "@/lib/pokemon/arena-net";
 import { P2PRoom } from "@/lib/multiplayer";
 import { useMe } from "@/lib/use-me";
@@ -40,6 +41,44 @@ const loadPick = (): ArenaPick => {
 const savePick = (p: ArenaPick) => {
   try {
     localStorage.setItem(PICK_KEY, JSON.stringify(p));
+  } catch {
+    /* storage unavailable */
+  }
+};
+/** The three Pokémon a player brings to an online Quick Battle. */
+const SQUAD_KEY = "arena-multi-squad";
+const DEFAULT_SQUAD: ArenaPick[] = [
+  { species: "charizard", gimmick: "awaken", mega: "", tera: "Fire", moves: [] },
+  { species: "blastoise", gimmick: "awaken", mega: "", tera: "Water", moves: [] },
+  { species: "venusaur", gimmick: "awaken", mega: "", tera: "Grass", moves: [] },
+];
+/** Anything that claims to be a squad (from storage, or from another player) becomes three valid picks. */
+function cleanSquad(raw: unknown): ArenaPick[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return [0, 1, 2].map((i) => {
+    const r = list[i] as Partial<ArenaPick> | undefined;
+    const sp = r && typeof r.species === "string" ? ROSTER.find((x) => x.id === r.species && !x.unlock) : undefined;
+    if (!sp) return DEFAULT_SQUAD[i]!;
+    const ok = gimmicksFor(sp.id) as string[];
+    return {
+      species: sp.id,
+      gimmick: typeof r!.gimmick === "string" && ok.includes(r!.gimmick) ? r!.gimmick : "awaken",
+      mega: typeof r!.mega === "string" ? r!.mega.slice(0, 40) : "",
+      tera: typeof r!.tera === "string" && TERA_TYPES.includes(r!.tera) ? r!.tera : sp.types[0] ?? "Normal",
+      moves: Array.isArray(r!.moves) ? r!.moves.filter((m): m is string => typeof m === "string").slice(0, 4) : [],
+    };
+  });
+}
+const loadSquad = (): ArenaPick[] => {
+  try {
+    return cleanSquad(JSON.parse(localStorage.getItem(SQUAD_KEY) ?? "null")).map((p) => ({ ...p, moves: p.moves.length === 4 ? p.moves : loadMoves(p.species) }));
+  } catch {
+    return DEFAULT_SQUAD;
+  }
+};
+const saveSquad = (s: ArenaPick[]) => {
+  try {
+    localStorage.setItem(SQUAD_KEY, JSON.stringify(s));
   } catch {
     /* storage unavailable */
   }
@@ -109,17 +148,50 @@ export function ArenaMulti() {
   const [pick, setPickState] = useState<ArenaPick>(DEFAULT_PICK);
   const [max, setMax] = useState(4);
   const [mode, setMode] = useState<ArenaMode>("royale");
+  const [squad, setSquadState] = useState<ArenaPick[]>(DEFAULT_SQUAD);
+  const [slot, setSlotIdx] = useState(0);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const roomId = room?.id ?? null;
 
   useEffect(() => setPickState(loadPick()), []);
+  useEffect(() => setSquadState(loadSquad()), []);
 
   const setPick = (p: ArenaPick) => {
     setPickState(p);
     savePick(p);
     if (roomId && room?.status === "open") void arenaPickSet({ data: { id: roomId, pick: p } }).catch(() => undefined);
   };
+
+  const quickMode = room ? room.mode === "quick" : mode === "quick";
+  const setSquadSlot = (p: ArenaPick) => {
+    const n = squad.map((x, i) => (i === slot ? p : x));
+    setSquadState(n);
+    saveSquad(n);
+    if (slot === 0) setPick(p);
+  };
+  const pickArea = quickMode ? (
+    <>
+      <div className="am-squad">
+        <b>{t("আপনার স্কোয়াড (৩ জন)", "Your squad (3 Pokémon)")}</b>
+        <div className="am-squad-row">
+          {squad.map((sd, i) => {
+            const spx = speciesOf(sd.species);
+            return (
+              <button key={i} type="button" className={`am-sq ${slot === i ? "on" : ""}`} onClick={() => setSlotIdx(i)}>
+                <Sprite info={{ id: spx.id, num: spx.num, types: spx.types }} still alt={spx.name} />
+                <span>{spx.name}</span>
+                <small>{i + 1}</small>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <PickPanel pick={squad[slot]!} onChange={setSquadSlot} />
+    </>
+  ) : (
+    <PickPanel pick={pick} onChange={setPick} />
+  );
 
   // the room list, until we sit in a room
   useEffect(() => {
@@ -216,7 +288,7 @@ export function ArenaMulti() {
     return (
       <div className="ab-menu am">
         <div className="am-head">
-          <h3>{t("অপেক্ষার ঘর", "Waiting room")} · {room.seats.length}/{room.max} · {room.mode === "coop" ? t("টিম সারভাইভাল", "Co-op Survival") : room.mode === "team" ? t("টিম ব্যাটল ৩ বনাম ৩", "Team Battle 3v3") : t("ব্যাটল রয়্যাল · ৩ রাউন্ড", "Battle Royale · 3 rounds")}</h3>
+          <h3>{t("অপেক্ষার ঘর", "Waiting room")} · {room.seats.length}/{room.max} · {room.mode === "coop" ? t("টিম সারভাইভাল", "Co-op Survival") : room.mode === "team" ? t("টিম ব্যাটল ৩ বনাম ৩", "Team Battle 3v3") : room.mode === "quick" ? t("কুইক ব্যাটল ৩ বনাম ৩", "Quick Battle 3v3") : t("ব্যাটল রয়্যাল · ৩ রাউন্ড", "Battle Royale · 3 rounds")}</h3>
           <p>{isHost ? t("কমপক্ষে ২ জন হলে শুরু করুন। বন্ধুরা এই পাতার “অনলাইন” ট্যাব থেকে রুমটি দেখে ঢুকতে পারবে।", "Start when at least 2 are in. Friends find this room under the Online tab of this page.") : t("হোস্ট শুরু করলে লড়াই শুরু হবে।", "The fight starts when the host starts it.")}</p>
         </div>
         {room.mode === "team" ? (
@@ -239,7 +311,7 @@ export function ArenaMulti() {
             {empty.map((_, i) => <div key={`e${i}`} className="am-seat empty">{t("ফাঁকা আসন", "Empty seat")}</div>)}
           </div>
         )}
-        <PickPanel pick={pick} onChange={setPick} />
+        {pickArea}
         {err ? <div className="am-err">{err}</div> : null}
         <div className="ab-row">
           {isHost ? (
@@ -259,29 +331,33 @@ export function ArenaMulti() {
         <h3>{t("অনলাইন খেলা", "Play online")}</h3>
         <p>{t("২ থেকে ৫ জন সদস্য। প্রতিটি পোকেমনের মাথার উপর সদস্যের নাম দেখা যায়।", "2 to 5 members. Each Pokémon wears its member's name above its head.")}</p>
       </div>
-      <PickPanel pick={pick} onChange={setPick} />
+      {pickArea}
       <div className="am-create">
         <b>{t("নতুন রুম", "New room")}</b>
         <div className="ab-modes">
-          <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => { setMode("royale"); setMax((m) => Math.min(5, m)); }}>
+          <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => { setMode("royale"); setMax((m) => (m < 2 || m > 5 ? 4 : m)); }}>
             <b>{t("ব্যাটল রয়্যাল", "Battle Royale")}</b>
             <span>{t("৩ রাউন্ড, সবাই সবার শত্রু। স্থান অনুযায়ী পয়েন্ট; সবচেয়ে বেশি পয়েন্ট জেতে।", "3 rounds, everyone against everyone. Places earn points; most points wins the match.")}</span>
+          </button>
+          <button type="button" className={`ab-mode ${mode === "quick" ? "on" : ""}`} onClick={() => { setMode("quick"); setMax(2); }}>
+            <b>{t("কুইক ব্যাটল ৩ বনাম ৩", "Quick Battle 3v3")}</b>
+            <span>{t("দুইজন, প্রত্যেকের ৩টি পোকেমন। লড়াইয়ের মাঝে বদলান (Z X C)। প্রত্যেকের নিজের HP। সব তিনটি হারলে হার।", "Two players, three Pokémon each. Swap between them mid-fight (Z X C). Each keeps its own health. Lose all three and you lose.")}</span>
           </button>
           <button type="button" className={`ab-mode ${mode === "team" ? "on" : ""}`} onClick={() => { setMode("team"); setMax(6); }}>
             <b>{t("টিম ব্যাটল ৩ বনাম ৩", "Team Battle 3v3")}</b>
             <span>{t("দুই দল, প্রতি দলে ৩ জন। ফাঁকা আসনে কম্পিউটার খেলে। একদল পুরো হারলে লড়াই শেষ।", "Two teams of three. Empty seats are played by the computer. The fight ends when a whole team is down.")}</span>
           </button>
-          <button type="button" className={`ab-mode ${mode === "coop" ? "on" : ""}`} onClick={() => { setMode("coop"); setMax((m) => Math.min(5, m)); }}>
+          <button type="button" className={`ab-mode ${mode === "coop" ? "on" : ""}`} onClick={() => { setMode("coop"); setMax((m) => (m < 2 || m > 5 ? 4 : m)); }}>
             <b>{t("টিম সারভাইভাল", "Co-op Survival")}</b>
             <span>{t("সবাই মিলে ওয়েভের বিরুদ্ধে। পড়ে গেলে পরের ওয়েভে সঙ্গীরা উঠে দাঁড়ায়। প্রতি ওয়েভের পর সবাই একটি পার্ক নেয়।", "Team up against the waves. Fallen teammates get back up next wave. Everyone picks a perk after each wave.")}</span>
           </button>
         </div>
-        <div className="ab-chips">
+        <div className="ab-chips" style={mode === "quick" ? { display: "none" } : undefined}>
           {(mode === "team" ? [2, 3, 4, 5, 6] : [2, 3, 4, 5]).map((n) => (
             <button key={n} type="button" className={`ab-chip ${max === n ? "on" : ""}`} onClick={() => setMax(n)}>{n} {t("জন", "players")}</button>
           ))}
         </div>
-        <button type="button" className="ab-btn" disabled={busy} onClick={() => run(async () => setRoom(await arenaCreate({ data: { max, mode, pick } })))}>{t("রুম খুলুন", "Create room")}</button>
+        <button type="button" className="ab-btn" disabled={busy} onClick={() => run(async () => setRoom(await arenaCreate({ data: { max: mode === "quick" ? 2 : max, mode, pick: mode === "quick" ? squad[0]! : pick } })))}>{t("রুম খুলুন", "Create room")}</button>
       </div>
       {err ? <div className="am-err">{err}</div> : null}
       <div className="am-rooms">
@@ -291,10 +367,10 @@ export function ArenaMulti() {
             <div key={r.id} className="am-room">
               <div>
                 <b>{r.host}</b>
-                <small> · {r.count}/{r.max} · {r.mode === "coop" ? t("টিম সারভাইভাল", "Co-op") : r.mode === "team" ? t("টিম ৩ বনাম ৩", "Team 3v3") : t("রয়্যাল ×৩", "Royale ×3")}</small>
+                <small> · {r.count}/{r.max} · {r.mode === "coop" ? t("টিম সারভাইভাল", "Co-op") : r.mode === "team" ? t("টিম ৩ বনাম ৩", "Team 3v3") : r.mode === "quick" ? t("কুইক ব্যাটল", "Quick 3v3") : t("রয়্যাল ×৩", "Royale ×3")}</small>
                 <div className="am-names">{r.names.join(", ")}</div>
               </div>
-              <button type="button" className="ab-btn" disabled={busy || r.count >= r.max} onClick={() => run(async () => setRoom(await arenaJoin({ data: { id: r.id, pick } })))}>{t("ঢুকুন", "Join")}</button>
+              <button type="button" className="ab-btn" disabled={busy || r.count >= r.max} onClick={() => run(async () => setRoom(await arenaJoin({ data: { id: r.id, pick: r.mode === "quick" ? squad[0]! : pick } })))}>{t("ঢুকুন", "Join")}</button>
             </div>
           ))
         ) : (
@@ -347,7 +423,7 @@ function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; 
   );
 }
 
-type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean };
+type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
 type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean; team?: number };
 
 type Wire = { k: string };
@@ -358,6 +434,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const isHost = init.hostId === init.you;
   const coop = init.mode === "coop";
   const teamBattle = init.mode === "team";
+  const quick = init.mode === "quick";
   const finalRound = coop || init.curRound >= init.rounds;
   const [picked, setPicked] = useState(false);
   const cb = useRef({ onReport, onNext });
@@ -434,7 +511,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, swapQ: -1, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -462,6 +539,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       if (e.repeat) return;
       if (k === " " || k === "shift") c.dodge = true;
       else if (k === "q") c.ult = true;
+      else if (k === "z" || k === "x" || k === "c") c.swapQ = "zxc".indexOf(k);
       else if (k === "+" || k === "=") setZoom(c.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(c.zoom - 0.15);
       else if (k === "t") cycleTilt();
@@ -515,7 +593,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     let dead = false;
     let raf = 0;
     const R = new ArenaRenderer(cv);
-    R.setTeamMode(teamBattle);
+    R.setTeamMode(teamBattle || quick);
     c.R = R;
     R.setZoom(c.zoom);
     R.resize();
@@ -526,6 +604,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const recv = new InputReceiver();
     const sender = new InputSender();
     const hellos = new Set<number>();
+    const squadsOf = new Map<number, ArenaPick[]>();
     const lastSeen = new Map<number, number>();
     let S: State | null = null; // the host's real fight
     let started = false;
@@ -575,14 +654,14 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         if (isHost) {
           if (d.k === "hello") {
             hellos.add(member);
+            if (quick) squadsOf.set(member, cleanSquad((d as unknown as { sq?: unknown }).sq));
             if (S && started) p2p.send(enc.keyframe(S), from);
           } else if (d.k === "perk") {
             const fid = fidOfMember.get(member);
             const pw = (d as unknown as { w?: number }).w;
             if (fid !== undefined && (pw === undefined || !S || pw === S.wave)) hostPick(fid, (d as unknown as { id: string }).id);
           } else if (d.k === "in") {
-            const fid = fidOfMember.get(member);
-            if (fid !== undefined) recv.put(fid, d as InputMsg);
+            recv.put(member, d as InputMsg);
           }
         } else if (d.k === "s" && from === hostPeer) {
           lastHeard = performance.now();
@@ -601,7 +680,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         my = c.joy.y;
       }
       const cast: [boolean, boolean, boolean, boolean] = [c.queue[0] || c.held[0] || c.mouse, c.queue[1] || c.held[1], c.queue[2] || c.held[2], c.queue[3] || c.held[3]];
-      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult };
+      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult, swap: c.swapQ >= 0 ? c.swapQ : undefined };
+      c.swapQ = -1;
       c.queue = [false, false, false, false];
       c.dodge = false;
       c.ult = false;
@@ -614,7 +694,11 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         setStatus("empty");
         return false;
       }
-      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves, team: seats.current.findIndex((x) => x.memberId === s.memberId) % 2 })), coop ? "survival" : "royale", teamBattle);
+      const guest = present.find((s) => s.memberId !== meId);
+      const hostSeat = seats.current.find((s) => s.memberId === meId);
+      const G = quick && guest && hostSeat
+        ? newMpQuick({ member: meId, name: hostSeat.name, picks: loadSquad() as QuickPick[] }, { member: guest.memberId, name: guest.name, picks: (squadsOf.get(guest.memberId) ?? cleanSquad(null)) as QuickPick[] }, "random")
+        : newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves, team: seats.current.findIndex((x) => x.memberId === s.memberId) % 2 })), coop ? "survival" : "royale", teamBattle);
       begin(G);
       // the host is always the first fighter
       G.fighters.sort((a, b) => (a.member === meId ? -1 : b.member === meId ? 1 : 0));
@@ -699,7 +783,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             }
           }
           const others = new Map<number, Input>();
-          for (const f of S.fighters) if (f.member !== meId && f.alive) others.set(f.id, recv.take(f.id));
+          for (const f of S.fighters) if (f.member !== meId && f.alive) others.set(f.id, recv.take(f.member ?? 0));
           step(S, inp, dt, others);
           const evs = S.events.slice();
           S.events.length = 0;
@@ -727,7 +811,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       } else {
         if (!dec.ready && now - lastHello > 600) {
           lastHello = now;
-          p2p.send({ k: "hello", member: meId }, hostPeer);
+          p2p.send({ k: "hello", member: meId, sq: quick ? loadSquad() : undefined }, hostPeer);
         }
         // our controls go to the host about 30 times a second
         const m = sender.next(inp, [c.held[0] || c.mouse, c.held[1], c.held[2], c.held[3]]);
@@ -763,9 +847,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         }
         if (now - hudAt > 90 && mine) {
           hudAt = now;
+          const SQ = quick ? V.sq ?? squadView(V) : undefined;
           const ids = mine.sp.moves;
           const alive = V.fighters.filter((f) => f.alive).length;
-          setOut(mine.alive ? null : coop || teamBattle ? 0 : mine.place ?? alive + 1);
+          setOut(mine.alive || quick ? null : coop || teamBattle ? 0 : mine.place ?? alive + 1);
           const finishing = V.fighters.some((f) => f.alive && f.team !== mine.team && f.hp / f.maxHp < 0.2 && Math.hypot(f.x - mine.x, f.y - mine.y) < 420);
           const gl = Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0);
           setHud({
@@ -774,7 +859,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             perks: V.perks,
             wave: V.wave,
             score: V.score,
-            foes: V.fighters.filter((f) => f.alive && f.team !== (teamBattle ? mine.team : 0)).length,
+            foes: quick && SQ ? SQ[1 - mine.team]!.filter((x) => x.alive).length : V.fighters.filter((f) => f.alive && f.team !== (teamBattle ? mine.team : 0)).length,
             name: mine.form?.name ?? mine.sp.name,
             hp: mine.hp,
             ghost: mine.ghost,
@@ -790,8 +875,15 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             ult: mine.ult,
             gimmick: mine.gimmick,
             gimmickT: Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0),
-            alive: teamBattle ? V.fighters.filter((f) => f.alive && f.team === mine.team).length : alive,
-            total: teamBattle ? V.fighters.filter((f) => f.team === mine.team).length : V.fighters.length,
+            alive: quick && SQ ? SQ[mine.team]!.filter((x) => x.alive).length : teamBattle ? V.fighters.filter((f) => f.alive && f.team === mine.team).length : alive,
+            total: quick ? 3 : teamBattle ? V.fighters.filter((f) => f.team === mine.team).length : V.fighters.length,
+            ...(quick && SQ
+              ? {
+                  squad: SQ[mine.team]!.map((x) => ({ sp: x.sp, name: speciesOf(x.sp).name, hp: x.hp, max: x.max, alive: x.alive, active: x.cur })),
+                  foeSquad: SQ[1 - mine.team]!.map((x) => ({ hp: x.hp, max: x.max, alive: x.alive, active: x.cur })),
+                  swapCd: V.swapCd?.[mine.team] ?? 0,
+                }
+              : {}),
             storm: V.storm.on,
           });
         }
@@ -799,16 +891,17 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           overT += dt;
           if (overT > 2) {
             const wTeam = V.fighters.find((f) => f.id === V.winnerId)?.team ?? -1;
-            const list = coop ? [...V.fighters].sort((a, b) => b.kos - a.kos) : teamBattle ? [...V.fighters].sort((a, b) => (a.team === wTeam ? 0 : 1) - (b.team === wTeam ? 0 : 1) || a.team - b.team || b.kos - a.kos) : [...V.fighters].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
+            const qw = V.winner ? 0 : 1;
+            const list = quick ? [...V.fighters].sort((a, b) => (a.team === qw ? 0 : 1) - (b.team === qw ? 0 : 1)) : coop ? [...V.fighters].sort((a, b) => b.kos - a.kos) : teamBattle ? [...V.fighters].sort((a, b) => (a.team === wTeam ? 0 : 1) - (b.team === wTeam ? 0 : 1) || a.team - b.team || b.kos - a.kos) : [...V.fighters].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
             if (!rowsShown.current) {
               rowsShown.current = true;
-              setRows(list.map((f, i) => ({ id: f.id, member: f.member ?? 0, name: f.name ?? "?", species: f.sp.name, place: coop ? i + 1 : teamBattle ? (f.team === wTeam ? 1 : 2) : f.place ?? i + 1, kos: f.kos, you: f.member === meId, team: f.team })));
+              setRows(list.map((f, i) => ({ id: f.id, member: f.member ?? 0, name: f.name ?? "?", species: f.sp.name, place: coop ? i + 1 : teamBattle ? (f.team === wTeam ? 1 : 2) : f.place ?? i + 1, kos: quick ? (V.sq ?? squadView(V))?.[1 - f.team]?.filter((x) => !x.alive).length ?? 0 : f.kos, you: f.member === meId, team: f.team })));
               setWinTeam(teamBattle ? { win: wTeam, mine: mine?.team ?? -1 } : null);
               setTeam({ wave: V.wave, score: V.score });
-              if (teamBattle ? wTeam >= 0 && mine?.team === wTeam : !coop && V.winnerId && mine?.id === V.winnerId) sfx.win();
+              if (quick ? mine?.team === qw : teamBattle ? wTeam >= 0 && mine?.team === wTeam : !coop && V.winnerId && mine?.id === V.winnerId) sfx.win();
               else sfx.lose();
               // the host writes the round into the match standings
-              if (isHost && !coop && !teamBattle && !reported.current) {
+              if (isHost && !coop && !teamBattle && !quick && !reported.current) {
                 reported.current = true;
                 cb.current.onReport(list.map((f, i) => ({ memberId: f.member ?? 0, place: Math.min(5, f.place ?? i + 1), kos: Math.min(99, f.kos) })));
               }
@@ -938,11 +1031,33 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             </div>
             {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
-              {teamBattle ? <>{t("টিম ৩ বনাম ৩", "Team 3v3")}</> : coop ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("রাউন্ড", "Round")} {init.curRound}/{init.rounds}</>}
-              {teamBattle ? <span>{t("আপনার দল", "Your team")} {hud.alive}/{hud.total} · {t("শত্রু", "Foes")} {hud.foes}</span> : coop ? <span>{t("শত্রু", "Foes")} {hud.foes}</span> : <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>}
+              {quick ? <>{t("কুইক ব্যাটল", "Quick 3v3")}</> : teamBattle ? <>{t("টিম ৩ বনাম ৩", "Team 3v3")}</> : coop ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("রাউন্ড", "Round")} {init.curRound}/{init.rounds}</>}
+              {quick ? <span>{t("আপনার", "You")} {hud.alive}/3 · {t("প্রতিপক্ষ", "Foe")} {hud.foes}/3</span> : teamBattle ? <span>{t("আপনার দল", "Your team")} {hud.alive}/{hud.total} · {t("শত্রু", "Foes")} {hud.foes}</span> : coop ? <span>{t("শত্রু", "Foes")} {hud.foes}</span> : <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>}
               {coop ? <span className="sc">★ {hud.score}</span> : null}
               {hud.storm ? <span>🌀</span> : null}
             </div>
+            {hud.squad ? (
+              <div className="ab-squad">
+                <div className="ab-foes">
+                  {hud.foeSquad!.map((f, i) => (
+                    <i key={i} className={`${f.alive ? "" : "dead"} ${f.active ? "act" : ""}`}><u style={{ width: `${f.alive ? Math.max(0, (f.hp / f.max) * 100) : 0}%` }} /></i>
+                  ))}
+                </div>
+                <div className="ab-sqrow">
+                  {hud.squad.map((m, i) => {
+                    const sx = speciesOf(m.sp);
+                    return (
+                      <button key={i} type="button" disabled={!m.alive || m.active || (hud.swapCd ?? 0) > 0} className={`ab-sq ${m.active ? "act" : ""} ${m.alive ? "" : "dead"}`} onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); ctl.current.swapQ = i; }} aria-label={m.name} title={`${m.name} (${"ZXC"[i]})`}>
+                        <Sprite info={{ id: sx.id, num: sx.num, types: sx.types }} still alt={m.name} style={{ width: 34, height: 34 }} />
+                        <span className="sq-bar"><u style={{ width: `${m.alive ? Math.max(0, (m.hp / m.max) * 100) : 0}%`, background: hpColor(m.hp / m.max) }} /></span>
+                        <span className="sq-ky">{"ZXC"[i]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {(hud.swapCd ?? 0) > 0 ? <small className="sq-cd">{t("বদল", "swap")} {hud.swapCd!.toFixed(1)}s</small> : null}
+              </div>
+            ) : null}
             <div className="ab-tools">
               <button type="button" className="ab-ic wide" onClick={() => cycleTilt()} aria-label="Camera angle" title="T">{tilt}°</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>

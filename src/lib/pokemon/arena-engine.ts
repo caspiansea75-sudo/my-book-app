@@ -213,6 +213,8 @@ export type Input = {
   dodge: boolean;
   /** Awaken (the special burst), once the gauge is full. */
   ult?: boolean;
+  /** Quick Battle: bring the squad member with this number into the ring. */
+  swap?: number;
 };
 export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false });
 
@@ -259,6 +261,8 @@ export type State = {
   /** Quick Battle (3v3): computer difficulty, both squads (index = team), swap cool-down per team. */
   level?: Level;
   squads?: Fighter[][];
+  /** What a screen that only sees the ring needs to draw the squads: set by the host's encoder, read by the client. */
+  sq?: { id: number; sp: string; hp: number; max: number; alive: boolean; cur: boolean }[][];
   swapCd?: number[];
   /** Arena events (Quick Battle). */
   gust?: { warn: number; t: number; dx: number; dy: number } | null;
@@ -664,6 +668,47 @@ function newTeamBattle(S: State, players: MpPlayer[]): State {
   S.teamBattle = true;
   unstick(S);
   return S;
+}
+
+/** Online Quick Battle: two people, each with a squad of three. Team 0 is the first squad (the host's). */
+export type MpSquad = { member: number; name: string; picks: QuickPick[] };
+export function newMpQuick(a: MpSquad, b: MpSquad, arena: StageKind | "random" = "random"): State {
+  const S = newGame("quick", a.picks[0]!.species, {});
+  S.fighters = [];
+  S.nextId = 1;
+  S.level = "normal";
+  S.swapCd = [0, 0];
+  S.wave = 1;
+  S.mp = true;
+  const make = (sq: MpSquad, team: number) =>
+    sq.picks.slice(0, 3).map((pk) => {
+      const f = makeFighter(S, speciesOf(pk.species), team, true, team === 0 ? 230 : W - 230, CY);
+      f.auto = false;
+      f.gimmick = pk.gimmick ?? "awaken";
+      f.megaForm = (MEGAS[pk.species] ?? []).find((m) => m.id === pk.mega) ?? MEGAS[pk.species]?.[0] ?? null;
+      if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
+      if (pk.tera && TERA_TYPES.includes(pk.tera)) f.teraType = pk.tera;
+      f.loadout = cleanMoves(pk.species, pk.moves);
+      f.member = sq.member;
+      f.name = sq.name;
+      f.face = team === 0 ? 0 : Math.PI;
+      return f;
+    });
+  const mine = make(a, 0);
+  const theirs = make(b, 1);
+  S.squads = [mine, theirs];
+  S.fighters = [mine[0]!, theirs[0]!];
+  const kind = arena === "random" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : arena;
+  buildStage(S, kind);
+  S.field = "none";
+  unstick(S);
+  return S;
+}
+
+/** A small description of both squads for the players' screens. */
+export function squadView(S: State): NonNullable<State["sq"]> | undefined {
+  if (!S.squads) return undefined;
+  return S.squads.map((sq) => sq.map((f) => ({ id: f.id, sp: f.sp.id, hp: Math.round(f.hp), max: f.maxHp, alive: f.alive, cur: S.fighters.includes(f) })));
 }
 
 export const playerOf = (S: State) => S.fighters[0]!;
@@ -1621,6 +1666,10 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       continue;
     }
     const inp = h === p ? input : others?.get(h.id) ?? noInput();
+    if (inp.swap !== undefined && inp.swap >= 0 && S.mode === "quick" && S.squads) {
+      // Quick Battle: a swap takes the turn (the new fighter is in the ring from the next step)
+      if (swapTo(S, h.team, inp.swap)) continue;
+    }
     const [mx, my] = len(inp.mx, inp.my) > 1 ? norm(inp.mx, inp.my) : [inp.mx, inp.my];
     h.vx = mx * h.speed;
     h.vy = my * h.speed;
@@ -2276,13 +2325,21 @@ function quickStep(S: State, dt: number) {
     }
   }
   // the computer pulls back a hurt fighter (never on Easy)
-  const cpu = S.fighters.find((f) => f.team === 1);
+  const cpu = S.mp ? undefined : S.fighters.find((f) => f.team === 1);
   if (cpu && cpu.alive && S.level !== "easy" && S.swapCd![1]! <= 0 && !swapBusy(cpu) && cpu.hp < cpu.maxHp * (S.level === "hard" ? 0.3 : 0.18)) {
     const best = sq[1]!.filter((f) => f.alive && f !== cpu && f.hp > f.maxHp * 0.5).sort((a, b) => b.hp / b.maxHp - a.hp / a.maxHp)[0];
     if (best && Math.random() < dt * (S.level === "hard" ? 1.2 : 0.5)) sendOut(S, 1, cpu, best);
   }
 
-  arenaEvents(S, dt, true);
+  if (!S.mp) arenaEvents(S, dt, true); // a shared match keeps the floors calm
+  // sudden death: between two people a match must end, so the floor starts to close in after two and a half minutes
+  if (S.mp && S.phase === "fight") {
+    if (!S.storm.on && S.time > 150) {
+      S.storm.on = true;
+      S.events.push({ t: "storm" });
+    }
+    if (S.storm.on) S.storm.r = Math.max(130, S.storm.r - 9 * dt);
+  }
 
   // ---- the end: a whole squad is down
   const up = (t: number) => sq[t]!.some((f) => f.alive);
