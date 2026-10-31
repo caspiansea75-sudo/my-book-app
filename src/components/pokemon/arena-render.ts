@@ -89,8 +89,123 @@ export class ArenaRenderer {
   private camX = ARENA.CX;
   private camY = ARENA.CY;
 
+  private tilt = 90;
+  private gc: HTMLCanvasElement | null = null;
+  private ac: HTMLCanvasElement | null = null;
+  private shx = 0;
+  private shy = 0;
+
   constructor(readonly canvas: HTMLCanvasElement, private sources: SpriteSource = defaultSources) {
     this.ctx = canvas.getContext("2d")!;
+    try {
+      const v = Number(localStorage.getItem("arena-brawl-tilt"));
+      this.tilt = v === 90 || v === 60 || v === 45 || v === 30 ? v : 60;
+    } catch {
+      this.tilt = 60;
+    }
+  }
+
+  /** Camera angle over the floor: 90 looks straight down, lower angles lean the view into a 3D-style perspective. */
+  setTilt(deg: number) {
+    this.tilt = deg === 60 || deg === 45 || deg === 30 ? deg : 90;
+    try {
+      localStorage.setItem("arena-brawl-tilt", String(this.tilt));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+  getTilt() {
+    return this.tilt;
+  }
+  /** s: how much the floor's depth is squashed; c: how fast things shrink with distance; tz: extra zoom so the floor still fills the frame. */
+  private get tp() {
+    switch (this.tilt) {
+      case 60: return { s: 0.866, c: 0.2, tz: 1.1, vs: 1.04 };
+      case 45: return { s: 0.707, c: 0.38, tz: 1.25, vs: 1.08 };
+      case 30: return { s: 0.5, c: 0.6, tz: 1.5, vs: 1.14 };
+      default: return { s: 1, c: 0, tz: 1, vs: 1 };
+    }
+  }
+  private get tilted() {
+    return this.tilt < 90;
+  }
+  /** Floor point (world) -> place on the canvas, in arena units. */
+  private proj(x: number, y: number) {
+    const { s, c, tz } = this.tp;
+    const Z = this.zoom * tz;
+    const dy = y - this.camY;
+    const f = 1 + (c * dy) / ARENA.H;
+    return { x: ARENA.CX + (x - this.camX) * Z * f, y: ARENA.CY + Z * s * (dy + (c * dy * dy) / (2 * ARENA.H)), f, Z };
+  }
+  /** Run a drawing at a world point: "bb" stands upright there (a billboard), "fl" lies flat on the floor. */
+  private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl", fn: () => void, tall = 1) {
+    if (!this.tilted) return fn();
+    const { s, vs } = this.tp;
+    const q = this.proj(x, y);
+    const sx = q.Z * q.f;
+    const sy = mode === "fl" ? sx * s : sx * (1 + (vs - 1) * tall);
+    const k = this.scale;
+    g.save();
+    g.setTransform(k * sx, 0, 0, k * sy, k * (q.x + this.shx - x * sx), k * (q.y + this.shy - y * sy));
+    fn();
+    g.restore();
+  }
+  /** Lay a flat world-sized picture onto the tilted floor, row by row. */
+  private blit(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number) {
+    const { s, c, tz } = this.tp;
+    const Z = this.zoom * tz;
+    const W = ARENA.W, H = ARENA.H;
+    const kx = src.width / W;
+    g.save();
+    g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    for (let y = 0; y < H; y += step) {
+      const yb = Math.min(H, y + step);
+      const d0 = y - this.camY, d1 = yb - this.camY;
+      const fm = 1 + (c * (d0 + d1)) / 2 / H;
+      if (fm < 0.1) continue;
+      const y0 = Z * s * (d0 + (c * d0 * d0) / (2 * H));
+      const y1 = Z * s * (d1 + (c * d1 * d1) / (2 * H));
+      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, ARENA.CX - this.camX * Z * fm + this.shx, ARENA.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
+    }
+    g.restore();
+  }
+  private layer(which: "gc" | "ac") {
+    const w = Math.round(ARENA.W * Math.min(this.scale, 1.5));
+    const h = Math.round(ARENA.H * Math.min(this.scale, 1.5));
+    let c = this[which];
+    if (!c) {
+      c = document.createElement("canvas");
+      this[which] = c;
+    }
+    if (c.width !== w || c.height !== h) {
+      c.width = w;
+      c.height = h;
+    }
+    const x = c.getContext("2d")!;
+    x.setTransform(1, 0, 0, 1, 0, 0);
+    x.clearRect(0, 0, w, h);
+    const k = w / ARENA.W;
+    x.setTransform(k, 0, 0, k, 0, 0);
+    return x;
+  }
+  /** Put the flat floor layer on screen, with a haze over the far end. */
+  private finishGround(g: CanvasRenderingContext2D, G: CanvasRenderingContext2D) {
+    void G;
+    this.drawAim(this.gcx());
+    this.blit(g, this.gc!, 2);
+    const far = this.proj(ARENA.CX, 0);
+    const len = 150 * this.tp.s * this.zoom;
+    g.save();
+    g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    const hz = g.createLinearGradient(0, far.y + this.shy, 0, far.y + this.shy + len);
+    hz.addColorStop(0, "rgba(10,18,34,.62)");
+    hz.addColorStop(1, "rgba(10,18,34,0)");
+    g.fillStyle = hz;
+    g.fillRect(0, Math.max(0, far.y + this.shy - 2), ARENA.W, len + 4);
+    g.restore();
+  }
+  private gcx() {
+    return this.gc!.getContext("2d")!;
   }
 
   /** Fit the drawing to the size the page gives the canvas, crisp on high-density screens. */
@@ -111,19 +226,32 @@ export class ArenaRenderer {
   }
   /** Turns a point on the canvas (in arena units, 0–960 by 0–600) into a place on the floor, whatever the zoom. */
   toWorld(px: number, py: number) {
+    if (this.tilted) {
+      const { s, c, tz } = this.tp;
+      const Z = this.zoom * tz;
+      const u = (py - ARENA.CY) / (Z * s);
+      const dy = c > 0 ? (ARENA.H * (Math.sqrt(Math.max(0, 1 + (2 * c * u) / ARENA.H)) - 1)) / c : u;
+      return { x: this.camX + (px - ARENA.CX) / (Z * (1 + (c * dy) / ARENA.H)), y: this.camY + dy };
+    }
     return { x: this.camX + (px - ARENA.CX) / this.zoom, y: this.camY + (py - ARENA.CY) / this.zoom };
   }
   private toCanvas(x: number, y: number) {
+    if (this.tilted) {
+      const q = this.proj(x, y);
+      return { x: q.x, y: q.y };
+    }
     return { x: (x - this.camX) * this.zoom + ARENA.CX, y: (y - this.camY) * this.zoom + ARENA.CY };
   }
   private followCamera(you: Fighter | undefined, dt: number) {
     let tx = ARENA.CX;
     let ty = ARENA.CY;
-    if (this.zoom > 1 && you) {
-      const hw = ARENA.W / (2 * this.zoom);
-      const hh = ARENA.H / (2 * this.zoom);
-      tx = Math.max(hw, Math.min(ARENA.W - hw, you.x));
-      ty = Math.max(hh, Math.min(ARENA.H - hh, you.y));
+    const { s, tz } = this.tp;
+    const Ze = this.zoom * tz;
+    if (Ze > 1 && you) {
+      const hw = ARENA.W / (2 * Ze);
+      const hh = ARENA.H / (2 * Ze * s);
+      if (hw < ARENA.W / 2) tx = Math.max(hw, Math.min(ARENA.W - hw, you.x));
+      if (hh < ARENA.H / 2) ty = Math.max(hh, Math.min(ARENA.H - hh, you.y));
     }
     const k = 1 - Math.exp(-dt * 9);
     this.camX += (tx - this.camX) * k;
@@ -765,89 +893,104 @@ export class ArenaRenderer {
     g.fillRect(0, 0, ARENA.W, ARENA.H);
     const k = this.shakeT > 0 ? this.shake * (this.shakeT / 0.3) : 0;
     const zoom = this.zoom * (1 + this.zoomPulse * 0.025);
-    g.translate(ARENA.CX, ARENA.CY);
-    g.scale(zoom, zoom);
-    g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
-    g.drawImage(stageBackground(S.stage), 0, 0);
-    for (const pool of S.pools) {
-      drawPool(g, pool, this.t);
-      if (pool.base) drawFoam(g, pool, this.t);
+    const T = this.tilted;
+    this.shx = T ? rnd(-k, k) : 0;
+    this.shy = T ? rnd(-k, k) : 0;
+    let G = g;
+    if (T) {
+      // the floor and everything lying on it is drawn flat first, then laid onto the tilted ground
+      const sky = g.createLinearGradient(0, 0, 0, ARENA.H);
+      sky.addColorStop(0, "#0b1426");
+      sky.addColorStop(1, "#04070d");
+      g.fillStyle = sky;
+      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      G = this.layer("gc");
+    } else {
+      g.translate(ARENA.CX, ARENA.CY);
+      g.scale(zoom, zoom);
+      g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
     }
-    for (const hole of S.holes) (S.stage === "lava" ? drawLavaPit : drawHole)(g, hole, this.t);
-    drawArenaFx(g, S, this.t);
+    G.drawImage(stageBackground(S.stage), 0, 0);
+    for (const pool of S.pools) {
+      drawPool(G, pool, this.t);
+      if (pool.base) drawFoam(G, pool, this.t);
+    }
+    for (const hole of S.holes) (S.stage === "lava" ? drawLavaPit : drawHole)(G, hole, this.t);
+    drawArenaFx(G, S, this.t);
     // blast marks: a dark patch with a glowing rim that cools
     for (const sc of this.scorch) {
       const k = sc.t / sc.max;
-      g.save();
-      g.translate(sc.x, sc.y);
-      g.scale(1, 0.72);
-      g.globalAlpha = Math.min(1, k * 1.6) * 0.5;
-      g.fillStyle = "#14100e";
-      g.beginPath();
+      G.save();
+      G.translate(sc.x, sc.y);
+      G.scale(1, 0.72);
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.5;
+      G.fillStyle = "#14100e";
+      G.beginPath();
       for (let i = 0; i <= 14; i++) {
         const a = (i / 14) * Math.PI * 2;
         const rr = sc.r * (0.78 + 0.28 * Math.sin(sc.seed + i * 2.3) * Math.cos(sc.seed * 0.7 + i));
-        if (i === 0) g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
-        else g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        if (i === 0) G.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        else G.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
       }
-      g.closePath();
-      g.fill();
+      G.closePath();
+      G.fill();
       if (k > 0.7 && (sc.type === "Fire" || sc.type === "Electric")) {
-        g.globalAlpha = (k - 0.7) * 2.2 * 0.5;
-        g.strokeStyle = sc.type === "Fire" ? "#ff7a2a" : "#ffe14d";
-        g.lineWidth = 2.5;
-        g.stroke();
+        G.globalAlpha = (k - 0.7) * 2.2 * 0.5;
+        G.strokeStyle = sc.type === "Fire" ? "#ff7a2a" : "#ffe14d";
+        G.lineWidth = 2.5;
+        G.stroke();
       }
-      g.restore();
+      G.restore();
     }
     // the remains of broken crates stay on the floor for a while
     for (const d of this.debris) {
-      g.save();
-      g.globalAlpha = Math.min(1, d.t / 2);
-      g.translate(d.x, d.y);
-      g.strokeStyle = "#8a5a2b";
-      g.lineWidth = 3;
+      G.save();
+      G.globalAlpha = Math.min(1, d.t / 2);
+      G.translate(d.x, d.y);
+      G.strokeStyle = "#8a5a2b";
+      G.lineWidth = 3;
       for (let i = 0; i < 4; i++) {
         const a = d.seed * 7 + i * 1.7;
-        g.beginPath();
-        g.moveTo(Math.cos(a) * 8, Math.sin(a) * 8);
-        g.lineTo(Math.cos(a) * 8 + Math.cos(a + 0.6) * 14, Math.sin(a) * 8 + Math.sin(a + 0.6) * 14);
-        g.stroke();
+        G.beginPath();
+        G.moveTo(Math.cos(a) * 8, Math.sin(a) * 8);
+        G.lineTo(Math.cos(a) * 8 + Math.cos(a + 0.6) * 14, Math.sin(a) * 8 + Math.sin(a + 0.6) * 14);
+        G.stroke();
       }
-      g.restore();
+      G.restore();
     }
 
     // the storm ring in a royale
     if (S.storm.on) {
-      g.save();
-      g.beginPath();
-      g.rect(0, 0, ARENA.W, ARENA.H);
-      g.arc(ARENA.CX, ARENA.CY, S.storm.r, 0, Math.PI * 2, true);
-      g.fillStyle = "rgba(150,60,200,.28)";
-      g.fill("evenodd");
-      g.strokeStyle = `rgba(210,130,255,${0.6 + Math.sin(this.t * 5) * 0.2})`;
-      g.lineWidth = 3;
-      g.beginPath();
-      g.arc(ARENA.CX, ARENA.CY, S.storm.r, 0, Math.PI * 2);
-      g.stroke();
-      g.restore();
+      G.save();
+      G.beginPath();
+      G.rect(0, 0, ARENA.W, ARENA.H);
+      G.arc(ARENA.CX, ARENA.CY, S.storm.r, 0, Math.PI * 2, true);
+      G.fillStyle = "rgba(150,60,200,.28)";
+      G.fill("evenodd");
+      G.strokeStyle = `rgba(210,130,255,${0.6 + Math.sin(this.t * 5) * 0.2})`;
+      G.lineWidth = 3;
+      G.beginPath();
+      G.arc(ARENA.CX, ARENA.CY, S.storm.r, 0, Math.PI * 2);
+      G.stroke();
+      G.restore();
     }
 
-    this.drawItems(g, S);
-    this.drawZones(g, S);
-    this.drawTelegraphs(g, S);
-    this.drawWaves(g, dt);
-    this.drawRocks(g, dt);
-    this.drawTethers(g, S);
+    this.drawItems(G, S);
+    this.drawZones(G, S);
+    this.drawTelegraphs(G, S);
+    this.drawWaves(G, dt);
+    this.drawRocks(G, dt);
+    this.drawTethers(G, S);
+    if (T) this.finishGround(g, G);
 
     // crates, pillars and Pokémon are drawn back to front so they stand behind and in front of each other
     const things: { y: number; draw: () => void }[] = [];
-    for (const o of S.obs) if (o.hp > 0) things.push({ y: o.y, draw: () => drawObstacle(g, o, this.t) });
-    for (const f of S.fighters) if (f.alive || f.koT < 0.01) things.push({ y: f.y, draw: () => this.drawFighter(g, f, S, f === you) });
+    for (const o of S.obs) if (o.hp > 0) things.push({ y: o.y, draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), 2.5) });
+    for (const f of S.fighters) if (f.alive || f.koT < 0.01) things.push({ y: f.y, draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), 0.6) });
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
     this.drawProjs(g, S);
-    this.drawAim(g);
+    if (!T) this.drawAim(g);
 
     // particles
     for (const p of this.parts) {
@@ -858,6 +1001,13 @@ export class ArenaRenderer {
       p.size += p.grow * dt;
       if (p.vr) p.rot = (p.rot ?? 0) + p.vr * dt;
       const a = Math.max(0, p.life / p.max);
+      if (T) {
+        const q = this.proj(p.x, p.y);
+        const sx = q.Z * q.f;
+        const sy = p.kind === "gring" ? sx * this.tp.s : sx;
+        g.save();
+        g.setTransform(this.scale * sx, 0, 0, this.scale * sy, this.scale * (q.x + this.shx - p.x * sx), this.scale * (q.y + this.shy - p.y * sy));
+      }
       g.globalAlpha = a;
       if (p.kind === "dot") {
         g.fillStyle = p.color;
@@ -1067,9 +1217,15 @@ export class ArenaRenderer {
         g.fillStyle = p.color;
         g.fillText(p.text, p.x, p.y);
       }
+      if (T) g.restore();
     }
     g.globalAlpha = 1;
-    drawAmbient(g, S, this.t);
+    if (T) {
+      const A = this.layer("ac");
+      drawAmbient(A, S, this.t);
+      A.globalAlpha = 1;
+      this.blit(g, this.ac!, 4);
+    } else drawAmbient(g, S, this.t);
     g.globalAlpha = 1;
     this.parts = this.parts.filter((p) => p.life > 0);
     if (this.parts.length > 950) this.parts.splice(0, this.parts.length - 950);
@@ -3567,12 +3723,12 @@ export class ArenaRenderer {
         continue;
       }
       const c = col(p.type);
-      drawShot(g, p, S.time - p.born, this.t);
+      this.at(g, p.x, p.y, "bb", () => drawShot(g, p, S.time - p.born, this.t), 0.5);
       this.trail(p, c);
     }
     for (const [owner, list] of streams) {
       const f = S.fighters.find((x) => x.id === owner);
-      if (f) this.drawStream(g, f, list);
+      if (f) this.at(g, f.x, f.y, "fl", () => this.drawStream(g, f, list));
     }
   }
 

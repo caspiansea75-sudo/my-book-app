@@ -14,6 +14,15 @@ import "@/components/pokemon/arena-brawl.css";
 
 type Screen = "menu" | "play" | "perks" | "over";
 type Save = { bestWave: number; bestScore: number; royaleWins: number; royalePlays: number };
+const TILTS = [90, 60, 45, 30];
+function readTilt() {
+  try {
+    const v = Number(localStorage.getItem("arena-brawl-tilt"));
+    return TILTS.includes(v) ? v : 60;
+  } catch {
+    return 60;
+  }
+}
 const SAVE_KEY = "arena-brawl-v1";
 const ZOOM_KEY = "arena-brawl-zoom";
 const loadSave = (): Save => {
@@ -79,6 +88,8 @@ export function ArenaBrawl() {
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [zoom, setZoomState] = useState(1);
+  const [tilt, setTiltState] = useState(60);
+  useEffect(() => setTiltState(readTilt()), []);
   const [fs, setFs] = useState(false);
   const [portraitHint, setPortraitHint] = useState(false);
   const [result, setResult] = useState<{ win: boolean; wave: number; score: number; place: number; kos: number; combo: number; perfects: number; best: boolean; left?: number } | null>(null);
@@ -121,6 +132,14 @@ export function ArenaBrawl() {
   const inGame = screen !== "menu";
 
   /* ------------------------------------------------------------ zoom */
+
+  const cycleTilt = useCallback((to?: number) => {
+    const cur = rt.current.R?.getTilt() ?? readTilt();
+    const next = to ?? TILTS[(TILTS.indexOf(cur) + 1) % TILTS.length]!;
+    rt.current.R?.setTilt(next);
+    setTiltState(next);
+    try { localStorage.setItem("arena-brawl-tilt", String(next)); } catch { /* storage unavailable */ }
+  }, []);
 
   const setZoom = useCallback((z: number) => {
     const v = clampZoom(z);
@@ -459,6 +478,7 @@ export function ArenaBrawl() {
       else if (k === "f") (fs ? exitFs : () => enterFs(false))();
       else if (k === "+" || k === "=") setZoom(r.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(r.zoom - 0.15);
+      else if (k === "t") cycleTilt();
       else if (k === "0") setZoom(1);
       else if (k === "1" || k === "j") r.queue[0] = true;
       else if (k === "2" || k === "k") r.queue[1] = true;
@@ -483,7 +503,7 @@ export function ArenaBrawl() {
       document.removeEventListener("visibilitychange", blur);
       r.keys.clear();
     };
-  }, [inGame, screen, fs, enterFs, exitFs, setZoom, setPausedBoth]);
+  }, [inGame, screen, fs, enterFs, exitFs, setZoom, cycleTilt, setPausedBoth]);
 
   // the mouse wheel zooms
   useEffect(() => {
@@ -810,6 +830,7 @@ export function ArenaBrawl() {
             {hud.combo > 1 ? <div className="ab-combo pulse">{t("কম্বো", "COMBO")} ×{hud.combo}</div> : null}
 
             <div className="ab-tools">
+              <button type="button" className="ab-ic wide" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label={t("ছোট করুন", "Zoom out")}><ZoomOut size={16} /></button>
               <button type="button" className="ab-ic wide" onClick={() => setZoom(1)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label={t("বড় করুন", "Zoom in")}><ZoomIn size={16} /></button>

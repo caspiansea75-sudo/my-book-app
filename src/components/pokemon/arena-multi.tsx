@@ -17,6 +17,15 @@ import { useMe } from "@/lib/use-me";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
+const TILTS = [90, 60, 45, 30];
+function readTilt() {
+  try {
+    const v = Number(localStorage.getItem("arena-brawl-tilt"));
+    return TILTS.includes(v) ? v : 60;
+  } catch {
+    return 60;
+  }
+}
 const PICK_KEY = "arena-multi-pick";
 const DEFAULT_PICK: ArenaPick = { species: "charizard", gimmick: "awaken", mega: "", tera: "Fire", moves: [] };
 const loadPick = (): ArenaPick => {
@@ -398,12 +407,22 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     };
   }, [goNative]);
   const [zoom, setZoomState] = useState(1);
+  const [tilt, setTiltState] = useState(60);
+  useEffect(() => setTiltState(readTilt()), []);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
   const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
+
+  const cycleTilt = useCallback((to?: number) => {
+    const cur = ctl.current.R?.getTilt() ?? readTilt();
+    const next = to ?? TILTS[(TILTS.indexOf(cur) + 1) % TILTS.length]!;
+    ctl.current.R?.setTilt(next);
+    setTiltState(next);
+    try { localStorage.setItem("arena-brawl-tilt", String(next)); } catch { /* storage unavailable */ }
+  }, []);
 
   const setZoom = useCallback((z: number) => {
     const v = Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
@@ -423,6 +442,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       else if (k === "q") c.ult = true;
       else if (k === "+" || k === "=") setZoom(c.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(c.zoom - 0.15);
+      else if (k === "t") cycleTilt();
       else if (k === "0") setZoom(1);
       else if (k === "1" || k === "j") c.queue[0] = true;
       else if (k === "2" || k === "k") c.queue[1] = true;
@@ -443,7 +463,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [setZoom]);
+  }, [setZoom, cycleTilt]);
 
   useEffect(() => {
     document.documentElement.style.overflow = fs ? "hidden" : "";
@@ -899,6 +919,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               {hud.storm ? <span>🌀</span> : null}
             </div>
             <div className="ab-tools">
+              <button type="button" className="ab-ic wide" onClick={() => cycleTilt()} aria-label="Camera angle" title="T">{tilt}°</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label="Zoom in">+</button>
               <button type="button" className="ab-ic" onClick={() => { if (fs) leaveFs(); else { setFs(true); void goNative(); } }} aria-label="Full screen">⛶</button>
