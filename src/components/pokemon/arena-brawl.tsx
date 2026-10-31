@@ -830,7 +830,7 @@ export function ArenaBrawl() {
             {hud.combo > 1 ? <div className="ab-combo pulse">{t("কম্বো", "COMBO")} ×{hud.combo}</div> : null}
 
             <div className="ab-tools">
-              <button type="button" className="ab-ic wide" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button>
+              <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label={t("ছোট করুন", "Zoom out")}><ZoomOut size={16} /></button>
               <button type="button" className="ab-ic wide" onClick={() => setZoom(1)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label={t("বড় করুন", "Zoom in")}><ZoomIn size={16} /></button>
