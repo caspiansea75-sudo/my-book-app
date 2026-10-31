@@ -620,7 +620,7 @@ export function ArenaBrawl() {
             <div className="ab-team">
               {team.map((id, i) => (
                 <button key={i} type="button" className={`ab-slot ${slot === i ? "on" : ""}`} onClick={() => { sfx.pick(); setSlot(i); setPick(team[i]!); }}>
-                  <Sprite id={speciesOf(id).num} size={44} />
+                  <Sprite info={{ id, num: speciesOf(id).num, types: speciesOf(id).types }} still alt={speciesOf(id).name} style={{ width: 52, height: 52 }} />
                   <b>{i + 1}. {speciesOf(id).name}</b>
                   <small>{slot === i ? t("এখন বাছাই হচ্ছে ↓", "choosing below ↓") : t("চাপুন বদলাতে", "tap to change")}</small>
                 </button>
@@ -797,7 +797,7 @@ export function ArenaBrawl() {
                 </div>
                 {hud.squad.map((m, i) => (
                   <button key={i} type="button" disabled={!m.alive || m.active || (hud.swapCd ?? 0) > 0} className={`ab-sq ${m.active ? "act" : ""} ${m.alive ? "" : "dead"}`} onPointerDown={(e) => { e.preventDefault(); rt.current.swapQ = i; }} aria-label={m.name}>
-                    <Sprite id={speciesOf(team[i] ?? "").num} size={30} />
+                    <Sprite info={{ id: team[i] ?? "", num: speciesOf(team[i] ?? "").num, types: speciesOf(team[i] ?? "").types }} still alt={m.name} style={{ width: 32, height: 32 }} />
                     <span className="sq-bar"><u style={{ width: `${m.alive ? Math.max(0, (m.hp / m.max) * 100) : 0}%`, background: hpColor(m.hp / m.max) }} /></span>
                     <span className="sq-ky">{"ZXC"[i]}</span>
                   </button>
