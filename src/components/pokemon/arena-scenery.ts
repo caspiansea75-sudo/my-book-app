@@ -448,6 +448,7 @@ export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
 /* =========================================================================== ambient */
 
 export function drawAmbient(g: G, S: State, t: number) {
+  lights(g, S, t);
   g.save();
   switch (S.stage) {
     case "ice": {
@@ -518,6 +519,147 @@ export function drawAmbient(g: G, S: State, t: number) {
       }
       g.fillStyle = "#cfd8f0";
       for (let i = 0; i < 20; i++) { g.globalAlpha = 0.12 + 0.1 * Math.sin(t + i); g.beginPath(); g.arc((i * 151 + t * 6) % W, M + ((i * 89 + t * 4) % (H - 2 * M)), 1.4, 0, PI2); g.fill(); }
+      break;
+    }
+  }
+  g.restore();
+}
+
+
+/* =========================================================================== glows and light */
+
+const soft = (g: G, x: number, y: number, r: number, c: string, a: number) => {
+  g.globalAlpha = a;
+  glow(g, x, y, r, c);
+};
+
+/** Light that sits on the floor and on the scenery: it breathes, drifts and sparkles. Everything here is additive. */
+function lights(g: G, S: State, t: number) {
+  g.save();
+  g.globalCompositeOperation = "lighter";
+  // halos round glowing scenery
+  for (const o of S.obs) {
+    if (o.hp <= 0) continue;
+    const p = 0.65 + 0.35 * Math.sin(t * 2.2 + o.id);
+    if (o.kind === "iceboulder") {
+      soft(g, o.x, o.y - o.r * 0.2, o.r * 2.6, "rgba(130,220,255,.55)", 0.5 * p);
+      const k = Math.max(0, Math.sin(t * 3 + o.id * 2));
+      g.globalAlpha = k; g.strokeStyle = "#fff"; g.lineWidth = 1.6; const sx = o.x - o.r * 0.3, sy = o.y - o.r * 0.7;
+      g.beginPath(); g.moveTo(sx - 7, sy); g.lineTo(sx + 7, sy); g.moveTo(sx, sy - 7); g.lineTo(sx, sy + 7); g.stroke();
+    } else if (o.kind === "basalt") soft(g, o.x, o.y + o.r * 0.4, o.r * 2.8, "rgba(255,110,30,.6)", 0.55 * p);
+    else if (o.kind === "crystal") soft(g, o.x, o.y - 10, o.r * 3.2, "rgba(170,120,255,.7)", 0.8 * p);
+    else if (o.kind === "tree") soft(g, o.x - 6, o.y - o.r * 1.9, o.r * 1.5, "rgba(255,255,170,.35)", 0.3 + 0.2 * Math.sin(t * 0.9 + o.id));
+    else if (o.kind === "palm") soft(g, o.x + o.r * 0.7, o.y - o.r * 3.2, o.r * 2.2, "rgba(255,245,170,.35)", 0.35);
+    else if (o.kind === "pine") soft(g, o.x, o.y - o.r * 1.3, o.r * 2.2, "rgba(210,240,255,.4)", 0.3 * p);
+  }
+  for (const h of S.holes) {
+    if (S.stage === "lava") {
+      const p = 0.7 + 0.3 * Math.sin(t * 2.6);
+      soft(g, h.x, h.y, h.rx * 2.1, "rgba(255,110,20,.7)", 0.8 * p);
+      soft(g, h.x, h.y, h.rx * 1.1, "rgba(255,220,120,.7)", 0.4 * p);
+      // bubbles popping on the lava
+      for (let i = 0; i < 7; i++) {
+        const ph = (t * 0.7 + i * 0.37) % 1, a = i * 2.4 + Math.floor(t * 0.7 + i * 0.37) * 1.7;
+        const bx = h.x + Math.cos(a) * h.rx * 0.7 * ((i % 3) / 3 + 0.2), by = h.y + Math.sin(a) * h.ry * 0.7 * ((i % 3) / 3 + 0.2);
+        g.globalAlpha = Math.sin(ph * Math.PI) * 0.9; g.strokeStyle = "#ffe9a0"; g.lineWidth = 2; g.beginPath(); g.ellipse(bx, by, 3 + ph * 9, (3 + ph * 9) * 0.6, 0, 0, PI2); g.stroke();
+      }
+      // a plume of sparks now and then
+      for (let i = 0; i < 12; i++) {
+        const ph = (t * 0.9 + i * 0.083) % 1; const a = i * 0.9;
+        g.globalAlpha = (1 - ph) * 0.9;
+        glow(g, h.x + Math.cos(a) * h.rx * 0.4 * ph * 2, h.y - ph * 90 + Math.sin(a) * 8, 3.5, "rgba(255,190,70,1)");
+      }
+    } else if (S.stage === "crystal") {
+      // the pit: stars spiralling in and the occasional shooting star
+      for (let i = 0; i < 18; i++) {
+        const a = t * (0.5 + (i % 4) * 0.12) + i * 0.35, k = ((t * 0.12 + i * 0.057) % 1);
+        g.globalAlpha = Math.sin(k * Math.PI) * 0.9;
+        glow(g, h.x + Math.cos(a) * h.rx * (1 - k) * 0.95, h.y + Math.sin(a) * h.ry * (1 - k) * 0.95, 4, i % 2 ? "rgba(150,220,255,1)" : "rgba(210,160,255,1)");
+      }
+      const ph = (t * 0.35) % 1;
+      g.globalAlpha = Math.sin(ph * Math.PI);
+      g.strokeStyle = "#fff"; g.lineWidth = 2; g.beginPath(); g.moveTo(h.x - h.rx * 0.6 + ph * h.rx * 1.2, h.y - h.ry * 0.5 + ph * h.ry); g.lineTo(h.x - h.rx * 0.6 + ph * h.rx * 1.2 - 24, h.y - h.ry * 0.5 + ph * h.ry - 8); g.stroke();
+      soft(g, h.x, h.y, h.rx * 1.3, "rgba(110,90,255,.5)", 0.25 + 0.1 * Math.sin(t * 1.8));
+    }
+  }
+  for (const v of S.vents ?? []) {
+    const hot = S.zones.some((z) => !z.struck && Math.hypot(z.x - v.x, z.y - v.y) < 4);
+    soft(g, v.x, v.y, hot ? 80 : 46, "rgba(255,120,30,.8)", hot ? 0.9 : 0.35 + 0.15 * Math.sin(t * 4 + v.x));
+    for (let i = 0; i < (hot ? 7 : 3); i++) { const ph = (t * 1.3 + i * 0.31 + v.x) % 1; g.globalAlpha = (1 - ph) * 0.9; glow(g, v.x + Math.sin(ph * 9 + i) * 8, v.y - ph * (hot ? 80 : 44), 3 + (hot ? 2 : 0), "rgba(255,200,90,1)"); }
+  }
+  for (const p of S.pools) if (S.stage === "coast" || S.stage === "grass") {
+    // caustics: light webs wobbling over the water and sparkles riding on it
+    g.save();
+    g.beginPath(); g.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, PI2); g.clip();
+    g.strokeStyle = "rgba(220,250,255,.5)"; g.lineWidth = 1.4; g.globalAlpha = 0.5;
+    for (let i = 0; i < 7; i++) { g.beginPath(); for (let k = 0; k <= 12; k++) { const u = k / 12; const x = p.x - p.rx + u * p.rx * 2, y = p.y - p.ry * 0.8 + (i / 6) * p.ry * 1.6 + Math.sin(u * 9 + t * 1.6 + i * 1.3) * 7; k ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+    for (let i = 0; i < 9; i++) { const k = Math.max(0, Math.sin(t * 2.6 + i * 2.1)); g.globalAlpha = k; glow(g, p.x + Math.cos(i * 2.4) * p.rx * 0.7, p.y + Math.sin(i * 3.1) * p.ry * 0.6, 5, "rgba(255,255,255,1)"); }
+    g.restore();
+  }
+  switch (S.stage) {
+    case "grass": {
+      // sunbeams through the leaves, and soft patches of light sliding over the ground
+      for (let i = 0; i < 4; i++) {
+        const x0 = 150 + i * 220 + Math.sin(t * 0.35 + i) * 24;
+        g.globalAlpha = 0.12 + 0.05 * Math.sin(t * 0.8 + i * 2);
+        const gr = g.createLinearGradient(x0, 0, x0 + 150, H); gr.addColorStop(0, "rgba(255,250,190,1)"); gr.addColorStop(1, "rgba(255,250,190,0)");
+        g.fillStyle = gr; g.beginPath(); g.moveTo(x0, 0); g.lineTo(x0 + 70, 0); g.lineTo(x0 + 250, H); g.lineTo(x0 + 120, H); g.closePath(); g.fill();
+      }
+      for (let i = 0; i < 9; i++) soft(g, (i * 211 + t * 9) % W, M + ((i * 137 + Math.sin(t * 0.3 + i) * 40 + 600) % (H - 2 * M)), 50, "rgba(255,255,170,.7)", 0.1);
+      break;
+    }
+    case "ice": {
+      // an aurora curtain above the peaks
+      for (let b = 0; b < 3; b++) {
+        const col = ["rgba(90,255,190,", "rgba(110,200,255,", "rgba(190,130,255,"][b]!;
+        for (let x = 0; x <= W; x += 16) {
+          const y = 34 + b * 7 + Math.sin(x * 0.014 + t * 0.7 + b * 1.7) * 14 + Math.sin(x * 0.04 - t * 0.5) * 5;
+          const h = 22 + Math.sin(x * 0.02 + t * 0.9 + b) * 10;
+          const gr = g.createLinearGradient(0, y - h, 0, y + 10);
+          gr.addColorStop(0, col + "0)"); gr.addColorStop(0.7, col + "0.48)"); gr.addColorStop(1, col + "0)");
+          g.globalAlpha = 1; g.fillStyle = gr; g.fillRect(x, y - h, 17, h + 10);
+        }
+      }
+      // diamond dust glittering on the ice and a cold mist along the floor
+      for (let i = 0; i < 26; i++) { const k = Math.max(0, Math.sin(t * 3 + i * 1.7)); g.globalAlpha = k; glow(g, (i * 233) % W, M + ((i * 149) % (H - 2 * M)), 6, "rgba(220,245,255,1)"); }
+      for (let i = 0; i < 6; i++) soft(g, ((i * 190 + t * 18) % (W + 200)) - 100, H - 90 + Math.sin(t * 0.5 + i) * 20, 110, "rgba(220,240,255,.8)", 0.1);
+      break;
+    }
+    case "lava": {
+      g.globalAlpha = 0.5 + 0.25 * Math.sin(t * 1.6);
+      const gr = g.createLinearGradient(0, H, 0, H - 150); gr.addColorStop(0, "rgba(255,90,20,.35)"); gr.addColorStop(1, "rgba(255,60,0,0)"); g.fillStyle = gr; g.fillRect(0, H - 150, W, 150);
+      for (const [rx, ry] of [[240, 100], [W - 260, H - 100], [110, H - 110]] as [number, number][]) { soft(g, rx, ry, 70, "rgba(255,140,40,.9)", 0.4 + 0.2 * Math.sin(t * 3 + rx)); const ph = (t * 0.8 + rx) % 1; g.globalAlpha = (1 - ph); glow(g, rx + Math.sin(ph * 7) * 12, ry - ph * 80, 4, "rgba(255,200,90,1)"); }
+      // heat shimmer lines
+      g.strokeStyle = "rgba(255,170,80,.12)"; g.lineWidth = 2; g.globalAlpha = 1;
+      for (let i = 0; i < 5; i++) { g.beginPath(); for (let x = 0; x <= W; x += 20) { const y = H * 0.3 + i * 90 + Math.sin(x * 0.03 + t * 2 + i) * 6; x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+      break;
+    }
+    case "coast": {
+      // sun glitter on the sea, long soft swells of light
+      for (let i = 0; i < 40; i++) { const x = (i * 83) % W, y = 6 + ((i * 29) % 44); const k = Math.max(0, Math.sin(t * 3 + i * 1.7)); g.globalAlpha = k; glow(g, x, y, 5, "rgba(255,255,255,1)"); }
+      g.globalAlpha = 0.14; const gr = g.createLinearGradient(0, 0, 0, 90); gr.addColorStop(0, "rgba(255,240,170,1)"); gr.addColorStop(1, "rgba(255,240,170,0)"); g.fillStyle = gr; g.fillRect(0, 0, W, 90);
+      for (let i = 0; i < 3; i++) soft(g, (i * 330 + t * 14) % W, 240 + i * 100, 140, "rgba(255,240,190,.9)", 0.08);
+      for (let i = 0; i < 12; i++) { const ph = (t * 0.25 + i * 0.083) % 1; g.globalAlpha = Math.sin(ph * Math.PI) * 0.6; glow(g, (i * 79 + ph * 40) % W, 60 + ph * 20, 4, "rgba(255,255,255,1)"); }
+      break;
+    }
+    case "dirt": {
+      const gr = g.createRadialGradient(80, 40, 10, 80, 40, 700); gr.addColorStop(0, "rgba(255,210,120,.28)"); gr.addColorStop(1, "rgba(255,160,60,0)"); g.globalAlpha = 0.85 + 0.15 * Math.sin(t * 0.6); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 4; i++) { const a = i * 1.57 + t * 1.8; const cx = ((t * 24 + i * 260) % (W + 120)) - 60, cy = 220 + (i % 2) * 190; for (let k = 0; k < 14; k++) { const u = k / 14; g.globalAlpha = 0.5 * (1 - u); glow(g, cx + Math.cos(a + u * 9) * (6 + u * 16), cy - u * 60, 4, "rgba(255,225,170,1)"); } }
+      for (let i = 0; i < 18; i++) { const k = Math.max(0, Math.sin(t * 2.8 + i * 1.9)); g.globalAlpha = k * 0.8; glow(g, (i * 227) % W, M + ((i * 113) % (H - 2 * M)), 4, "rgba(255,240,190,1)"); }
+      break;
+    }
+    case "crystal": {
+      for (let i = 0; i < 3; i++) { const x0 = 220 + i * 260 + Math.sin(t * 0.3 + i) * 20; g.globalAlpha = 0.06 + 0.03 * Math.sin(t + i); const gr = g.createLinearGradient(x0, 0, x0, H * 0.8); gr.addColorStop(0, "rgba(190,160,255,1)"); gr.addColorStop(1, "rgba(190,160,255,0)"); g.fillStyle = gr; g.beginPath(); g.moveTo(x0, 0); g.lineTo(x0 + 40, 0); g.lineTo(x0 + 90, H * 0.8); g.lineTo(x0 - 30, H * 0.8); g.closePath(); g.fill(); }
+      for (let i = 0; i < 16; i++) { const k = Math.max(0, Math.sin(t * 2.4 + i * 1.3)); g.globalAlpha = k; const x = (i * 181) % W, y = M + ((i * 97) % (H - 2 * M)); g.strokeStyle = "#e0d0ff"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x - 6, y); g.lineTo(x + 6, y); g.moveTo(x, y - 6); g.lineTo(x, y + 6); g.stroke(); }
+      break;
+    }
+    case "stone": {
+      for (const [sx, sy] of [[40, 40], [W - 40, 40], [40, H - 40], [W - 40, H - 40], [W / 2, 22], [W / 2, H - 22]] as [number, number][]) soft(g, sx, sy, 150 + Math.sin(t * 8 + sx) * 10, "rgba(255,160,60,.8)", 0.14);
+      const p = 0.5 + 0.5 * Math.sin(t * 1.3);
+      soft(g, W / 2, H / 2, 190, "rgba(110,190,255,.9)", 0.1 + 0.08 * p);
+      g.globalAlpha = 0.25 + 0.2 * p; g.strokeStyle = "rgba(150,215,255,1)"; g.lineWidth = 3; g.beginPath(); g.arc(W / 2, H / 2, 170, 0, PI2); g.stroke();
+      // runes drift up off the circle
+      for (let i = 0; i < 14; i++) { const ph = (t * 0.3 + i / 14) % 1, a = i * 0.9; g.globalAlpha = Math.sin(ph * Math.PI) * 0.8; glow(g, W / 2 + Math.cos(a) * 160, H / 2 + Math.sin(a) * 160 * 0.95 - ph * 60, 4, "rgba(150,215,255,1)"); }
       break;
     }
   }
