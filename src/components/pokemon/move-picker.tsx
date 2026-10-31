@@ -17,6 +17,7 @@ const KIND: Record<MoveKind, [string, string]> = {
   guard: ["ঢাল", "Guard"],
   heal: ["আরোগ্য", "Heal"],
   buff: ["শক্তি বাড়ায়", "Buff"],
+  grab: ["ধরে ছুঁড়ে মারে", "Grab & throw"],
 };
 
 const KEY = "arena-moves-v1";
@@ -146,7 +147,7 @@ export function MovePicker({ species, moves, onChange }: { species: string; move
                     <span className="mp-ic"><TypeIcon type={mv.type} size={20} /></span>
                     <span className="mp-info">
                       <b>{mv.name}{own.includes(mv.type) ? <i className="mp-stab">STAB</i> : null}{at >= 0 ? <em> · {at + 1}</em> : null}</b>
-                      <small>{t(KIND[mv.kind][0], KIND[mv.kind][1])} · {t("ক্ষমতা", "power")} {mv.power} · {mv.cd}s</small>
+                      <small>{t((KIND[mv.kind] ?? [mv.kind, mv.kind])[0], (KIND[mv.kind] ?? [mv.kind, mv.kind])[1])} · {t("ক্ষমতা", "power")} {mv.power} · {mv.cd}s</small>
                       <small className="mp-desc">{mv.desc}</small>
                     </span>
                   </button>
