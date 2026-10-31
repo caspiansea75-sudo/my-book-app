@@ -7,7 +7,7 @@ import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
-import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
+import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaSeatSet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
 import { PERK_BN } from "@/components/pokemon/arena-brawl";
 import { GIMMICKS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
 import type { QuickPick } from "@/lib/pokemon/arena-engine";
@@ -298,9 +298,14 @@ export function ArenaMulti() {
                 <h4>{tm === 0 ? t("দল এ", "Team A") : t("দল বি", "Team B")}</h4>
                 {Array.from({ length: 3 }).map((_, k) => {
                   const idx = k * 2 + tm;
-                  const sd = room.seats[idx];
+                  const sd = room.seats.find((x) => x.slot === idx);
                   if (sd) return <Seat key={sd.memberId} seat={sd} you={sd.memberId === room.you} />;
-                  return <div key={`e${idx}`} className="am-seat empty">{idx < room.max ? t("ফাঁকা আসন", "Empty seat") : t("কম্পিউটার", "Computer")}</div>;
+                  if (idx >= room.max) return <div key={`e${idx}`} className="am-seat empty">{t("কম্পিউটার", "Computer")}</div>;
+                  return (
+                    <button key={`e${idx}`} type="button" className="am-seat empty take" disabled={busy} onClick={() => run(async () => setRoom(await arenaSeatSet({ data: { id: room.id, slot: idx } })))}>
+                      {t("এখানে বসুন", "Tap to sit here")}
+                    </button>
+                  );
                 })}
               </div>
             ))}
@@ -698,7 +703,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       const hostSeat = seats.current.find((s) => s.memberId === meId);
       const G = quick && guest && hostSeat
         ? newMpQuick({ member: meId, name: hostSeat.name, picks: loadSquad() as QuickPick[] }, { member: guest.memberId, name: guest.name, picks: (squadsOf.get(guest.memberId) ?? cleanSquad(null)) as QuickPick[] }, "random")
-        : newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves, team: seats.current.findIndex((x) => x.memberId === s.memberId) % 2 })), coop ? "survival" : "royale", teamBattle);
+        : newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves, team: (s.slot ?? seats.current.findIndex((x) => x.memberId === s.memberId)) % 2 })), coop ? "survival" : "royale", teamBattle);
       begin(G);
       // the host is always the first fighter
       G.fighters.sort((a, b) => (a.member === meId ? -1 : b.member === meId ? 1 : 0));

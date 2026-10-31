@@ -295,3 +295,5 @@
 .am-sq.on { border-color: #ffd54a; background: rgba(255, 213, 74, 0.12); }
 .am-sq img, .am-sq canvas { width: 48px; height: 48px; }
 .am-sq small { position: absolute; top: 4px; left: 8px; opacity: 0.6; }
+.am-seat.empty.take { cursor: pointer; font: inherit; color: inherit; width: 100%; }
+.am-seat.empty.take:hover { border-style: solid; background: rgba(255, 255, 255, 0.06); }

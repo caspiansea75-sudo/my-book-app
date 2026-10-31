@@ -10,7 +10,7 @@ import { ROSTER, TERA_TYPES, cleanMoves, gimmicksFor } from "@/lib/pokemon/arena
  */
 
 export type ArenaPick = { species: string; gimmick: string; mega: string; tera: string; moves: string[] };
-export type ArenaSeat = ArenaPick & { memberId: number; name: string; avatarUrl: string | null; host: boolean; points: number; wins: number; kos: number };
+export type ArenaSeat = ArenaPick & { slot: number; memberId: number; name: string; avatarUrl: string | null; host: boolean; points: number; wins: number; kos: number };
 export type ArenaMode = "royale" | "coop" | "team" | "quick"; // team = Team Battle 3v3 (two sides, the computer fills empty seats)
 export type ArenaRoomView = {
   id: number;
@@ -61,11 +61,22 @@ type RoomRow = { id: number; host_id: number; max_players: number; status: "open
 
 async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
   const sql = await getSql();
-  const rows = await sql<{ member_id: number; species: string; gimmick: string; mega: string; tera: string; moves: string; display_name: string; avatar_id: number | null; points: number; wins: number; kos: number }>`
-    select p.member_id, p.species, p.gimmick, p.mega, p.tera, p.moves, p.points, p.wins, p.kos, m.display_name, m.avatar_id
+  const rows = await sql<{ member_id: number; species: string; gimmick: string; mega: string; tera: string; moves: string; display_name: string; avatar_id: number | null; points: number; wins: number; kos: number; slot: number | null }>`
+    select p.slot, p.member_id, p.species, p.gimmick, p.mega, p.tera, p.moves, p.points, p.wins, p.kos, m.display_name, m.avatar_id
     from arena_room_players p join members m on m.id = p.member_id
     where p.room_id = ${room.id} order by p.joined_at
   `;
+  // everybody gets a seat number: the one they chose if it is free, otherwise the lowest free one
+  const used = new Set<number>();
+  const slots = new Map<number, number>();
+  for (const r of rows) if (r.slot !== null && r.slot >= 0 && r.slot < room.max_players && !used.has(r.slot)) (used.add(r.slot), slots.set(r.member_id, r.slot));
+  for (const r of rows) {
+    if (slots.has(r.member_id)) continue;
+    let k = 0;
+    while (used.has(k)) k++;
+    used.add(k);
+    slots.set(r.member_id, k);
+  }
   return {
     id: room.id,
     hostId: room.host_id,
@@ -79,6 +90,7 @@ async function viewOf(room: RoomRow, youId: number): Promise<ArenaRoomView> {
     reportedRound: room.reported_round,
     you: youId,
     seats: rows.map((r) => ({
+      slot: slots.get(r.member_id)!,
       memberId: r.member_id,
       name: r.display_name,
       avatarUrl: r.avatar_id ? `/api/chat-image/${r.avatar_id}` : null,
@@ -262,4 +274,21 @@ export const arenaNextRound = createServerFn({ method: "POST" })
       await sql`update arena_rooms set cur_round = cur_round + 1, round = round + 1, updated_at = now() where id = ${room.id} and round = ${room.round}`;
     }
     return viewOf(await roomOf(data.id), me.id);
+  });
+
+/** Team Battle: move to another seat (even seat numbers are Team A, odd ones Team B). Only a free seat can be taken. */
+export const arenaSeatSet = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int(), slot: z.number().int().min(0).max(5) }))
+  .handler(async ({ data }): Promise<ArenaRoomView> => {
+    const me = await requireMember();
+    const sql = await getSql();
+    const room = await roomOf(data.id);
+    if (room.status !== "open") throw new Error("লড়াই শুরু হয়ে গেছে / The fight has already started");
+    if (data.slot >= room.max_players) throw new Error("No such seat");
+    const v = await viewOf(room, me.id);
+    if (!v.seats.some((s) => s.memberId === me.id)) throw new Error("You are not in this room");
+    if (v.seats.some((s) => s.slot === data.slot && s.memberId !== me.id)) throw new Error("সিটটি নেওয়া হয়ে গেছে / That seat is taken");
+    // write everybody's current seat down first, so choosing one never shuffles the others
+    for (const s of v.seats) await sql`update arena_room_players set slot = ${s.memberId === me.id ? data.slot : s.slot} where room_id = ${room.id} and member_id = ${s.memberId}`;
+    return viewOf(room, me.id);
   });
