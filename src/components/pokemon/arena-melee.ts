@@ -77,7 +77,7 @@ const LIFE: Record<Style, number> = { claws: 0.55, blade: 0.5, xslash: 0.45, win
 /** Moves drawn by the renderer itself. */
 export const MELEE_OWN = new Set(["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"]);
 
-type Fx = { fid: number; id: string; type: string; ang: number; t0: number; style: Style; c1: string; c2: string; flav: string; shook: boolean; seed: number };
+type Fx = { fid: number; id: string; type: string; ang: number; t0: number; style: Style; c1: string; c2: string; flav: string; shook: boolean; hit: boolean; seed: number };
 type Emit = (p: Record<string, unknown>) => void;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -106,7 +106,7 @@ export class MeleeFx {
     const row = T[d.mv.id] ?? T[id];
     const c = TYPE_COLOR[d.mv.type] ?? "#ffffff";
     const [style, c1, c2, flav] = row ?? (["ram", c, "#ffffff", "star"] as [Style, string, string, string]);
-    this.list.push({ fid: f.id, id: d.mv.id, type: d.mv.type, ang: Math.atan2(d.dy, d.dx), t0: t, style, c1, c2, flav, shook: false, seed: Math.random() * 100 });
+    this.list.push({ fid: f.id, id: d.mv.id, type: d.mv.type, ang: Math.atan2(d.dy, d.dx), t0: t, style, c1, c2, flav, shook: false, hit: false, seed: Math.random() * 100 });
   }
 
   draw(g: CanvasRenderingContext2D, f: Fighter, t: number, emit: Emit, shake: (a: number, s: number) => void) {
@@ -145,8 +145,49 @@ export class MeleeFx {
         case "spin": spin(g, e, cx, cy, f.r, p, t, emit); break;
       }
       g.restore();
+      // the moment of contact throws a big burst of particles; a trail of sparks follows the whole move
+      const at = HIT_AT[e.style];
+      if (!e.hit && p >= at) {
+        e.hit = true;
+        const big = e.style === "stomp" || e.style === "hammer" || e.style === "ram" || e.style === "bird" || e.flav === "power" || e.flav === "star";
+        contact(e, tipx, tipy, s, big, emit);
+      }
+      if (p < at + 0.25) trailSparks(e, cx, cy, f.r, p, emit);
     }
   }
+}
+
+/** When (as a share of the move) each style makes contact. */
+const HIT_AT: Record<Style, number> = { claws: 0.2, blade: 0.3, xslash: 0.15, wing: 0.25, fist: 0.2, jaws: 0.42, kick: 0.4, stomp: 0.2, tail: 0.3, ram: 0.22, speed: 0.3, lance: 0.25, drill: 0.25, bird: 0.3, hammer: 0.5, spin: 0.2, phantom: 0.35 };
+
+/** A burst at the point of contact: sparks, streaks, a glow, rings, dust and bits of the element. */
+function contact(e: Fx, x: number, y: number, s: number, big: boolean, emit: Emit) {
+  const n = big ? 30 : 20;
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, PI2), v = rnd(120, big ? 520 : 380);
+    emit({ kind: "spark", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, g: 340, life: rnd(0.35, 0.9), max: 0.9, size: rnd(1.5, 3.4), grow: 0, color: i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? e.c2 : e.c1 });
+  }
+  for (let i = 0; i < (big ? 12 : 7); i++) {
+    const a = e.ang + rnd(-0.9, 0.9), v = rnd(260, 560);
+    emit({ kind: "streak", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, life: 0.28, max: 0.28, size: rnd(5, 9), grow: 0, color: i % 2 ? "#ffffff" : e.c1 });
+  }
+  emit({ kind: "glow", x, y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: s * 0.5, grow: s * 2.2, color: e.c1 });
+  emit({ kind: "ring", x, y, vx: 0, vy: 0, g: 0, life: 0.4, max: 0.4, size: 6, grow: s * 3.2, color: e.c2 });
+  emit({ kind: "gring", x, y: y + 8, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 6, grow: s * 3.6, color: e.c1 });
+  flavour(e, x, y, emit, big ? 14 : 9);
+  for (let i = 0; i < (big ? 8 : 4); i++) emit({ kind: "smoke", x: x + rnd(-s * 0.4, s * 0.4), y: y + rnd(-s * 0.2, s * 0.3), vx: rnd(-70, 70), vy: rnd(-70, -10), g: 0, life: rnd(0.6, 1), max: 1, size: rnd(8, 14), grow: 26, color: i % 2 ? "#d4c7b0" : "#9a8f80" });
+}
+
+/** Sparks and element bits shed all along the move, forward of the attacker, drifting behind. */
+function trailSparks(e: Fx, cx: number, cy: number, r: number, p: number, emit: Emit) {
+  const reach = r * (1.3 + 1.2 * Math.min(1, p / 0.25));
+  for (let i = 0; i < 3; i++) {
+    const a = e.ang + rnd(-0.9, 0.9);
+    const d = rnd(0.6, 1) * reach;
+    const x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
+    emit({ kind: "spark", x, y, vx: rnd(-60, 60) - Math.cos(e.ang) * 90, vy: rnd(-60, 60) - Math.sin(e.ang) * 90, g: 60, life: rnd(0.3, 0.7), max: 0.7, size: rnd(1.4, 3), grow: 0, color: Math.random() < 0.5 ? e.c2 : e.c1 });
+  }
+  if (Math.random() < 0.6) flavour(e, cx + Math.cos(e.ang) * reach, cy + Math.sin(e.ang) * reach, emit, 1);
 }
 
 /* ------------------------------------------------------------------ shared pieces */
