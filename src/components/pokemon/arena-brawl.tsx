@@ -795,14 +795,16 @@ export function ArenaBrawl() {
                     <i key={i} className={`${f.alive ? "" : "dead"} ${f.active ? "act" : ""}`}><u style={{ width: `${f.alive ? Math.max(0, (f.hp / f.max) * 100) : 0}%` }} /></i>
                   ))}
                 </div>
-                {hud.squad.map((m, i) => (
-                  <button key={i} type="button" disabled={!m.alive || m.active || (hud.swapCd ?? 0) > 0} className={`ab-sq ${m.active ? "act" : ""} ${m.alive ? "" : "dead"}`} onPointerDown={(e) => { e.preventDefault(); rt.current.swapQ = i; }} aria-label={m.name}>
-                    <Sprite info={{ id: team[i] ?? "", num: speciesOf(team[i] ?? "").num, types: speciesOf(team[i] ?? "").types }} still alt={m.name} style={{ width: 32, height: 32 }} />
-                    <span className="sq-bar"><u style={{ width: `${m.alive ? Math.max(0, (m.hp / m.max) * 100) : 0}%`, background: hpColor(m.hp / m.max) }} /></span>
-                    <span className="sq-ky">{"ZXC"[i]}</span>
-                  </button>
-                ))}
-                {(hud.swapCd ?? 0) > 0 ? <small className="sq-cd">{hud.swapCd!.toFixed(1)}s</small> : null}
+                <div className="ab-sqrow">
+                  {hud.squad.map((m, i) => (
+                    <button key={i} type="button" disabled={!m.alive || m.active || (hud.swapCd ?? 0) > 0} className={`ab-sq ${m.active ? "act" : ""} ${m.alive ? "" : "dead"}`} onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); rt.current.swapQ = i; }} aria-label={m.name} title={`${m.name} (${"ZXC"[i]})`}>
+                      <Sprite info={{ id: team[i] ?? "", num: speciesOf(team[i] ?? "").num, types: speciesOf(team[i] ?? "").types }} still alt={m.name} style={{ width: 34, height: 34 }} />
+                      <span className="sq-bar"><u style={{ width: `${m.alive ? Math.max(0, (m.hp / m.max) * 100) : 0}%`, background: hpColor(m.hp / m.max) }} /></span>
+                      <span className="sq-ky">{"ZXC"[i]}</span>
+                    </button>
+                  ))}
+                </div>
+                {(hud.swapCd ?? 0) > 0 ? <small className="sq-cd">{t("বদল", "swap")} {hud.swapCd!.toFixed(1)}s</small> : null}
               </div>
             ) : null}
             {hud.combo > 1 ? <div className="ab-combo pulse">{t("কম্বো", "COMBO")} ×{hud.combo}</div> : null}
