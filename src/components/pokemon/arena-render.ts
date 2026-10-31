@@ -125,15 +125,21 @@ export class ArenaRenderer {
   }
   /** s: how much the floor's depth is squashed; c: how fast things shrink with distance; tz: extra zoom so the floor still fills the frame. */
   private get tp() {
+    // fv / ov: how tall Pokémon / scenery look next to the floor (higher camera = more foreshortened, lower = taller)
+    // sh: how round the shadows and rings under things are (they are drawn for a low camera; seen from higher they open up)
     switch (this.tilt) {
-      case 60: return { s: 0.866, c: 0.2, tz: 1.1, vs: 1.04 };
-      case 45: return { s: 0.707, c: 0.38, tz: 1.25, vs: 1.08 };
-      case 30: return { s: 0.5, c: 0.6, tz: 1.5, vs: 1.14 };
-      default: return { s: 1, c: 0, tz: 1, vs: 1 };
+      case 60: return { s: 0.866, c: 0.2, tz: 1.1, fv: 0.9, ov: 0.93, sh: 2.0 };
+      case 45: return { s: 0.707, c: 0.38, tz: 1.25, fv: 1.0, ov: 1.08, sh: 1.65 };
+      case 30: return { s: 0.5, c: 0.6, tz: 1.5, fv: 1.15, ov: 1.24, sh: 1.2 };
+      default: return { s: 1, c: 0, tz: 1, fv: 1, ov: 1, sh: 1 };
     }
   }
   private get tilted() {
     return this.tilt < 90;
+  }
+  /** Multiplies the short radius of a shadow or ring under a Pokémon. */
+  private get gk() {
+    return this.tp.sh;
   }
   /** Floor point (world) -> place on the canvas, in arena units. */
   private proj(x: number, y: number) {
@@ -144,12 +150,13 @@ export class ArenaRenderer {
     return { x: ARENA.CX + (x - this.camX) * Z * f, y: ARENA.CY + Z * s * (dy + (c * dy * dy) / (2 * ARENA.H)), f, Z };
   }
   /** Run a drawing at a world point: "bb" stands upright there (a billboard), "fl" lies flat on the floor. */
-  private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl", fn: () => void, tall = 1) {
+  private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix", fn: () => void, kind: "f" | "o" | "p" = "p") {
     if (!this.tilted) return fn();
-    const { s, vs } = this.tp;
+    const { s, fv, ov } = this.tp;
     const q = this.proj(x, y);
     const sx = q.Z * q.f;
-    const sy = mode === "fl" ? sx * s : sx * (1 + (vs - 1) * tall);
+    // bb: stands upright (Pokémon, scenery); fl: lies on the floor; mix: in between (shots and streaks that travel along the floor)
+    const sy = mode === "fl" ? sx * s : mode === "mix" ? sx * (1 - (1 - s) * 0.45) : sx * (kind === "f" ? fv : kind === "o" ? ov : 1);
     const k = this.scale;
     g.save();
     g.setTransform(k * sx, 0, 0, k * sy, k * (q.x + this.shx - x * sx), k * (q.y + this.shy - y * sy));
@@ -193,6 +200,48 @@ export class ArenaRenderer {
     const k = w / ARENA.W;
     x.setTransform(k, 0, 0, k, 0, 0);
     return x;
+  }
+  /** What lies beyond the far edge of the floor when the camera is tilted: a sky for the place and distant hills. */
+  private drawBackdrop(g: CanvasRenderingContext2D, S: State) {
+    const SKY: Record<string, [string, string, string]> = {
+      grass: ["#3a6fa8", "#a9d6c2", "#2b5a34"],
+      stone: ["#2a2f45", "#7c7fa0", "#1c1f30"],
+      dirt: ["#c9763a", "#f2c27a", "#5a3a22"],
+      crystal: ["#150a2e", "#4a2a86", "#120a24"],
+      ice: ["#5c86b8", "#dcefff", "#7ea0c4"],
+      lava: ["#1c0806", "#c2410c", "#2a0d08"],
+      coast: ["#2e86c1", "#bfe6f5", "#e6c78c"],
+    };
+    const [top, hor, hill] = SKY[S.stage] ?? SKY.stone!;
+    const far = this.proj(ARENA.CX, 0);
+    const horizon = Math.max(0, far.y + this.shy);
+    g.save();
+    g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    g.fillStyle = "#04070d";
+    g.fillRect(0, 0, ARENA.W, ARENA.H);
+    if (horizon > 4) {
+      const sky = g.createLinearGradient(0, 0, 0, horizon);
+      sky.addColorStop(0, top);
+      sky.addColorStop(1, hor);
+      g.fillStyle = sky;
+      g.fillRect(0, 0, ARENA.W, horizon + 2);
+      // distant hills, drifting slightly against the camera
+      const sh = Math.min(70, horizon * 0.55);
+      const drift = -this.camX * 0.05;
+      for (let layer = 0; layer < 2; layer++) {
+        g.fillStyle = layer === 0 ? hill + "88" : hill;
+        g.beginPath();
+        g.moveTo(0, horizon + 2);
+        for (let x = 0; x <= ARENA.W; x += 12) {
+          const w = Math.sin((x + drift * (1 + layer)) * 0.011 + layer * 2.1) * 0.5 + Math.sin((x + drift) * 0.027 + layer) * 0.3;
+          g.lineTo(x, horizon - sh * (0.35 + 0.5 * (w + 0.8) / 1.6) * (layer === 0 ? 1 : 0.6));
+        }
+        g.lineTo(ARENA.W, horizon + 2);
+        g.closePath();
+        g.fill();
+      }
+    }
+    g.restore();
   }
   /** Put the flat floor layer on screen, with a haze over the far end. */
   private finishGround(g: CanvasRenderingContext2D, G: CanvasRenderingContext2D) {
@@ -906,11 +955,7 @@ export class ArenaRenderer {
     let G = g;
     if (T) {
       // the floor and everything lying on it is drawn flat first, then laid onto the tilted ground
-      const sky = g.createLinearGradient(0, 0, 0, ARENA.H);
-      sky.addColorStop(0, "#0b1426");
-      sky.addColorStop(1, "#04070d");
-      g.fillStyle = sky;
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      this.drawBackdrop(g, S);
       G = this.layer("gc");
     } else {
       g.translate(ARENA.CX, ARENA.CY);
@@ -992,8 +1037,8 @@ export class ArenaRenderer {
 
     // crates, pillars and Pokémon are drawn back to front so they stand behind and in front of each other
     const things: { y: number; draw: () => void }[] = [];
-    for (const o of S.obs) if (o.hp > 0) things.push({ y: o.y, draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), 2.5) });
-    for (const f of S.fighters) if (f.alive || f.koT < 0.01) things.push({ y: f.y, draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), 0.6) });
+    for (const o of S.obs) if (o.hp > 0) things.push({ y: o.y, draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), "o") });
+    for (const f of S.fighters) if (f.alive || f.koT < 0.01) things.push({ y: f.y, draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
     this.drawProjs(g, S);
@@ -1011,7 +1056,9 @@ export class ArenaRenderer {
       if (T) {
         const q = this.proj(p.x, p.y);
         const sx = q.Z * q.f;
-        const sy = p.kind === "gring" ? sx * this.tp.s : sx;
+        const flat = p.kind === "gring" || p.kind === "crack";
+        const mixed = p.kind === "streak" || p.kind === "arc" || p.kind === "ring";
+        const sy = flat ? sx * this.tp.s : mixed ? sx * (1 - (1 - this.tp.s) * 0.45) : sx;
         g.save();
         g.setTransform(this.scale * sx, 0, 0, this.scale * sy, this.scale * (q.x + this.shx - p.x * sx), this.scale * (q.y + this.shy - p.y * sy));
       }
@@ -3730,7 +3777,7 @@ export class ArenaRenderer {
         continue;
       }
       const c = col(p.type);
-      this.at(g, p.x, p.y, "bb", () => drawShot(g, p, S.time - p.born, this.t), 0.5);
+      this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t));
       this.trail(p, c);
     }
     for (const [owner, list] of streams) {
@@ -4244,7 +4291,7 @@ export class ArenaRenderer {
         const k = (t * 1.1 + i * 0.5) % 1;
         g.globalAlpha = 1 - k;
         g.beginPath();
-        g.ellipse(f.x, f.y + f.r * 0.6, f.r * (1.1 + k * 1.2), f.r * (0.4 + k * 0.5), 0, 0, Math.PI * 2);
+        g.ellipse(f.x, f.y + f.r * 0.6, f.r * (1.1 + k * 1.2), (f.r * (0.4 + k * 0.5)) * this.gk, 0, 0, Math.PI * 2);
         g.stroke();
       }
       g.globalAlpha = 0.7;
@@ -4271,13 +4318,13 @@ export class ArenaRenderer {
       const sk = clamp(1 - lift / 90, 0.45, 1) * shadowK;
       g.fillStyle = `rgba(0,0,0,${0.4 * sk})`;
       g.beginPath();
-      g.ellipse(f.x, f.y + f.r * 0.75, f.r * 1.15 * sk, f.r * 0.42 * sk, 0, 0, Math.PI * 2);
+      g.ellipse(f.x, f.y + f.r * 0.75, f.r * 1.15 * sk, (f.r * 0.42 * sk) * this.gk, 0, 0, Math.PI * 2);
       g.fill();
     }
     g.strokeStyle = isYou ? "rgba(120,255,160,.9)" : this.teamMode && f.team === this.youTeam ? "rgba(110,185,255,.9)" : "rgba(255,110,100,.75)";
     g.lineWidth = 2.5;
     g.beginPath();
-    g.ellipse(f.x, f.y + f.r * 0.75, f.r * 1.3, f.r * 0.5, 0, 0, Math.PI * 2);
+    g.ellipse(f.x, f.y + f.r * 0.75, f.r * 1.3, (f.r * 0.5) * this.gk, 0, 0, Math.PI * 2);
     g.stroke();
     g.restore();
 
@@ -4327,11 +4374,11 @@ export class ArenaRenderer {
       g.save();
       g.fillStyle = "#5c4128";
       g.beginPath();
-      g.ellipse(f.x, f.y + f.r * 0.45, f.r * 1.5, f.r * 0.62, 0, 0, Math.PI * 2);
+      g.ellipse(f.x, f.y + f.r * 0.45, f.r * 1.5, (f.r * 0.62) * this.gk, 0, 0, Math.PI * 2);
       g.fill();
       g.fillStyle = "#8a6a45";
       g.beginPath();
-      g.ellipse(f.x, f.y + f.r * 0.3, f.r * 1.05, f.r * 0.4, 0, 0, Math.PI * 2);
+      g.ellipse(f.x, f.y + f.r * 0.3, f.r * 1.05, (f.r * 0.4) * this.gk, 0, 0, Math.PI * 2);
       g.fill();
       for (let i = 1; i < 10; i += 2) {
         const h = hist[i];
@@ -4487,7 +4534,7 @@ export class ArenaRenderer {
       g.save();
       g.fillStyle = "rgba(70,150,220,.35)";
       g.beginPath();
-      g.ellipse(f.x, f.y + f.r * 0.25, f.r * 1.35, f.r * 0.5, 0, 0, Math.PI * 2);
+      g.ellipse(f.x, f.y + f.r * 0.25, f.r * 1.35, (f.r * 0.5) * this.gk, 0, 0, Math.PI * 2);
       g.fill();
       g.strokeStyle = "rgba(225,242,255,.8)";
       g.lineWidth = 2;
@@ -4495,7 +4542,7 @@ export class ArenaRenderer {
         const k = (t * 0.9 + i / 2) % 1;
         g.globalAlpha = 1 - k;
         g.beginPath();
-        g.ellipse(f.x, f.y + f.r * 0.25, f.r * (1 + k * 0.7), f.r * (0.4 + k * 0.3), 0, 0, Math.PI * 2);
+        g.ellipse(f.x, f.y + f.r * 0.25, f.r * (1 + k * 0.7), (f.r * (0.4 + k * 0.3)) * this.gk, 0, 0, Math.PI * 2);
         g.stroke();
       }
       g.restore();
@@ -4685,7 +4732,7 @@ export class ArenaRenderer {
         const q = (mt * 1.4 + i / 2) % 1;
         g.globalAlpha = (1 - q) * k;
         g.beginPath();
-        g.ellipse(f.x, f.y + r * 0.6, r * (1 + q * 3), r * (0.4 + q * 1.1), 0, 0, Math.PI * 2);
+        g.ellipse(f.x, f.y + r * 0.6, r * (1 + q * 3), (r * (0.4 + q * 1.1)) * this.gk, 0, 0, Math.PI * 2);
         g.stroke();
       }
     } else if (m.kind === "tera") {
