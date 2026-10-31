@@ -277,3 +277,13 @@
 .ab-squad .sq-cd { font-size: 10px; color: #cfeaff; opacity: 0.85; }
 @media (max-width: 700px) { .ab-sq { width: 38px; } .ab-sq img { width: 28px !important; height: 28px !important; } }
 .ab-squad ~ .ab-combo { top: 74px; }
+
+/* Team Battle lobby */
+.am-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.am-team { border-radius: 12px; padding: 8px; display: grid; gap: 6px; align-content: start; }
+.am-team h4 { margin: 0 0 2px; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+.am-team.t0 { background: rgba(80, 150, 255, 0.12); border: 1px solid rgba(110, 185, 255, 0.35); }
+.am-team.t0 h4 { color: #74c0fc; }
+.am-team.t1 { background: rgba(255, 90, 80, 0.1); border: 1px solid rgba(255, 130, 120, 0.35); }
+.am-team.t1 h4 { color: #ff8a8a; }
+@media (max-width: 520px) { .am-teams { grid-template-columns: 1fr; } }

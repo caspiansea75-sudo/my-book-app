@@ -250,6 +250,8 @@ export type State = {
   easy: number;
   /** Multiplayer royale (2-5 members, no computer fighters). */
   mp?: boolean;
+  /** Multiplayer Team Battle (3v3): two sides, computer fighters fill empty seats. */
+  teamBattle?: boolean;
   /** Multiplayer: the fighter id of the champion once the fight is over (0 = nobody, a draw). */
   winnerId?: number;
   /** When two beams last met (so the steam is not spawned every frame). */
@@ -587,10 +589,10 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   return S;
 }
 
-export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[] };
+export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[]; /** Team Battle: 0 = Team A (left), 1 = Team B (right). */ team?: number };
 
 /** A battle royale between 2-5 members: every fighter is steered by a person, nobody else is in the arena. */
-export function newMpGame(players: MpPlayer[], mode: Mode = "royale"): State {
+export function newMpGame(players: MpPlayer[], mode: Mode = "royale", teamBattle = false): State {
   const first = players[0]!;
   const S = newGame(mode, first.species, { gimmick: first.gimmick, mega: first.mega, tera: first.tera });
   // newGame made the first human and four computer fighters: keep only the humans
@@ -598,6 +600,7 @@ export function newMpGame(players: MpPlayer[], mode: Mode = "royale"): State {
   S.nextId = 1;
   S.mp = true;
   const n = players.length;
+  if (teamBattle) return newTeamBattle(S, players);
   players.forEach((pl, i) => {
     const a = (i / n) * Math.PI * 2 - Math.PI / 2;
     // royale: everybody on their own team around the ring. Co-op: one team in a line on the left.
@@ -615,6 +618,50 @@ export function newMpGame(players: MpPlayer[], mode: Mode = "royale"): State {
     f.face = mode === "royale" ? Math.atan2(CY - f.y, CX - f.x) : 0;
     S.fighters.push(f);
   });
+  unstick(S);
+  return S;
+}
+
+/** Team Battle (3v3): people on two sides; seats nobody fills are played by the computer, so each side always has three. */
+function newTeamBattle(S: State, players: MpPlayer[]): State {
+  const sides: MpPlayer[][] = [[], []];
+  players.forEach((pl, i) => sides[pl.team === 1 || (pl.team === undefined && i % 2 === 1) ? 1 : 0]!.push(pl));
+  const taken = new Set(players.map((p) => p.species));
+  const pool = ROSTER.filter((x) => !taken.has(x.id) && !x.unlock);
+  for (const team of [0, 1]) {
+    const mine = sides[team]!;
+    for (let i = 0; i < 3; i++) {
+      const x = team === 0 ? 230 : W - 230;
+      const y = CY + (i - 1) * 130;
+      const pl = mine[i];
+      if (pl) {
+        const f = makeFighter(S, speciesOf(pl.species), team, true, x, y);
+        f.gimmick = pl.gimmick ?? "awaken";
+        f.megaForm = (MEGAS[pl.species] ?? []).find((m) => m.id === pl.mega) ?? MEGAS[pl.species]?.[0] ?? null;
+        if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
+        if (pl.tera && TERA_TYPES.includes(pl.tera)) f.teraType = pl.tera;
+        f.loadout = cleanMoves(pl.species, pl.moves);
+        f.member = pl.member;
+        f.name = pl.name;
+        f.face = team === 0 ? 0 : Math.PI;
+        S.fighters.push(f);
+      } else {
+        const sp = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
+        const f = makeFighter(S, sp, team, false, x, y, { hp: 1, dmg: 0.95 });
+        const kinds = gimmicksFor(sp.id);
+        f.cpuGimmick = true;
+        f.gimmick = kinds[Math.floor(Math.random() * kinds.length)]!;
+        const forms = MEGAS[sp.id] ?? [];
+        f.megaForm = forms[Math.floor(Math.random() * forms.length)] ?? null;
+        f.teraType = TERA_TYPES[Math.floor(Math.random() * TERA_TYPES.length)]!;
+        f.name = "CPU";
+        f.face = team === 0 ? 0 : Math.PI;
+        S.fighters.push(f);
+      }
+    }
+  }
+  S.storm.on = false;
+  S.teamBattle = true;
   unstick(S);
   return S;
 }
@@ -1903,7 +1950,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
 
   // ---- the shrinking storm (royale)
   if (S.mode === "royale") {
-    if (!S.storm.on && S.time > 22) {
+    if (!S.storm.on && S.time > (S.teamBattle ? 70 : 22)) {
       S.storm.on = true;
       S.events.push({ t: "storm" });
     }
@@ -1990,10 +2037,11 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
   if (S.mp) {
     const alive = S.fighters.filter((f) => f.alive);
     for (const f of S.fighters) if (!f.alive && !f.place) f.place = alive.length + 1;
-    if (alive.length <= 1) {
+    // over when one side is left (in a royale everyone is their own side, so it is the last one standing; a team battle ends when a whole team is down)
+    if (new Set(alive.map((f) => f.team)).size <= 1) {
       S.phase = "over";
       S.winnerId = alive[0]?.id ?? 0;
-      if (alive[0]) alive[0].place = 1;
+      for (const f of alive) f.place = 1;
       S.events.push({ t: "over", win: false });
     }
     return;

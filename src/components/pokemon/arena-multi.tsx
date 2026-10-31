@@ -216,13 +216,29 @@ export function ArenaMulti() {
     return (
       <div className="ab-menu am">
         <div className="am-head">
-          <h3>{t("অপেক্ষার ঘর", "Waiting room")} · {room.seats.length}/{room.max} · {room.mode === "coop" ? t("টিম সারভাইভাল", "Co-op Survival") : t("ব্যাটল রয়্যাল · ৩ রাউন্ড", "Battle Royale · 3 rounds")}</h3>
+          <h3>{t("অপেক্ষার ঘর", "Waiting room")} · {room.seats.length}/{room.max} · {room.mode === "coop" ? t("টিম সারভাইভাল", "Co-op Survival") : room.mode === "team" ? t("টিম ব্যাটল ৩ বনাম ৩", "Team Battle 3v3") : t("ব্যাটল রয়্যাল · ৩ রাউন্ড", "Battle Royale · 3 rounds")}</h3>
           <p>{isHost ? t("কমপক্ষে ২ জন হলে শুরু করুন। বন্ধুরা এই পাতার “অনলাইন” ট্যাব থেকে রুমটি দেখে ঢুকতে পারবে।", "Start when at least 2 are in. Friends find this room under the Online tab of this page.") : t("হোস্ট শুরু করলে লড়াই শুরু হবে।", "The fight starts when the host starts it.")}</p>
         </div>
-        <div className="am-seats">
-          {room.seats.map((s) => <Seat key={s.memberId} seat={s} you={s.memberId === room.you} />)}
-          {empty.map((_, i) => <div key={`e${i}`} className="am-seat empty">{t("ফাঁকা আসন", "Empty seat")}</div>)}
-        </div>
+        {room.mode === "team" ? (
+          <div className="am-teams">
+            {[0, 1].map((tm) => (
+              <div key={tm} className={`am-team t${tm}`}>
+                <h4>{tm === 0 ? t("দল এ", "Team A") : t("দল বি", "Team B")}</h4>
+                {Array.from({ length: 3 }).map((_, k) => {
+                  const idx = k * 2 + tm;
+                  const sd = room.seats[idx];
+                  if (sd) return <Seat key={sd.memberId} seat={sd} you={sd.memberId === room.you} />;
+                  return <div key={`e${idx}`} className="am-seat empty">{idx < room.max ? t("ফাঁকা আসন", "Empty seat") : t("কম্পিউটার", "Computer")}</div>;
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="am-seats">
+            {room.seats.map((s) => <Seat key={s.memberId} seat={s} you={s.memberId === room.you} />)}
+            {empty.map((_, i) => <div key={`e${i}`} className="am-seat empty">{t("ফাঁকা আসন", "Empty seat")}</div>)}
+          </div>
+        )}
         <PickPanel pick={pick} onChange={setPick} />
         {err ? <div className="am-err">{err}</div> : null}
         <div className="ab-row">
@@ -247,17 +263,21 @@ export function ArenaMulti() {
       <div className="am-create">
         <b>{t("নতুন রুম", "New room")}</b>
         <div className="ab-modes">
-          <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => setMode("royale")}>
+          <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => { setMode("royale"); setMax((m) => Math.min(5, m)); }}>
             <b>{t("ব্যাটল রয়্যাল", "Battle Royale")}</b>
             <span>{t("৩ রাউন্ড, সবাই সবার শত্রু। স্থান অনুযায়ী পয়েন্ট; সবচেয়ে বেশি পয়েন্ট জেতে।", "3 rounds, everyone against everyone. Places earn points; most points wins the match.")}</span>
           </button>
-          <button type="button" className={`ab-mode ${mode === "coop" ? "on" : ""}`} onClick={() => setMode("coop")}>
+          <button type="button" className={`ab-mode ${mode === "team" ? "on" : ""}`} onClick={() => { setMode("team"); setMax(6); }}>
+            <b>{t("টিম ব্যাটল ৩ বনাম ৩", "Team Battle 3v3")}</b>
+            <span>{t("দুই দল, প্রতি দলে ৩ জন। ফাঁকা আসনে কম্পিউটার খেলে। একদল পুরো হারলে লড়াই শেষ।", "Two teams of three. Empty seats are played by the computer. The fight ends when a whole team is down.")}</span>
+          </button>
+          <button type="button" className={`ab-mode ${mode === "coop" ? "on" : ""}`} onClick={() => { setMode("coop"); setMax((m) => Math.min(5, m)); }}>
             <b>{t("টিম সারভাইভাল", "Co-op Survival")}</b>
             <span>{t("সবাই মিলে ওয়েভের বিরুদ্ধে। পড়ে গেলে পরের ওয়েভে সঙ্গীরা উঠে দাঁড়ায়। প্রতি ওয়েভের পর সবাই একটি পার্ক নেয়।", "Team up against the waves. Fallen teammates get back up next wave. Everyone picks a perk after each wave.")}</span>
           </button>
         </div>
         <div className="ab-chips">
-          {[2, 3, 4, 5].map((n) => (
+          {(mode === "team" ? [2, 3, 4, 5, 6] : [2, 3, 4, 5]).map((n) => (
             <button key={n} type="button" className={`ab-chip ${max === n ? "on" : ""}`} onClick={() => setMax(n)}>{n} {t("জন", "players")}</button>
           ))}
         </div>
@@ -271,7 +291,7 @@ export function ArenaMulti() {
             <div key={r.id} className="am-room">
               <div>
                 <b>{r.host}</b>
-                <small> · {r.count}/{r.max} · {r.mode === "coop" ? t("টিম সারভাইভাল", "Co-op") : t("রয়্যাল ×৩", "Royale ×3")}</small>
+                <small> · {r.count}/{r.max} · {r.mode === "coop" ? t("টিম সারভাইভাল", "Co-op") : r.mode === "team" ? t("টিম ৩ বনাম ৩", "Team 3v3") : t("রয়্যাল ×৩", "Royale ×3")}</small>
                 <div className="am-names">{r.names.join(", ")}</div>
               </div>
               <button type="button" className="ab-btn" disabled={busy || r.count >= r.max} onClick={() => run(async () => setRoom(await arenaJoin({ data: { id: r.id, pick } })))}>{t("ঢুকুন", "Join")}</button>
@@ -328,7 +348,7 @@ function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; 
 }
 
 type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean };
-type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean };
+type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean; team?: number };
 
 type Wire = { k: string };
 
@@ -337,6 +357,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const me = useMe();
   const isHost = init.hostId === init.you;
   const coop = init.mode === "coop";
+  const teamBattle = init.mode === "team";
   const finalRound = coop || init.curRound >= init.rounds;
   const [picked, setPicked] = useState(false);
   const cb = useRef({ onReport, onNext });
@@ -346,6 +367,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const [hud, setHud] = useState<Hud | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [team, setTeam] = useState({ wave: 0, score: 0 });
+  const [winTeam, setWinTeam] = useState<{ win: number; mine: number } | null>(null);
   const [out, setOut] = useState<number | null>(null);
   const [fs, setFs] = useState(true);
   const shell = useRef<HTMLDivElement>(null);
@@ -493,6 +515,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     let dead = false;
     let raf = 0;
     const R = new ArenaRenderer(cv);
+    R.setTeamMode(teamBattle);
     c.R = R;
     R.setZoom(c.zoom);
     R.resize();
@@ -591,7 +614,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         setStatus("empty");
         return false;
       }
-      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves })), coop ? "survival" : "royale");
+      const G = newMpGame(present.map((s) => ({ member: s.memberId, name: s.name, species: s.species, gimmick: s.gimmick as GimmickKind, mega: s.mega, tera: s.tera, moves: s.moves, team: seats.current.findIndex((x) => x.memberId === s.memberId) % 2 })), coop ? "survival" : "royale", teamBattle);
       begin(G);
       // the host is always the first fighter
       G.fighters.sort((a, b) => (a.member === meId ? -1 : b.member === meId ? 1 : 0));
@@ -742,7 +765,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           hudAt = now;
           const ids = mine.sp.moves;
           const alive = V.fighters.filter((f) => f.alive).length;
-          setOut(mine.alive ? null : coop ? 0 : mine.place ?? alive + 1);
+          setOut(mine.alive ? null : coop || teamBattle ? 0 : mine.place ?? alive + 1);
           const finishing = V.fighters.some((f) => f.alive && f.team !== mine.team && f.hp / f.maxHp < 0.2 && Math.hypot(f.x - mine.x, f.y - mine.y) < 420);
           const gl = Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0);
           setHud({
@@ -751,7 +774,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             perks: V.perks,
             wave: V.wave,
             score: V.score,
-            foes: V.fighters.filter((f) => f.alive && f.team !== 0).length,
+            foes: V.fighters.filter((f) => f.alive && f.team !== (teamBattle ? mine.team : 0)).length,
             name: mine.form?.name ?? mine.sp.name,
             hp: mine.hp,
             ghost: mine.ghost,
@@ -767,23 +790,25 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             ult: mine.ult,
             gimmick: mine.gimmick,
             gimmickT: Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0),
-            alive,
-            total: V.fighters.length,
+            alive: teamBattle ? V.fighters.filter((f) => f.alive && f.team === mine.team).length : alive,
+            total: teamBattle ? V.fighters.filter((f) => f.team === mine.team).length : V.fighters.length,
             storm: V.storm.on,
           });
         }
         if (V.phase === "over") {
           overT += dt;
           if (overT > 2) {
-            const list = coop ? [...V.fighters].sort((a, b) => b.kos - a.kos) : [...V.fighters].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
+            const wTeam = V.fighters.find((f) => f.id === V.winnerId)?.team ?? -1;
+            const list = coop ? [...V.fighters].sort((a, b) => b.kos - a.kos) : teamBattle ? [...V.fighters].sort((a, b) => (a.team === wTeam ? 0 : 1) - (b.team === wTeam ? 0 : 1) || a.team - b.team || b.kos - a.kos) : [...V.fighters].sort((a, b) => (a.place ?? 99) - (b.place ?? 99));
             if (!rowsShown.current) {
               rowsShown.current = true;
-              setRows(list.map((f, i) => ({ id: f.id, member: f.member ?? 0, name: f.name ?? "?", species: f.sp.name, place: coop ? i + 1 : f.place ?? i + 1, kos: f.kos, you: f.member === meId })));
+              setRows(list.map((f, i) => ({ id: f.id, member: f.member ?? 0, name: f.name ?? "?", species: f.sp.name, place: coop ? i + 1 : teamBattle ? (f.team === wTeam ? 1 : 2) : f.place ?? i + 1, kos: f.kos, you: f.member === meId, team: f.team })));
+              setWinTeam(teamBattle ? { win: wTeam, mine: mine?.team ?? -1 } : null);
               setTeam({ wave: V.wave, score: V.score });
-              if (!coop && V.winnerId && mine?.id === V.winnerId) sfx.win();
+              if (teamBattle ? wTeam >= 0 && mine?.team === wTeam : !coop && V.winnerId && mine?.id === V.winnerId) sfx.win();
               else sfx.lose();
               // the host writes the round into the match standings
-              if (isHost && !coop && !reported.current) {
+              if (isHost && !coop && !teamBattle && !reported.current) {
                 reported.current = true;
                 cb.current.onReport(list.map((f, i) => ({ memberId: f.member ?? 0, place: Math.min(5, f.place ?? i + 1), kos: Math.min(99, f.kos) })));
               }
@@ -913,8 +938,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             </div>
             {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
-              {coop ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("রাউন্ড", "Round")} {init.curRound}/{init.rounds}</>}
-              {coop ? <span>{t("শত্রু", "Foes")} {hud.foes}</span> : <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>}
+              {teamBattle ? <>{t("টিম ৩ বনাম ৩", "Team 3v3")}</> : coop ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : <>{t("রাউন্ড", "Round")} {init.curRound}/{init.rounds}</>}
+              {teamBattle ? <span>{t("আপনার দল", "Your team")} {hud.alive}/{hud.total} · {t("শত্রু", "Foes")} {hud.foes}</span> : coop ? <span>{t("শত্রু", "Foes")} {hud.foes}</span> : <span>{t("বেঁচে আছে", "Alive")} {hud.alive}/{hud.total}</span>}
               {coop ? <span className="sc">★ {hud.score}</span> : null}
               {hud.storm ? <span>🌀</span> : null}
             </div>
@@ -963,7 +988,9 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
 
         {out !== null && !rows && hud?.phase !== "perks" ? (
           <div className="am-out">
-            {coop
+            {teamBattle
+              ? t("আপনি পড়ে গেছেন: সঙ্গীদের খেলা দেখুন", "You are down: cheer on your team")
+              : coop
               ? t("আপনি পড়ে গেছেন: পরের ওয়েভে সঙ্গীরা আপনাকে তুলবে", "You are down: you get back up next wave")
               : t(`আপনি আউট! স্থান #${out}: দেখতে থাকুন`, `You are out! Place #${out}: keep watching`)}
           </div>
@@ -1005,6 +1032,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
                   <h2 style={{ color: "#ffb4a8" }}>{t("টিম হেরে গেছে", "The team has fallen")}</h2>
                   <p>{t("পৌঁছেছেন", "Reached")} {t("ওয়েভ", "wave")} <b>{team.wave}</b> · ★ <b>{team.score}</b></p>
                 </>
+              ) : teamBattle ? (
+                <h2 style={{ color: winTeam && winTeam.win === winTeam.mine ? "#ffd54a" : "#ffb4a8" }}>
+                  {winTeam && winTeam.win < 0 ? t("ড্র", "Draw") : winTeam && winTeam.win === winTeam.mine ? t("আপনার দল জিতেছে!", "Your team won!") : `${winTeam?.win === 0 ? t("দল এ", "Team A") : t("দল বি", "Team B")} ${t("জিতেছে", "wins")}`}
+                </h2>
               ) : (
                 <h2 style={{ color: rows[0]?.you ? "#ffd54a" : "#fff" }}>
                   {init.rounds > 1 ? `${t("রাউন্ড", "Round")} ${init.curRound}/${init.rounds}: ` : ""}
@@ -1014,7 +1045,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               <div className="am-rank">
                 {rows.map((r) => (
                   <div key={r.id} className={`am-rank-row ${r.you ? "you" : ""}`}>
-                    <b>{coop ? "" : `#${r.place}`}</b>
+                    <b>{coop ? "" : teamBattle ? (r.team === 0 ? "A" : "B") : `#${r.place}`}</b>
                     <span>{r.name}{r.you ? ` (${t("আপনি", "you")})` : ""}</span>
                     <small>{r.species} · {r.kos} KO</small>
                   </div>

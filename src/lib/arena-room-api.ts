@@ -11,7 +11,7 @@ import { ROSTER, TERA_TYPES, cleanMoves, gimmicksFor } from "@/lib/pokemon/arena
 
 export type ArenaPick = { species: string; gimmick: string; mega: string; tera: string; moves: string[] };
 export type ArenaSeat = ArenaPick & { memberId: number; name: string; avatarUrl: string | null; host: boolean; points: number; wins: number; kos: number };
-export type ArenaMode = "royale" | "coop";
+export type ArenaMode = "royale" | "coop" | "team"; // team = Team Battle 3v3 (two sides, the computer fills empty seats)
 export type ArenaRoomView = {
   id: number;
   hostId: number;
@@ -123,7 +123,7 @@ export const arenaLobby = createServerFn({ method: "GET" }).handler(async (): Pr
 });
 
 export const arenaCreate = createServerFn({ method: "POST" })
-  .validator(z.object({ max: z.number().int().min(2).max(5), mode: z.enum(["royale", "coop"]).default("royale"), pick: pickSchema }))
+  .validator(z.object({ max: z.number().int().min(2).max(6), mode: z.enum(["royale", "coop", "team"]).default("royale"), pick: pickSchema }))
   .handler(async ({ data }): Promise<ArenaRoomView> => {
     const me = await requireMember();
     const sql = await getSql();

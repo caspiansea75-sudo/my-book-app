@@ -90,6 +90,8 @@ export class ArenaRenderer {
   private camY = ARENA.CY;
 
   private tilt = 90;
+  private teamMode = false;
+  private youTeam = -1;
   private gc: HTMLCanvasElement | null = null;
   private ac: HTMLCanvasElement | null = null;
   private shx = 0;
@@ -113,6 +115,10 @@ export class ArenaRenderer {
     } catch {
       /* storage unavailable */
     }
+  }
+  /** Team Battle: allies get a blue ring and name, foes a red one. */
+  setTeamMode(on: boolean) {
+    this.teamMode = on;
   }
   getTilt() {
     return this.tilt;
@@ -886,6 +892,7 @@ export class ArenaRenderer {
     this.scorch = this.scorch.filter((sc) => sc.t > 0);
     for (const d of this.debris) d.t -= dtReal;
     this.debris = this.debris.filter((d) => d.t > 0);
+    if (you) this.youTeam = you.team;
     this.followCamera(you, dtReal);
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
@@ -4267,7 +4274,7 @@ export class ArenaRenderer {
       g.ellipse(f.x, f.y + f.r * 0.75, f.r * 1.15 * sk, f.r * 0.42 * sk, 0, 0, Math.PI * 2);
       g.fill();
     }
-    g.strokeStyle = isYou ? "rgba(120,255,160,.9)" : "rgba(255,110,100,.75)";
+    g.strokeStyle = isYou ? "rgba(120,255,160,.9)" : this.teamMode && f.team === this.youTeam ? "rgba(110,185,255,.9)" : "rgba(255,110,100,.75)";
     g.lineWidth = 2.5;
     g.beginPath();
     g.ellipse(f.x, f.y + f.r * 0.75, f.r * 1.3, f.r * 0.5, 0, 0, Math.PI * 2);
@@ -4624,7 +4631,7 @@ export class ArenaRenderer {
         g.lineWidth = 3;
         g.strokeStyle = "rgba(0,0,0,.75)";
         g.strokeText(label, f.x, base - 1, 150);
-        g.fillStyle = isYou ? "#8dffb0" : (NAME_COLORS[f.team % NAME_COLORS.length] ?? "#fff");
+        g.fillStyle = isYou ? "#8dffb0" : this.teamMode ? (f.team === this.youTeam ? "#74c0fc" : "#ff8a8a") : (NAME_COLORS[f.team % NAME_COLORS.length] ?? "#fff");
         g.fillText(label, f.x, base - 1, 150);
         g.restore();
       }
