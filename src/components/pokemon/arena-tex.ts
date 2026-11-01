@@ -8,8 +8,8 @@ export type TexKind = "lava" | "fire" | "water" | "grass" | "rock" | "sand" | "i
 type Def = { pal: string[]; vein?: string; vs?: number; ax?: number; ay?: number; warp?: number };
 
 const DEF: Record<TexKind, Def> = {
-  lava: { pal: ["#1a0a06", "#3a160a", "#7a2a0e", "#ff6a1a"], vein: "#ffe27a", vs: 0.84, warp: 0.5 },
-  fire: { pal: ["#b8360d", "#ff6a1a", "#ffb02e", "#ffe27a"], vein: "#fff6c0", vs: 0.9, warp: 0.6 },
+  lava: { pal: ["#9c1e08", "#d83e0e", "#ff7f1e", "#ffc548"], vein: "#fff3b0", vs: 0.88, warp: 0.85 },
+  fire: { pal: ["#d03a0c", "#ff761a", "#ffb838", "#ffe58a"], vein: "#fffbe0", vs: 0.88, warp: 0.85 },
   water: { pal: ["#14498f", "#1f6fc0", "#3d9be8", "#8fd3ff"], vein: "#ffffff", vs: 0.9, warp: 0.7 },
   grass: { pal: ["#2f6a2c", "#3f8a38", "#5fb04a", "#8fd870"], ay: 6 },
   rock: { pal: ["#3a352f", "#5b544b", "#837a6d", "#aaa090"], vein: "#17120e", vs: 0.9 },

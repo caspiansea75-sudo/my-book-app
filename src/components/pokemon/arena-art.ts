@@ -6,6 +6,7 @@
 import { ARENA, type Obstacle, type Patch, type Proj, type StageKind } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import { specShot } from "./arena-spec";
+import { texPat, typeTex } from "./arena-tex";
 import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
 
 const { W, H } = ARENA;
@@ -508,7 +509,8 @@ export function blob(g: CanvasRenderingContext2D, x: number, y: number, r: numbe
   g.beginPath();
   g.arc(x, y, r * 0.72 + 2, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = fill;
+  const warm = fill[0] === "#" && fill.length === 7 && parseInt(fill.slice(1, 3), 16) > 170 && parseInt(fill.slice(5, 7), 16) < 120;
+  g.fillStyle = warm ? texPat(g, "fire", x, y, 0.5) : fill;
   for (let i = 0; i < lobes; i++) {
     const a = (i / lobes) * Math.PI * 2 + rr();
     g.beginPath();
@@ -1025,6 +1027,27 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
       g.beginPath();
       g.arc(0, 0, r * 2.2, 0, Math.PI * 2);
       g.fill();
+      // the body of the shot: a ball with the surface of its element, shaded round, with a bright rim
+      g.globalCompositeOperation = "source-over";
+      g.save();
+      g.beginPath();
+      g.arc(0, 0, r * 1.15, 0, Math.PI * 2);
+      g.clip();
+      g.rotate(t * 3 + p.id);
+      g.fillStyle = texPat(g, typeTex(p.type), t * 50, 0, 0.55);
+      g.fillRect(-r * 1.4, -r * 1.4, r * 2.8, r * 2.8);
+      g.restore();
+      const sh = g.createRadialGradient(-r * 0.4, -r * 0.4, 0, 0, 0, r * 1.2);
+      sh.addColorStop(0, "rgba(255,255,255,.65)");
+      sh.addColorStop(0.45, "rgba(255,255,255,0)");
+      sh.addColorStop(1, "rgba(0,0,0,.4)");
+      g.fillStyle = sh;
+      g.beginPath();
+      g.arc(0, 0, r * 1.15, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = c;
+      g.lineWidth = 2;
+      g.stroke();
       break;
     }
   }

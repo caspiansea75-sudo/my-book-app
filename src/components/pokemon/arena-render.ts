@@ -139,7 +139,7 @@ export class ArenaRenderer {
       shake: (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); },
       flash: (t) => { this.flashT = Math.max(this.flashT, t); },
       night: (t) => { this.nightT = Math.max(this.nightT, t); },
-      decal: (d) => { this.decals.push({ ...d, t: 0 }); if (this.decals.length > 14) this.decals.shift(); },
+      decal: (d) => { this.decals.push({ ...d, t: 0 }); if (this.decals.length > 22) this.decals.shift(); },
       scorch: (x, y, r, type) => { this.scorch.push({ x, y, r, seed: Math.random() * 100, t: 9, max: 9, type }); if (this.scorch.length > 28) this.scorch.shift(); },
     });
   }
@@ -910,6 +910,11 @@ export class ArenaRenderer {
         this.shakeT = 0.3;
         break;
       case "earthquake":
+        // the floor buckles in rolling ridges around the caster, throws up rock and lets out clouds of dust
+        this.sctx.decal({ kind: "quake", x, y, r: Math.max(220, r * 2.1), life: 1.2, seed: 0, ang: 0 });
+        this.sctx.decal({ kind: "crater", x, y, r: Math.max(90, r * 0.8), life: 1.8, seed: Math.random() * 99, ang: 0 });
+        for (let i = 0; i < 14; i++) { const a2 = (i / 14) * Math.PI * 2; this.parts.push({ kind: "smoke", x: x + Math.cos(a2) * r * 0.5, y: y + Math.sin(a2) * r * 0.3, vx: Math.cos(a2) * r * 1.4, vy: Math.sin(a2) * r * 0.5 - 20, g: 0, life: rnd(0.8, 1.3), max: 1.3, size: rnd(14, 24), grow: 30, color: i % 2 ? "#cdb995" : "#a8946f" }); }
+        for (let i = 0; i < 16; i++) this.parts.push({ kind: "plank", x: x + rnd(-r * 0.7, r * 0.7), y: y + rnd(-r * 0.4, r * 0.4), vx: rnd(-120, 120), vy: rnd(-520, -200), g: 1100, life: rnd(0.7, 1.1), max: 1.1, size: rnd(5, 10), grow: 0, color: i % 2 ? "#8a6a45" : "#6b5b4a", rot: rnd(0, 6), vr: rnd(-12, 12) });
         for (let i = 0; i < 12; i++) {
           const a = (i / 12) * Math.PI * 2 + rnd(-0.15, 0.15);
           this.parts.push({ kind: "crack", x, y, vx: 0, vy: 0, g: 0, life: 1.3, max: 1.3, size: 1, grow: 0, color: "#000", x2: x + Math.cos(a) * r * 1.5, y2: y + Math.sin(a) * r * 1.15, seed: 7 + i });
@@ -1006,6 +1011,8 @@ export class ArenaRenderer {
         break;
       }
       case "slam":
+        this.sctx.decal({ kind: "crater", x, y, r: 70, life: 1.5, seed: Math.random() * 99, ang: 0 });
+        this.sctx.decal({ kind: "quake", x, y, r: 150, life: 0.8, seed: 0, ang: 0 });
         this.scorch.push({ x, y, r: 46, seed: Math.random() * 100, t: 12, max: 12, type: "Rock" });
         for (let i = 0; i < 16; i++) this.parts.push({ kind: "dot", x: x + rnd(-14, 14), y: y + rnd(-6, 8), vx: rnd(-240, 240), vy: rnd(-380, -110), g: 760, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3, 6.5), grow: 0, color: i % 2 ? "#8a7a68" : "#c9b79a" });
         this.ring(x, y, "#ff9be6", r * 1.3, 0.45);
@@ -1117,6 +1124,10 @@ export class ArenaRenderer {
       }
       G.closePath();
       G.fill();
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.45;
+      G.fillStyle = texPat(G, "rock", sc.x * 0.5, sc.y * 0.5, 0.8);
+      G.fill();
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.5;
       if (k > 0.7 && (sc.type === "Fire" || sc.type === "Electric")) {
         G.globalAlpha = (k - 0.7) * 2.2 * 0.5;
         G.strokeStyle = sc.type === "Fire" ? "#ff7a2a" : "#ffe14d";
@@ -1402,7 +1413,7 @@ export class ArenaRenderer {
         const nx = -(p.y2 - p.y) / (len || 1);
         const ny = (p.x2 - p.x) / (len || 1);
         // a molten fissure: a dark gash with a glowing orange-yellow seam and a side branch that cools as it fades
-        const heat = Math.min(1, p.life / (p.max * 0.8));
+        const heat = p.edge === "hot" ? Math.min(1, p.life / (p.max * 0.8)) : 0;
         const grow2 = Math.min(1, (p.max - p.life) * 8);
         const pts: [number, number][] = [[p.x, p.y]];
         for (let i = 1; i <= n; i++) {
@@ -1412,13 +1423,24 @@ export class ArenaRenderer {
         }
         const path = () => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); };
         g.lineCap = "round"; g.lineJoin = "round";
-        g.strokeStyle = "#140a06"; g.lineWidth = 7; path(); g.stroke();
+        // a gash that is wide where it starts and thins to nothing, with a rough lip of broken ground and a hot seam inside
+        const ws = pts.map((_, i) => (1 - i / n) * 8 + 2.2);
+        g.fillStyle = "#0d0704";
+        g.beginPath();
+        pts.forEach((q, i) => { const px = q[0] + nx * ws[i]!, py = q[1] + ny * ws[i]!; if (i) g.lineTo(px, py); else g.moveTo(px, py); });
+        for (let i = n; i >= 0; i--) g.lineTo(pts[i]![0] - nx * ws[i]!, pts[i]![1] - ny * ws[i]!);
+        g.closePath();
+        g.fill();
+        g.strokeStyle = texPat(g, "rock", p.x, p.y, 0.6, 0); g.lineWidth = 5; g.stroke();
+        g.strokeStyle = "rgba(255,238,205,.4)"; g.lineWidth = 1.6; g.stroke();
+        g.strokeStyle = "rgba(0,0,0,.6)"; g.lineWidth = 1.3; g.stroke();
         g.save();
         g.globalCompositeOperation = "lighter";
-        g.strokeStyle = `rgba(255,110,20,${0.35 + heat * 0.6})`; g.lineWidth = 4; path(); g.stroke();
-        g.strokeStyle = `rgba(255,220,110,${heat})`; g.lineWidth = 1.6; path(); g.stroke();
+        g.strokeStyle = `rgba(255,110,20,${0.1 * heat})`; g.lineWidth = 12; path(); g.stroke();
+        g.strokeStyle = `rgba(255,130,30,${0.3 * heat})`; g.lineWidth = 6; path(); g.stroke();
+        g.strokeStyle = `rgba(255,220,120,${0.55 * heat})`; g.lineWidth = 2.2; path(); g.stroke();
         const m = pts[Math.min(3, pts.length - 1)]!;
-        g.strokeStyle = `rgba(255,150,40,${0.2 + heat * 0.6})`; g.lineWidth = 2.5;
+        g.strokeStyle = `rgba(255,150,40,${0.12 + heat * 0.3})`; g.lineWidth = 3;
         g.beginPath(); g.moveTo(m[0], m[1]); g.lineTo(m[0] + nx * 26 * grow2 + (p.x2 - p.x) * 0.1, m[1] + ny * 26 * grow2 + (p.y2 - p.y) * 0.1); g.stroke();
         g.restore();
       } else if (p.kind === "bolt" && p.x2 !== undefined && p.y2 !== undefined) {
@@ -2422,6 +2444,12 @@ export class ArenaRenderer {
           g.arc(z.x, z.y, z.r, 0, Math.PI * 2);
           g.fill();
           g.stroke();
+          g.save();
+          g.beginPath(); g.arc(z.x, z.y, z.r, 0, Math.PI * 2); g.clip();
+          g.globalAlpha = 0.2 + prog * 0.3;
+          g.fillStyle = texPat(g, typeTex(z.type), this.t * 25, this.t * 10, 0.9);
+          g.fillRect(z.x - z.r, z.y - z.r, z.r * 2, z.r * 2);
+          g.restore();
           if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.orbFall(g, z, prog);
           if (z.team !== -1 && SPEC_ART.has(z.mv.id)) specWindup(g, z.mv.id, z, prog, this.t);
           if ((z.mv.fx ?? z.mv.id) === "fireblast") {
@@ -2554,6 +2582,13 @@ export class ArenaRenderer {
           g.beginPath();
           g.arc(z.x, z.y, z.r * 1.2, 0, Math.PI * 2);
           g.fill();
+          g.save();
+          g.globalCompositeOperation = "source-over";
+          g.globalAlpha = a * 0.75;
+          g.beginPath(); g.arc(z.x, z.y, z.r * 1.05, 0, Math.PI * 2); g.clip();
+          g.fillStyle = texPat(g, typeTex(z.type), this.t * 60, this.t * 30, 0.8);
+          g.fillRect(z.x - z.r * 1.1, z.y - z.r * 1.1, z.r * 2.2, z.r * 2.2);
+          g.restore();
           if (z.mv.id === "rocktomb") {
             // boulders heave up in a broken ring around the target
             g.globalCompositeOperation = "source-over";
@@ -3501,6 +3536,10 @@ export class ArenaRenderer {
   /** A shockwave along the floor, a ring of dust and a few pebbles: for anything that lands hard. */
   private groundImpact(x: number, y: number, color: string, r: number) {
     const big = r >= 70;
+    if (r >= 36) {
+      this.sctx.decal({ kind: "crater", x, y: y + 4, r: r * 1.05, life: 1.5, seed: Math.random() * 99, ang: 0 });
+      if (r >= 55) this.sctx.decal({ kind: "quake", x, y: y + 4, r: r * 2.3, life: 0.9, seed: 0, ang: 0 });
+    }
     this.parts.push({ kind: "gring", x, y: y + 4, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 6, grow: r * 2.6, color });
     if (r >= 55) this.parts.push({ kind: "gring", x, y: y + 4, vx: 0, vy: 0, g: 0, life: 0.34, max: 0.34, size: 4, grow: r * 2.1, color: "#ffffff" });
     const n = Math.round(6 + r / 9);

@@ -14,7 +14,7 @@ export const SPEC_ART = new Set([
 ]);
 
 export type SP = { kind: string; x: number; y: number; vx?: number; vy?: number; g?: number; life: number; size?: number; grow?: number; color: string; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; text?: string; weight?: number };
-export type Decal = { kind: "snow" | "night" | "runes" | "claws"; x: number; y: number; r: number; t: number; life: number; seed: number; ang: number };
+export type Decal = { kind: "snow" | "night" | "runes" | "claws" | "crater" | "quake"; x: number; y: number; r: number; t: number; life: number; seed: number; ang: number };
 
 export interface SpecCtx {
   add(p: SP): void;
@@ -55,9 +55,8 @@ export function specBoom(id: string, x: number, y: number, r: number, c: SpecCtx
       add({ kind: "glow", x, y, life: 0.5, size: r * 0.6, grow: r * 1.4, color: "#ff8a1f" });
       for (let i = 0; i < 26; i++) add({ kind: "dot", x: x + rnd(-14, 14), y, vx: rnd(-160, 160), vy: rnd(-560, -240), g: 760, life: rnd(0.7, 1.2), size: rnd(4, 8), color: pick(["#ff5a1a", "#ffb02e", "#ffe27a"]) });
       for (let i = 0; i < 10; i++) add({ kind: "flame", x: x + rnd(-r * 0.5, r * 0.5), y: y + rnd(-6, 6), vx: rnd(-50, 50), vy: rnd(-300, -140), g: 40, life: rnd(0.6, 1), size: rnd(10, 18), color: pick(["#ffd84d", "#ff8a1f", "#e63a1e"]), seed: i });
-      for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; add({ kind: "crack", x, y, life: 1.4, color: "#000", x2: x + Math.cos(a) * r * 1.3, y2: y + Math.sin(a) * r * 1.0, seed: 11 + i }); }
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; add({ kind: "crack", x, y, life: 1.4, color: "#000", edge: "hot", x2: x + Math.cos(a) * r * 1.3, y2: y + Math.sin(a) * r * 1.0, seed: 11 + i }); }
       for (let i = 0; i < 5; i++) add({ kind: "smoke", x: x + rnd(-r * 0.4, r * 0.4), y, vx: rnd(-20, 20), vy: rnd(-130, -70), life: rnd(1, 1.6), size: rnd(14, 22), grow: 30, color: i % 2 ? "#3a2a26" : "#1f1614" });
-      c.scorch(x, y, r * 0.8, "Fire");
       c.shake(9, 0.3);
       c.flash(0.08);
       break;
@@ -227,24 +226,13 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
   g.globalAlpha = fade;
   if (id === "magmastorm") {
     // a pool of molten rock with a cracked crust, lava fountains and embers circling above it
-    ball(g, z.x, z.y, R * 1.12, "rgba(30,10,6,.6)", "rgba(30,10,6,0)");
     const pulse = 0.75 + Math.sin(t * 5) * 0.12;
     g.fillStyle = texPat(g, "lava", t * 9, t * 5, 1.15);
     g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.fill();
     g.globalCompositeOperation = "lighter";
-    ball(g, z.x, z.y, R * grow, `rgba(255,170,50,${0.3 * pulse})`, "rgba(220,50,10,.1)");
-    g.strokeStyle = "rgba(255,160,40,.95)";
+    g.save(); g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip(); g.globalAlpha = fade * 0.45; g.fillStyle = texPat(g, "lava", -t * 6, t * 3, 1.6); g.fillRect(z.x - R, z.y - R, R * 2, R * 2); g.restore();
+    ball(g, z.x, z.y, R * grow, `rgba(255,170,50,${0.35 * pulse})`, "rgba(255,90,20,.25)");
     g.lineCap = "round"; g.lineJoin = "round";
-    for (let k = 0; k < 10; k++) {
-      const a0 = (k / 10) * TAU + hash(z.id + k) * 0.5;
-      g.lineWidth = 3.2;
-      g.beginPath();
-      let px = z.x, py = z.y;
-      g.moveTo(px, py);
-      for (let s = 1; s <= 4; s++) { const a = a0 + (hash(z.id * 3 + k * 7 + s) - 0.5) * 0.9; const d = (R * grow * s) / 4; px = z.x + Math.cos(a) * d; py = z.y + Math.sin(a) * d; g.lineTo(px, py); }
-      g.stroke();
-      g.strokeStyle = "rgba(255,240,170,.8)"; g.lineWidth = 1.2; g.stroke(); g.strokeStyle = "rgba(255,160,40,.95)";
-    }
     // fountains
     for (let k = 0; k < 5; k++) {
       const ph = (t * 0.85 + hash(z.id + k * 5)) % 1;
@@ -740,6 +728,36 @@ export function drawDecals(g: CanvasRenderingContext2D, list: Decal[], dt: numbe
       for (let k = 0; k <= 6; k++) { const a = (k * 2 / 6) * TAU; const px = Math.cos(a) * s * 0.62, py = Math.sin(a) * s * 0.62; k ? g.lineTo(px, py) : g.moveTo(px, py); }
       g.stroke(); g.restore();
       ball(g, 0, 0, s * 0.4, "rgba(255,255,255,.55)", "rgba(139,92,246,0)");
+    } else if (d.kind === "crater") {
+      // a dent in the floor: dark hollow, rubble, a raised rim of broken ground and cracks running out of it
+      g.globalCompositeOperation = "source-over";
+      const s = d.r * (0.5 + ease(d.t / 0.15) * 0.5);
+      const hg = g.createRadialGradient(d.x, d.y, 0, d.x, d.y, s);
+      hg.addColorStop(0, "rgba(22,13,7,.6)"); hg.addColorStop(0.7, "rgba(22,13,7,.38)"); hg.addColorStop(1, "rgba(22,13,7,0)");
+      g.fillStyle = hg; g.beginPath(); g.arc(d.x, d.y, s, 0, TAU); g.fill();
+      g.save(); g.beginPath(); g.arc(d.x, d.y, s * 0.86, 0, TAU); g.clip(); g.globalAlpha = fade * 0.5; g.fillStyle = texPat(g, "rock", d.x, d.y, 0.9); g.fillRect(d.x - s, d.y - s, s * 2, s * 2); g.restore();
+      g.strokeStyle = texPat(g, "rock", d.x, d.y, 1.1); g.lineWidth = 10; g.beginPath(); g.arc(d.x, d.y, s * 0.93, 0, TAU); g.stroke();
+      g.strokeStyle = "rgba(0,0,0,.45)"; g.lineWidth = 2.5; g.beginPath(); g.arc(d.x, d.y, s * 0.84, 0, TAU); g.stroke();
+      g.strokeStyle = "rgba(255,238,205,.55)"; g.lineWidth = 2; g.beginPath(); g.arc(d.x, d.y, s * 1.0, 3.6, 5.8); g.stroke();
+      g.fillStyle = "rgba(12,7,3,.85)";
+      for (let k = 0; k < 9; k++) {
+        const a0 = (k / 9) * TAU + hash(d.seed + k) * 0.5, l = s * (1.05 + hash(d.seed * 3 + k) * 0.5), w = 4 + hash(k + d.seed) * 3;
+        g.beginPath(); g.moveTo(d.x + Math.cos(a0) * s * 0.85 - Math.sin(a0) * w, d.y + Math.sin(a0) * s * 0.85 + Math.cos(a0) * w); g.lineTo(d.x + Math.cos(a0 + 0.08) * l, d.y + Math.sin(a0 + 0.08) * l); g.lineTo(d.x + Math.cos(a0) * s * 0.85 + Math.sin(a0) * w, d.y + Math.sin(a0) * s * 0.85 - Math.cos(a0) * w); g.closePath(); g.fill();
+      }
+    } else if (d.kind === "quake") {
+      // ridges of buckled ground rolling outward, with the floor heaving under them
+      g.globalCompositeOperation = "source-over";
+      for (let k = 0; k < 3; k++) {
+        const ph = Math.min(1, Math.max(0, d.t / d.life * 1.5 - k * 0.2));
+        if (ph <= 0) continue;
+        const R = d.r * ease(ph), w = 14 * (1 - ph) + 5;
+        g.globalAlpha = fade * (1 - ph) * 0.95;
+        g.strokeStyle = texPat(g, "rock", d.x + k * 17, d.y, 1.0); g.lineWidth = w * 2; g.beginPath(); g.arc(d.x, d.y, R, 0, TAU); g.stroke();
+        g.strokeStyle = "rgba(0,0,0,.4)"; g.lineWidth = 4; g.beginPath(); g.arc(d.x, d.y, Math.max(1, R - w), 0, TAU); g.stroke();
+        g.strokeStyle = "rgba(255,236,200,.55)"; g.lineWidth = 2; g.beginPath(); g.arc(d.x, d.y, R + w, 0, TAU); g.stroke();
+      }
+      g.globalAlpha = fade * (1 - u) * 0.4;
+      g.save(); g.beginPath(); g.arc(d.x, d.y, d.r * 0.6, 0, TAU); g.clip(); g.fillStyle = texPat(g, "sand", d.x + Math.sin(d.t * 50) * 4, d.y + Math.cos(d.t * 43) * 3, 1.2); g.fillRect(d.x - d.r, d.y - d.r, d.r * 2, d.r * 2); g.restore();
     } else if (d.kind === "claws") {
       const s = d.r * 1.15;
       g.translate(d.x, d.y); g.rotate(-0.7 + d.ang);
