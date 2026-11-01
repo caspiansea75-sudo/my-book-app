@@ -1509,7 +1509,7 @@ function aiStep(S: State, f: Fighter, dt: number) {
 /* ------------------------------------------------------------------- step */
 
 /** How quickly each kind of mover gets up to speed and slows down (flyers and floaters drift). */
-const ACCEL: Record<string, number> = { fly: 5.5, float: 3.8, surf: 6, slither: 6.5, run: 11, walk: 15 };
+const ACCEL: Record<string, number> = { fly: 9, float: 6.5, surf: 9, slither: 9.5, run: 16, walk: 20 };
 
 function moveFighter(S: State, f: Fighter, dt: number) {
   const under = !!f.dash?.under;
@@ -1629,6 +1629,11 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     f.y = clamp(f.y, MARGIN, H - MARGIN);
   }
   if (len(sx, sy) > 20 && !f.cast && !f.channel) f.face = Math.atan2(sy, sx);
+}
+
+/** Client-side guess of where a fighter moves under its own player's input (used to hide network lag); touches nothing but `f`. */
+export function predictMove(S: State, f: Fighter, dt: number) {
+  moveFighter({ ...S, events: [] } as State, f, dt);
 }
 
 /**

@@ -241,10 +241,16 @@ export class SnapshotDecoder {
     return e;
   }
 
+  /** Where the host last said this thing is. */
+  goalOf(o: object): Smooth | undefined {
+    return this.goal.get(o);
+  }
+
   /** Move what is drawn a step closer to where the host says it is. */
-  glide(dt: number) {
+  glide(dt: number, skip?: object) {
     const k = 1 - Math.exp(-Math.max(0, dt) * 28);
     for (const [o, g] of this.goal) {
+      if (o === skip) continue;
       const x = o as { x: number; y: number };
       x.x += (g.tx - x.x) * k;
       x.y += (g.ty - x.y) * k;

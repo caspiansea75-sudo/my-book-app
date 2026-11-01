@@ -394,7 +394,7 @@ export function ArenaBrawl() {
         r.drawFailed = true;
       }
 
-      if (now - r.hudAt > 90) {
+      if (now - r.hudAt > 130) {
         r.hudAt = now;
         const ids = p.sp.moves;
         void gimmickActive;
@@ -589,7 +589,10 @@ export function ArenaBrawl() {
       x /= l;
       y /= l;
     }
-    rt.current.joy = { x: Math.abs(x) < 0.15 ? 0 : x, y: Math.abs(y) < 0.15 ? 0 : y };
+    // full speed at ~60% of the stick, with a small smooth deadzone: short thumb moves already steer
+    const mag = Math.min(1, Math.max(0, (l - 0.08) / 0.52));
+    const lc = Math.max(Math.min(l, 1), 1e-6);
+    rt.current.joy = { x: (x / lc) * mag, y: (y / lc) * mag };
     const knob = el.firstElementChild as HTMLElement | null;
     if (knob) knob.style.transform = `translate(${x * 34}px, ${y * 34}px)`;
   };

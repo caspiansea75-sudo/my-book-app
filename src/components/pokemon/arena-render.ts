@@ -351,8 +351,12 @@ export class ArenaRenderer {
   }
 
   /** Fit the drawing to the size the page gives the canvas, crisp on high-density screens. */
+  /** Adaptive quality: a slow device draws at a lower resolution (and fewer particles) so the game keeps up with the thumb. */
+  private q = 1;
+  private frameEma = 1 / 60;
+  private qAt = 0;
   resize() {
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const dpr = Math.min(2, window.devicePixelRatio || 1) * this.q;
     const w = this.canvas.clientWidth || ARENA.W;
     const h = this.canvas.clientHeight || w * (ARENA.H / ARENA.W);
     // the screen may be wider than the arena's 16:10 (a phone on its side, a monitor): the view then shows more, instead of black bars
@@ -1041,6 +1045,13 @@ export class ArenaRenderer {
     const dt = dtReal * (S.slow > 0 ? 0.4 : 1);
     this.t += dtReal;
     this.dtr = dtReal;
+    if (dtReal > 0 && dtReal < 0.5) {
+      this.frameEma += (dtReal - this.frameEma) * 0.05;
+      if (this.t - this.qAt > 2) {
+        if (this.frameEma > 0.027 && this.q > 0.55) { this.q = Math.max(0.55, this.q - 0.15); this.qAt = this.t; this.resize(); }
+        else if (this.frameEma < 0.019 && this.q < 1) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
+      }
+    }
     if (this.later.length) {
       for (const l of this.later) l.t -= dtReal;
       const due = this.later.filter((l) => l.t <= 0);
@@ -1583,7 +1594,8 @@ export class ArenaRenderer {
     } else drawAmbient(g, S, this.t);
     g.globalAlpha = 1;
     this.parts = this.parts.filter((p) => p.life > 0);
-    if (this.parts.length > 950) this.parts.splice(0, this.parts.length - 950);
+    const cap = Math.round(950 * (0.45 + 0.55 * this.q));
+    if (this.parts.length > cap) this.parts.splice(0, this.parts.length - cap);
     g.restore();
 
     // screen tints (not shaken): the HUD-style layer keeps its 960x600 layout, centred on a wider screen

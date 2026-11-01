@@ -11,7 +11,7 @@ import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPi
 import { PERK_BN } from "@/components/pokemon/arena-brawl";
 import { GIMMICKS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
 import type { QuickPick } from "@/lib/pokemon/arena-engine";
-import { ARENA, applyPerk, begin, moveOf, newMpGame, newMpQuick, nextWave, noInput, squadView, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
+import { ARENA, applyPerk, begin, moveOf, newMpGame, newMpQuick, nextWave, noInput, predictMove, squadView, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
 import { InputReceiver, InputSender, SnapshotDecoder, SnapshotEncoder, type InputMsg, type Snap } from "@/lib/pokemon/arena-net";
 import { P2PRoom } from "@/lib/multiplayer";
 import { useMe } from "@/lib/use-me";
@@ -680,6 +680,32 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     });
     void p2p.join();
 
+    // Own movement is predicted on this device (the host stays the judge): the Pokémon answers the thumb at once
+    // instead of a network round trip later, and is eased back toward the host's position if the two drift apart.
+    const pred = { x: 0, y: 0, mvx: 0, mvy: 0, ok: false };
+    const predictOwn = (me: Fighter, auth: { tx: number; ty: number } | undefined, inp: Input, dt: number, S: State) => {
+      const hostBusy = !me.alive || S.phase !== "fight" || me.dodge.t > 0 || !!me.dash || me.stun > 0 || me.status.frz > 0 || me.status.slp > 0 || (me.grabT ?? 0) > 0 || (me.flyT ?? 0) > 0 || Math.hypot(me.kx, me.ky) > 30;
+      if (!auth || hostBusy) {
+        // follow the host exactly while it is doing something special with us
+        if (auth) { const k = 1 - Math.exp(-dt * 28); me.x += (auth.tx - me.x) * k; me.y += (auth.ty - me.y) * k; }
+        pred.ok = false;
+        return;
+      }
+      if (!pred.ok) { pred.x = me.x; pred.y = me.y; pred.mvx = me.mvx; pred.mvy = me.mvy; pred.ok = true; }
+      let mx = inp.mx, my = inp.my;
+      const l = Math.hypot(mx, my);
+      if (l > 1) { mx /= l; my /= l; }
+      const g = { ...me, x: pred.x, y: pred.y, mvx: pred.mvx, mvy: pred.mvy, vx: mx * me.speed, vy: my * me.speed, hp: 1e9, maxHp: 1e9 } as Fighter;
+      predictMove(S, g, Math.min(dt, 0.05));
+      pred.x = g.x; pred.y = g.y; pred.mvx = g.mvx; pred.mvy = g.mvy;
+      // the host's answer is some milliseconds old: only a real disagreement pulls us back
+      const ex = auth.tx - pred.x, ey = auth.ty - pred.y;
+      const e = Math.hypot(ex, ey);
+      if (e > 130) { pred.x = auth.tx; pred.y = auth.ty; }
+      else if (e > 45) { const k = Math.min(1, dt * 2.5) * (e - 45) / e; pred.x += ex * k; pred.y += ey * k; }
+      me.x = pred.x; me.y = pred.y; me.mvx = pred.mvx; me.mvy = pred.mvy;
+    };
+
     const build = (): Input => {
       const k = c.keys;
       let mx = (k.has("d") || k.has("arrowright") ? 1 : 0) - (k.has("a") || k.has("arrowleft") ? 1 : 0);
@@ -829,8 +855,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           p2p.broadcast(m);
         }
         if (dec.ready) {
-          dec.glide(dt);
+          const me0 = dec.S.fighters.find((f) => f.member === meId);
+          dec.glide(dt, me0);
           V = dec.S;
+          if (me0) predictOwn(me0, dec.goalOf(me0), inp, dt, dec.S);
           localEvents(dec.takeEvents(), V.fighters.find((f) => f.member === meId));
           if (now - lastHeard > 8000) setStatus("lost");
           // sitting on the perk screen for long: ask the host for a fresh complete copy in case the next wave's news got lost
@@ -867,7 +895,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         } catch (err) {
           console.error("Arena Brawl: a frame failed to draw", err);
         }
-        if (now - hudAt > 90 && mine) {
+        if (now - hudAt > 130 && mine) {
           hudAt = now;
           const SQ = quick ? V.sq ?? squadView(V) : undefined;
           const ids = mine.sp.moves;
@@ -982,7 +1010,10 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       x /= l;
       y /= l;
     }
-    ctl.current.joy = { x: Math.abs(x) < 0.15 ? 0 : x, y: Math.abs(y) < 0.15 ? 0 : y };
+    // full speed at ~60% of the stick, with a small smooth deadzone: short thumb moves already steer
+    const mag = Math.min(1, Math.max(0, (l - 0.08) / 0.52));
+    const lc = Math.max(Math.min(l, 1), 1e-6);
+    ctl.current.joy = { x: (x / lc) * mag, y: (y / lc) * mag };
     const knob = el.firstElementChild as HTMLElement | null;
     if (knob) knob.style.transform = `translate(${x * 34}px, ${y * 34}px)`;
   };
