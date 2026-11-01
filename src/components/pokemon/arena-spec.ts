@@ -5,6 +5,8 @@
  * The renderer owns the particle list; this module only draws and asks for particles through `SpecCtx`.
  */
 
+import { texPat } from "./arena-tex";
+
 export const SPEC_ART = new Set([
   "overdriverush", "magmastorm", "whirlpoolprison", "sporegarden", "thundercage", "absolutezero", "finalflurry", "toxicflood",
   "psychicgrip", "fissurebreak", "hurricanegale", "swarmburst", "rockwrecker", "hauntingcurse", "draconicfury", "eternalnight",
@@ -227,10 +229,10 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     // a pool of molten rock with a cracked crust, lava fountains and embers circling above it
     ball(g, z.x, z.y, R * 1.12, "rgba(30,10,6,.6)", "rgba(30,10,6,0)");
     const pulse = 0.75 + Math.sin(t * 5) * 0.12;
-    g.fillStyle = "#1d0d08";
+    g.fillStyle = texPat(g, "lava", t * 9, t * 5, 1.15);
     g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.fill();
     g.globalCompositeOperation = "lighter";
-    ball(g, z.x, z.y, R * grow, `rgba(255,200,70,${0.7 * pulse})`, "rgba(220,50,10,.25)");
+    ball(g, z.x, z.y, R * grow, `rgba(255,170,50,${0.3 * pulse})`, "rgba(220,50,10,.1)");
     g.strokeStyle = "rgba(255,160,40,.95)";
     g.lineCap = "round"; g.lineJoin = "round";
     for (let k = 0; k < 10; k++) {
@@ -270,11 +272,16 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
   } else if (id === "whirlpoolprison") {
     // a spinning water disc inside a cage of water jets
     ball(g, z.x, z.y, R * 1.1, "rgba(10,40,90,.55)", "rgba(10,40,90,0)");
-    ball(g, z.x, z.y, R * grow, "rgba(20,90,180,.85)", "rgba(60,160,240,.55)");
+    g.save();
+    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip();
+    g.translate(z.x, z.y); g.rotate(t * 0.9);
+    g.fillStyle = texPat(g, "water", t * 20, 0, 1.3);
+    g.fillRect(-R, -R, R * 2, R * 2);
+    g.restore();
     g.lineCap = "round";
     for (let arm = 0; arm < 3; arm++) {
-      g.strokeStyle = arm % 2 ? "rgba(255,255,255,.9)" : "rgba(160,220,255,.85)";
-      g.lineWidth = 4 - arm * 0.6;
+      g.strokeStyle = arm % 2 ? "rgba(255,255,255,.55)" : "rgba(170,225,255,.5)";
+      g.lineWidth = 12 - arm * 2.5;
       g.beginPath();
       for (let s = 0; s <= 28; s++) { const u = s / 28; const a = t * 4 + arm * (TAU / 3) + u * 5.2; const d = R * grow * (1 - u * 0.92); const px = z.x + Math.cos(a) * d, py = z.y + Math.sin(a) * d; s ? g.lineTo(px, py) : g.moveTo(px, py); }
       g.stroke();
@@ -304,7 +311,12 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     if (Math.random() < 0.3) add({ kind: "bubble", x: z.x + rnd(-R, R) * 0.8, y: z.y + rnd(-R, R) * 0.6, vx: 0, vy: rnd(-70, -30), g: -10, life: 0.9, size: rnd(2.5, 5), color: "#bfe6ff" });
   } else if (id === "sporegarden") {
     // a patch of grass blooming with mushrooms and flowers that puff drowsy spores
-    ball(g, z.x, z.y, R * grow, "rgba(110,200,90,.5)", "rgba(60,140,60,.28)");
+    g.save();
+    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip();
+    g.globalAlpha = fade * 0.92;
+    g.fillStyle = texPat(g, "grass", 0, 0, 1.1);
+    g.fillRect(z.x - R, z.y - R, R * 2, R * 2);
+    g.restore();
     g.strokeStyle = "rgba(190,240,120,.85)"; g.lineWidth = 3;
     g.beginPath(); g.arc(z.x, z.y, R, 0, TAU); g.stroke();
     const items: { x: number; y: number; k: number }[] = [];
@@ -334,7 +346,12 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
   } else if (id === "toxicflood") {
     // a glossy pool of venom with slime tendrils and big bubbles that pop
     ball(g, z.x, z.y, R * 1.1, "rgba(20,5,40,.5)", "rgba(20,5,40,0)");
-    ball(g, z.x, z.y, R * grow, "rgba(90,30,140,.9)", "rgba(60,120,30,.75)");
+    g.save();
+    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip();
+    g.translate(z.x, z.y); g.rotate(Math.sin(t * 0.7) * 0.5);
+    g.fillStyle = texPat(g, "venom", t * 14, t * 8, 1.2);
+    g.fillRect(-R, -R, R * 2, R * 2);
+    g.restore();
     for (let k = 0; k < 3; k++) { const ph = (t * 0.7 + k / 3) % 1; g.strokeStyle = `rgba(160,255,110,${0.5 * (1 - ph)})`; g.lineWidth = 2; g.beginPath(); g.arc(z.x, z.y, R * ph, 0, TAU); g.stroke(); }
     g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 4; g.lineCap = "round";
     g.beginPath(); g.arc(z.x, z.y, R * 0.7, 3.5, 4.4); g.stroke();
@@ -380,7 +397,9 @@ export function specWindup(g: CanvasRenderingContext2D, id: string, z: { x: numb
       g.fillStyle = "#7d7266"; g.strokeStyle = "#2e2822"; g.lineWidth = 3; g.lineJoin = "round";
       g.beginPath();
       for (let k = 0; k < 9; k++) { const a = (k / 9) * TAU, rr = s * (0.82 + hash(z.id + k) * 0.36); k ? g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); }
-      g.closePath(); g.fill(); g.stroke();
+      g.closePath(); g.fill();
+      g.fillStyle = texPat(g, "rock", 0, 0, 0.7, 0); g.fill();
+      g.stroke();
       g.fillStyle = "#a89a88"; g.beginPath(); g.moveTo(-s * 0.5, -s * 0.5); g.lineTo(s * 0.1, -s * 0.75); g.lineTo(-s * 0.1, -s * 0.1); g.closePath(); g.fill();
       g.strokeStyle = "#3a322b"; g.lineWidth = 1.6; g.beginPath(); g.moveTo(-s * 0.2, s * 0.1); g.lineTo(s * 0.2, s * 0.5); g.moveTo(s * 0.1, -s * 0.1); g.lineTo(s * 0.55, s * 0.05); g.stroke();
     } else if (id === "magmastorm") {
@@ -452,8 +471,8 @@ export function specStrike(g: CanvasRenderingContext2D, id: string, z: { x: numb
       g.stroke();
     };
     const off = z.r * 1.15;
-    rail(0, 22, 15, "rgba(255,225,60,.28)", 1); rail(0, 22, 6, "#ffe14d", 1); rail(0, 22, 2.5, "#ffffff", 1);
-    for (const sd of [-1, 1]) { rail(sd * off, 7, 8, "rgba(120,230,255,.3)", 2 + sd); rail(sd * off, 7, 2.5, "#c9f6ff", 2 + sd); }
+    rail(0, 22, 28, "rgba(255,225,60,.22)", 1); rail(0, 22, 13, "rgba(255,225,60,.6)", 1); rail(0, 22, 7, "#ffe14d", 1); rail(0, 22, 3, "#ffffff", 1);
+    for (const sd of [-1, 1]) { rail(sd * off, 7, 18, "rgba(120,230,255,.28)", 2 + sd); rail(sd * off, 7, 8, "rgba(160,240,255,.8)", 2 + sd); rail(sd * off, 7, 3, "#ffffff", 2 + sd); }
     g.strokeStyle = "#fff6b0"; g.lineWidth = 2;
     for (let d = 26, k = 0; d < L; d += 46, k++) {
       g.beginPath(); g.moveTo(z.x + ux * d + nx * -off, z.y + uy * d + ny * -off);
@@ -474,7 +493,8 @@ export function specStrike(g: CanvasRenderingContext2D, id: string, z: { x: numb
     const E1 = edge(-1), E2 = edge(1).reverse();
     const path = () => { g.beginPath(); E1.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); E2.forEach((p) => g.lineTo(p[0], p[1])); g.closePath(); };
     path(); g.fillStyle = "rgba(10,5,2,.95)"; g.fill();
-    g.strokeStyle = "rgba(201,164,112,.9)"; g.lineWidth = 3; g.stroke();
+    g.strokeStyle = texPat(g, "rock", 0, 0, 1); g.lineWidth = 10; g.stroke();
+    g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 2; g.stroke();
     g.globalCompositeOperation = "lighter";
     g.save(); g.translate(z.x, z.y); g.rotate(ang);
     const gl = g.createLinearGradient(0, -z.r, 0, z.r);
@@ -494,7 +514,7 @@ export function specShot(g: CanvasRenderingContext2D, p: { mv: string; vx: numbe
     g.rotate(ang);
     g.globalCompositeOperation = "lighter"; g.lineCap = "round";
     const spin = t * 18 + p.id;
-    for (const [rad, wd, col, al] of [[r * 2.2, 11, "rgba(190,230,255,", 0.35], [r * 2.2, 4.5, "rgba(255,255,255,", 0.95], [r * 1.5, 3, "rgba(190,230,255,", 0.8]] as const) {
+    for (const [rad, wd, col, al] of [[r * 2.2, 20, "rgba(190,230,255,", 0.3], [r * 2.2, 8, "rgba(255,255,255,", 0.95], [r * 1.5, 5, "rgba(190,230,255,", 0.8]] as const) {
       g.strokeStyle = `${col}${al})`; g.lineWidth = wd;
       g.beginPath(); g.arc(-r * 0.9, 0, rad, -0.95, 0.95); g.stroke();
     }
@@ -614,7 +634,9 @@ export function drawAura(g: CanvasRenderingContext2D, kind: string, f: { x: numb
       const gr = g.createLinearGradient(-w, -h, w, h);
       gr.addColorStop(0, "#f0f5fb"); gr.addColorStop(0.5, "#98a6ba"); gr.addColorStop(1, "#58657a");
       g.fillStyle = gr; g.strokeStyle = "#2a3342"; g.lineWidth = 2.4; g.lineJoin = "round";
-      g.beginPath(); g.moveTo(-w * 0.8, -h); g.lineTo(w * 0.8, -h); g.lineTo(w, h * 0.7); g.lineTo(0, h); g.lineTo(-w, h * 0.7); g.closePath(); g.fill(); g.stroke();
+      g.beginPath(); g.moveTo(-w * 0.8, -h); g.lineTo(w * 0.8, -h); g.lineTo(w, h * 0.7); g.lineTo(0, h); g.lineTo(-w, h * 0.7); g.closePath(); g.fill();
+      { const ga = g.globalAlpha; g.globalAlpha = ga * 0.6; g.fillStyle = texPat(g, "metal", 0, 0, 0.7, 0); g.fill(); g.globalAlpha = ga; }
+      g.stroke();
       g.fillStyle = "#dfe7f2"; for (const [rx, ry] of [[-0.5, -0.6], [0.5, -0.6], [0, 0.5]] as const) { g.beginPath(); g.arc(rx * w, ry * h, 2.2, 0, TAU); g.fill(); }
       const gl = ((t * 1.6 + i / N) % 1);
       if (gl < 0.12) { g.globalCompositeOperation = "lighter"; g.fillStyle = `rgba(255,255,255,${0.7 * (1 - gl / 0.12)})`; g.fillRect(-w, -h, w * 2, h * 2); }
@@ -677,8 +699,9 @@ export function drawDecals(g: CanvasRenderingContext2D, list: Decal[], dt: numbe
     if (d.kind === "snow") {
       const s = d.r * (0.25 + ease(d.t / 0.4) * 0.75);
       ball(g, d.x, d.y, s * 1.05, "rgba(190,240,255,.35)", "rgba(120,210,255,0)");
+      g.save(); g.beginPath(); g.arc(d.x, d.y, s * 0.96, 0, TAU); g.clip(); g.globalCompositeOperation = "source-over"; g.globalAlpha = fade * 0.55; g.fillStyle = texPat(g, "ice", d.t * 10, 0, 1.2); g.fillRect(d.x - s, d.y - s, s * 2, s * 2); g.restore();
       g.translate(d.x, d.y); g.rotate(d.ang + d.t * 0.5);
-      for (const [wd, col] of [[7, "rgba(140,225,255,.35)"], [2.6, "#ffffff"]] as const) {
+      for (const [wd, col] of [[17, "rgba(140,225,255,.3)"], [9, texPat(g, "ice", 0, 0, 0.8)], [2.8, "#ffffff"]] as const) {
         g.strokeStyle = col; g.lineWidth = wd;
         for (let k = 0; k < 6; k++) {
           g.save(); g.rotate((k / 6) * TAU);
@@ -694,6 +717,7 @@ export function drawDecals(g: CanvasRenderingContext2D, list: Decal[], dt: numbe
       const gr = g.createRadialGradient(d.x, d.y, 0, d.x, d.y, s);
       gr.addColorStop(0, "rgba(8,3,22,.8)"); gr.addColorStop(0.75, "rgba(30,10,70,.6)"); gr.addColorStop(1, "rgba(110,60,200,.0)");
       g.fillStyle = gr; g.beginPath(); g.arc(d.x, d.y, s, 0, TAU); g.fill();
+      g.save(); g.beginPath(); g.arc(d.x, d.y, s, 0, TAU); g.clip(); g.globalAlpha = fade * 0.6; g.fillStyle = texPat(g, "shade", d.t * 22, d.t * 11, 1.5); g.fillRect(d.x - s, d.y - s, s * 2, s * 2); g.restore();
       g.globalCompositeOperation = "lighter";
       g.strokeStyle = "rgba(190,150,255,.9)"; g.lineWidth = 3; g.beginPath(); g.arc(d.x, d.y, s * 0.98, 0, TAU); g.stroke();
       for (let k = 0; k < 22; k++) { const a = hash(d.seed + k) * TAU, rr = Math.sqrt(hash(d.seed + k * 3 + 1)) * s * 0.9; const tw = 0.5 + 0.5 * Math.sin(d.t * 8 + k * 2); ball(g, d.x + Math.cos(a) * rr, d.y + Math.sin(a) * rr, 3.5 * tw + 1, "rgba(255,255,255,.95)", "rgba(190,160,255,0)"); }
@@ -704,10 +728,11 @@ export function drawDecals(g: CanvasRenderingContext2D, list: Decal[], dt: numbe
     } else if (d.kind === "runes") {
       const s = d.r * (0.3 + ease(d.t / 0.25) * 0.7);
       g.translate(d.x, d.y);
+      g.save(); g.beginPath(); g.arc(0, 0, s * 0.8, 0, TAU); g.clip(); g.globalAlpha = fade * 0.32; g.fillStyle = texPat(g, "aura", d.t * 30, 0, 1.2, d.t); g.fillRect(-s, -s, s * 2, s * 2); g.restore();
       for (const [rad, rot, col] of [[1, d.t * 1.6, "#ffd54a"], [0.8, -d.t * 2.2, "#8b5cf6"]] as const) {
         g.save(); g.rotate(rot + d.ang);
-        g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); g.arc(0, 0, s * rad, 0, TAU); g.stroke();
-        g.lineWidth = 2.4;
+        g.strokeStyle = col; g.lineWidth = 6; g.beginPath(); g.arc(0, 0, s * rad, 0, TAU); g.stroke();
+        g.lineWidth = 4;
         for (let k = 0; k < 12; k++) { const a = (k / 12) * TAU; g.beginPath(); g.moveTo(Math.cos(a) * s * rad * 0.88, Math.sin(a) * s * rad * 0.88); g.lineTo(Math.cos(a) * s * rad * 0.98, Math.sin(a) * s * rad * 0.98); if (k % 2) g.lineTo(Math.cos(a + 0.08) * s * rad * 0.9, Math.sin(a + 0.08) * s * rad * 0.9); g.stroke(); }
         g.restore();
       }

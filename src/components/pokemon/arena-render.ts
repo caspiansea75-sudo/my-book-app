@@ -4,6 +4,7 @@
  */
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
+import { cloudSprite, texPat, typeTex } from "./arena-tex";
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
@@ -11,10 +12,16 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 /** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
+/** The same colour with a different opacity (for gradient stops); other colour formats pass through. */
+const withA = (c: string, a: number) => {
+  if (c[0] === "#" && c.length === 7) { const n = parseInt(c.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
+  return c;
+};
+const hsh = (n: number) => { const v = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return v - Math.floor(v); };
 const ORB_LOBS = new Set(["sludgebomb", "seedbomb", "gunkshot", "moonblast", "focusblast", "iciclecrash", "photongeyser", "lightofruin"]);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const easeOutBack = (k: number) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
@@ -583,6 +590,7 @@ export class ArenaRenderer {
           this.burst(e.x, e.y, c, e.heavy ? 18 : 9, e.heavy ? 280 : 190);
           if (e.dmg > 0) {
             this.elementBurst(e.x, e.y, e.type, e.heavy ? 56 : 30);
+            this.parts.push({ kind: "splat", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: e.heavy ? 60 : 38, grow: 0, color: c, edge: e.type, seed: Math.random() * 99, rot: rnd(0, 6.28) });
             this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.22, max: 0.22, size: e.heavy ? 26 : 16, grow: e.heavy ? 150 : 90, color: c });
             if (e.crit || e.heavy) this.parts.push({ kind: "cross", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.24, max: 0.24, size: e.crit ? 56 : 40, grow: 0, color: e.crit ? "#ffe08a" : "#ffffff" });
             if (e.heavy) this.groundImpact(e.x, e.y + 8, c, 38);
@@ -611,6 +619,7 @@ export class ArenaRenderer {
           const c = col(e.type);
           this.ring(e.x, e.y, c, e.r * 1.1, 0.45);
           this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.4, max: 0.4, size: e.r, grow: e.r * 0.8, color: c });
+          this.parts.push({ kind: "splat", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.42, max: 0.42, size: Math.max(34, e.r * 0.95), grow: 0, color: c, edge: e.type, seed: Math.random() * 99, rot: rnd(0, 6.28) });
           this.burst(e.x, e.y, c, Math.round(8 + e.r / 8), 120 + e.r * 2.2);
           this.elementBurst(e.x, e.y, e.type, e.r);
           if (e.r >= 100) {
@@ -1187,10 +1196,50 @@ export class ArenaRenderer {
       }
       g.globalAlpha = a;
       if (p.kind === "dot") {
+        // a little shaded ball: lit from the top left, darker underneath
+        const rr = Math.max(0.6, p.size * (0.4 + a * 0.6));
+        const sg = g.createRadialGradient(p.x - rr * 0.35, p.y - rr * 0.4, 0, p.x, p.y, rr);
+        sg.addColorStop(0, "rgba(255,255,255,.9)");
+        sg.addColorStop(0.4, p.color);
+        sg.addColorStop(1, "rgba(0,0,0,.5)");
         g.fillStyle = p.color;
         g.beginPath();
-        g.arc(p.x, p.y, p.size * (0.4 + a * 0.6), 0, Math.PI * 2);
+        g.arc(p.x, p.y, rr, 0, Math.PI * 2);
         g.fill();
+        g.fillStyle = sg;
+        g.fill();
+      } else if (p.kind === "splat") {
+        // a textured impact burst: a spiky splash filled with the surface of the move's element, with a white-hot core
+        const k = 1 - a;
+        const R0 = p.size * (0.4 + Math.min(1, k * 5) * 0.6);
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(p.rot ?? 0);
+        const NS = 11;
+        const sd = p.seed ?? 3;
+        g.beginPath();
+        for (let i = 0; i < NS * 2; i++) {
+          const rr = i % 2 ? R0 * (0.5 + hsh(sd + i) * 0.12) : R0 * (0.85 + hsh(sd * 2 + i) * 0.35);
+          const an = (i / (NS * 2)) * Math.PI * 2;
+          g.lineTo(Math.cos(an) * rr, Math.sin(an) * rr);
+        }
+        g.closePath();
+        g.fillStyle = texPat(g, typeTex(p.edge ?? "Normal"), this.t * 60, this.t * 30, 0.7, p.rot ?? 0);
+        g.fill();
+        g.lineJoin = "round";
+        g.strokeStyle = withA(p.color, 0.9);
+        g.lineWidth = 2.5 * a + 0.5;
+        g.stroke();
+        g.globalCompositeOperation = "lighter";
+        const cg = g.createRadialGradient(0, 0, 0, 0, 0, R0 * 0.8);
+        cg.addColorStop(0, "rgba(255,255,255,.95)");
+        cg.addColorStop(0.45, withA(p.color, 0.55));
+        cg.addColorStop(1, withA(p.color, 0));
+        g.fillStyle = cg;
+        g.beginPath();
+        g.arc(0, 0, R0 * 0.8, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
       } else if (p.kind === "cross") {
         // two crossing slashes that flash in and thin out (X-Scissor)
         const k = 1 - a;
@@ -1244,35 +1293,57 @@ export class ArenaRenderer {
         }
         g.lineCap = "butt";
       } else if (p.kind === "streak") {
-        g.strokeStyle = p.color;
-        g.lineWidth = 2.5;
-        g.beginPath();
-        g.moveTo(p.x, p.y);
-        g.lineTo(p.x - p.vx * 0.04, p.y - p.vy * 0.04);
-        g.stroke();
+        // a glowing streak: soft halo, coloured body, white-hot core
+        const sp2 = Math.hypot(p.vx, p.vy) || 1;
+        const tl = Math.max(9, sp2 * 0.05);
+        const tx = p.x - (p.vx / sp2) * tl, ty = p.y - (p.vy / sp2) * tl;
+        const w0 = Math.max(2.2, Math.min(p.size, 14) * 0.5);
+        g.save();
+        g.lineCap = "round";
+        g.globalCompositeOperation = "lighter";
+        g.globalAlpha = a * 0.4;
+        g.strokeStyle = p.color; g.lineWidth = w0 * 2.6;
+        g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(tx, ty); g.stroke();
+        g.globalAlpha = a;
+        g.lineWidth = w0;
+        g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(tx, ty); g.stroke();
+        g.strokeStyle = "#ffffff"; g.lineWidth = Math.max(1, w0 * 0.4);
+        g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - (p.vx / sp2) * tl * 0.55, p.y - (p.vy / sp2) * tl * 0.55); g.stroke();
+        g.restore();
       } else if (p.kind === "ring") {
-        g.strokeStyle = p.color;
-        g.lineWidth = 4 * a + 1;
+        // a shockwave band: soft edges, a coloured body and a bright core instead of a thin line
+        const R1 = Math.max(2, p.size), w1 = 4 + 9 * a;
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        const rg = g.createRadialGradient(p.x, p.y, Math.max(0, R1 - w1), p.x, p.y, R1 + w1);
+        rg.addColorStop(0, withA(p.color, 0));
+        rg.addColorStop(0.35, withA(p.color, 0.6));
+        rg.addColorStop(0.55, "rgba(255,255,255,.85)");
+        rg.addColorStop(0.72, withA(p.color, 0.65));
+        rg.addColorStop(1, withA(p.color, 0));
+        g.fillStyle = rg;
         g.beginPath();
-        g.arc(p.x, p.y, Math.max(1, p.size), 0, Math.PI * 2);
-        g.stroke();
+        g.arc(p.x, p.y, R1 + w1, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
       } else if (p.kind === "gring") {
         // a shockwave running out along the floor (flattened, with a bright inner edge)
         const R = Math.max(2, p.size);
         g.save();
         g.translate(p.x, p.y);
         g.scale(1, 0.42);
-        g.strokeStyle = p.color;
-        g.lineWidth = 8 * a + 1.5;
+        const w2 = 6 + 12 * a;
+        g.globalCompositeOperation = "lighter";
+        const rg2 = g.createRadialGradient(0, 0, Math.max(0, R - w2), 0, 0, R + w2);
+        rg2.addColorStop(0, withA(p.color, 0));
+        rg2.addColorStop(0.4, withA(p.color, 0.65));
+        rg2.addColorStop(0.58, "rgba(255,255,255,.8)");
+        rg2.addColorStop(0.75, withA(p.color, 0.55));
+        rg2.addColorStop(1, withA(p.color, 0));
+        g.fillStyle = rg2;
         g.beginPath();
-        g.arc(0, 0, R, 0, Math.PI * 2);
-        g.stroke();
-        g.strokeStyle = "#ffffff";
-        g.globalAlpha = a * 0.85;
-        g.lineWidth = 2.5 * a + 0.5;
-        g.beginPath();
-        g.arc(0, 0, R * 0.93, 0, Math.PI * 2);
-        g.stroke();
+        g.arc(0, 0, R + w2, 0, Math.PI * 2);
+        g.fill();
         g.restore();
       } else if (p.kind === "glow") {
         const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, Math.max(2, p.size));
@@ -1286,11 +1357,14 @@ export class ArenaRenderer {
         g.fill();
         g.globalCompositeOperation = "source-over";
       } else if (p.kind === "smoke") {
-        g.fillStyle = p.color;
-        g.globalAlpha = a * 0.35;
-        g.beginPath();
-        g.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        g.fill();
+        // a lumpy textured cloud that turns slowly as it drifts and thins out
+        const cs = Math.max(2, p.size) * 1.15;
+        g.globalAlpha = Math.min(1, a * 1.1) * 0.7;
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate(hsh(p.max * 977 + p.size) * 6 + (1 - a) * 0.8);
+        g.drawImage(cloudSprite(p.color), -cs, -cs, cs * 2, cs * 2);
+        g.restore();
       } else if (p.kind === "puff") {
         blob(g, p.x, p.y, Math.max(1, p.size), p.seed ?? 1, p.color, p.edge ?? "#000");
       } else if (p.kind === "plank") {
@@ -1298,8 +1372,29 @@ export class ArenaRenderer {
         g.save();
         g.translate(p.x, p.y);
         g.rotate(p.rot);
+        // a chunk: an uneven shape with a rough surface, a lit edge and a dark underside
+        const ps = Math.max(2, p.size);
+        const sd2 = p.max * 977;
+        g.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const an = (i / 6) * Math.PI * 2, rr = ps * (0.85 + hsh(sd2 + i) * 0.55);
+          g.lineTo(Math.cos(an) * rr * 1.25, Math.sin(an) * rr * 0.9);
+        }
+        g.closePath();
+        g.fillStyle = texPat(g, "rock", 0, 0, 0.5, 0);
+        g.fill();
+        g.globalAlpha = a * 0.55;
         g.fillStyle = p.color;
-        g.fillRect(-p.size * 1.6, -p.size * 0.4, p.size * 3.2, p.size * 0.8);
+        g.fill();
+        g.globalAlpha = a;
+        g.strokeStyle = "rgba(0,0,0,.55)";
+        g.lineWidth = 1.3;
+        g.lineJoin = "round";
+        g.stroke();
+        g.strokeStyle = "rgba(255,255,255,.35)";
+        g.beginPath();
+        g.moveTo(-ps * 0.9, -ps * 0.3); g.lineTo(-ps * 0.2, -ps * 0.8); g.lineTo(ps * 0.7, -ps * 0.55);
+        g.stroke();
         g.restore();
       } else if (p.kind === "crack" && p.x2 !== undefined && p.y2 !== undefined) {
         const n = 7;
@@ -1334,17 +1429,16 @@ export class ArenaRenderer {
         g.save();
         g.translate(p.x, p.y);
         g.rotate(p.rot);
+        // a faceted splinter: one lit face, one shaded face
+        const hs = p.size;
         g.fillStyle = p.color;
-        g.strokeStyle = "#ffffff";
-        g.lineWidth = 1.2;
-        g.beginPath();
-        g.moveTo(0, -p.size * 1.8);
-        g.lineTo(p.size * 0.8, 0);
-        g.lineTo(0, p.size * 1.8);
-        g.lineTo(-p.size * 0.8, 0);
-        g.closePath();
-        g.fill();
-        g.stroke();
+        g.beginPath(); g.moveTo(0, -hs * 1.8); g.lineTo(hs * 0.8, 0); g.lineTo(0, hs * 1.8); g.lineTo(-hs * 0.8, 0); g.closePath(); g.fill();
+        g.fillStyle = "rgba(255,255,255,.55)";
+        g.beginPath(); g.moveTo(0, -hs * 1.8); g.lineTo(-hs * 0.8, 0); g.lineTo(0, hs * 1.8); g.lineTo(-hs * 0.1, 0); g.closePath(); g.fill();
+        g.fillStyle = "rgba(0,0,0,.28)";
+        g.beginPath(); g.moveTo(0, -hs * 1.8); g.lineTo(hs * 0.8, 0); g.lineTo(0, hs * 1.8); g.lineTo(hs * 0.1, 0); g.closePath(); g.fill();
+        g.strokeStyle = "rgba(255,255,255,.9)"; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(0, -hs * 1.8); g.lineTo(hs * 0.8, 0); g.lineTo(0, hs * 1.8); g.lineTo(-hs * 0.8, 0); g.closePath(); g.stroke();
         g.restore();
       } else if (p.kind === "arc") {
         // a curved blade of water
@@ -1352,13 +1446,23 @@ export class ArenaRenderer {
         g.save();
         g.translate(p.x, p.y);
         g.rotate(p.rot);
-        g.lineCap = "round";
-        for (const [w, cc] of [[p.size * 0.5, p.color], [p.size * 0.18, "#ffffff"]] as const) {
-          g.strokeStyle = cc;
-          g.lineWidth = w;
+        // a crescent blade: a filled sweep fading toward its tips, not a thin line
+        {
+          const RA = p.size * 5;
+          g.globalCompositeOperation = "lighter";
+          const cg2 = g.createLinearGradient(-RA * 0.3, 0, RA, 0);
+          cg2.addColorStop(0, withA(p.color, 0.1));
+          cg2.addColorStop(0.7, p.color);
+          cg2.addColorStop(1, "#ffffff");
+          g.fillStyle = cg2;
           g.beginPath();
-          g.arc(0, 0, p.size * 5, -0.7, 0.7);
-          g.stroke();
+          g.arc(0, 0, RA, -0.75, 0.75);
+          g.arc(-RA * 0.3, 0, RA * 0.92, 0.7, -0.7, true);
+          g.closePath();
+          g.fill();
+          g.globalAlpha = a * 0.4;
+          g.lineCap = "round"; g.lineWidth = p.size * 0.9; g.strokeStyle = p.color;
+          g.beginPath(); g.arc(0, 0, RA, -0.75, 0.75); g.stroke();
         }
         g.restore();
       } else if (p.kind === "star") {
@@ -1366,15 +1470,28 @@ export class ArenaRenderer {
         g.save();
         g.translate(p.x, p.y);
         g.rotate(p.rot);
-        g.fillStyle = p.color;
-        g.beginPath();
-        for (let k = 0; k < 8; k++) {
-          const rr = k % 2 ? p.size * 0.35 : p.size;
-          const aa = (k / 8) * Math.PI * 2;
-          g.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
+        {
+          g.globalCompositeOperation = "lighter";
+          const hg = g.createRadialGradient(0, 0, 0, 0, 0, p.size * 2.2);
+          hg.addColorStop(0, withA(p.color, 0.6));
+          hg.addColorStop(1, withA(p.color, 0));
+          g.fillStyle = hg;
+          g.beginPath(); g.arc(0, 0, p.size * 2.2, 0, Math.PI * 2); g.fill();
+          g.globalCompositeOperation = "source-over";
+          const sgr = g.createRadialGradient(0, 0, 0, 0, 0, p.size);
+          sgr.addColorStop(0, "#ffffff");
+          sgr.addColorStop(0.5, p.color);
+          sgr.addColorStop(1, p.color);
+          g.fillStyle = sgr;
+          g.beginPath();
+          for (let k = 0; k < 8; k++) {
+            const rr = k % 2 ? p.size * 0.35 : p.size;
+            const aa = (k / 8) * Math.PI * 2;
+            g.lineTo(Math.cos(aa) * rr, Math.sin(aa) * rr);
+          }
+          g.closePath();
+          g.fill();
         }
-        g.closePath();
-        g.fill();
         g.restore();
       } else if (p.kind === "spark") {
         // a glowing point with a short streak behind it
@@ -1405,13 +1522,22 @@ export class ArenaRenderer {
         g.strokeStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.moveTo(-p.size * 1.3, 0); g.lineTo(p.size * 1.3, 0); g.stroke();
         g.restore();
       } else if (p.kind === "bubble") {
-        g.strokeStyle = p.color; g.lineWidth = 1.6; g.fillStyle = "rgba(255,255,255,.12)";
-        g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill(); g.stroke();
+        {
+          const bg = g.createRadialGradient(p.x - p.size * 0.2, p.y - p.size * 0.2, p.size * 0.1, p.x, p.y, p.size);
+          bg.addColorStop(0, "rgba(255,255,255,.12)");
+          bg.addColorStop(0.75, withA(p.color, 0.25));
+          bg.addColorStop(1, withA(p.color, 0.65));
+          g.fillStyle = bg; g.strokeStyle = p.color; g.lineWidth = 1.6;
+          g.beginPath(); g.arc(p.x, p.y, p.size, 0, Math.PI * 2); g.fill(); g.stroke();
+        }
         g.fillStyle = "rgba(255,255,255,.9)"; g.beginPath(); g.arc(p.x - p.size * 0.35, p.y - p.size * 0.35, Math.max(0.8, p.size * 0.22), 0, Math.PI * 2); g.fill();
       } else if (p.kind === "flake") {
         p.rot = (p.rot ?? 0) + (p.vr ?? 0) * dt;
-        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.strokeStyle = p.color; g.lineWidth = 1.5; g.lineCap = "round";
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.strokeStyle = p.color; g.lineWidth = Math.max(1.8, p.size * 0.4); g.lineCap = "round";
+        g.globalCompositeOperation = "lighter";
+        { const fg = g.createRadialGradient(0, 0, 0, 0, 0, p.size * 1.6); fg.addColorStop(0, withA(p.color, 0.5)); fg.addColorStop(1, withA(p.color, 0)); g.fillStyle = fg; g.beginPath(); g.arc(0, 0, p.size * 1.6, 0, Math.PI * 2); g.fill(); }
         for (let k = 0; k < 3; k++) { const aa = (k / 3) * Math.PI; g.beginPath(); g.moveTo(Math.cos(aa) * p.size, Math.sin(aa) * p.size); g.lineTo(-Math.cos(aa) * p.size, -Math.sin(aa) * p.size); g.stroke(); }
+        g.fillStyle = "#ffffff"; g.beginPath(); g.arc(0, 0, p.size * 0.32, 0, Math.PI * 2); g.fill();
         g.restore();
       } else if (p.kind === "text" && p.text) {
         const pop = Math.min(1, (p.max - p.life) * 9);
