@@ -82,7 +82,7 @@ export type Fighter = {
   roam: { x: number; y: number };
   ringT: number; // the boss's ring attack
   // player only
-  combo: { n: number; t: number; last: number; best: number };
+  combo: { n: number; t: number; last: number; best: number; /** seconds the finisher stays ready (0 = not ready) */ ready: number };
   focus: number; // bonus damage after a perfect dodge
   ult: number; // the awakening gauge, 0 to 100
   awaken: number; // seconds of awakening left
@@ -213,6 +213,8 @@ export type Input = {
   dodge: boolean;
   /** Awaken (the special burst), once the gauge is full. */
   ult?: boolean;
+  /** Fire the combo finisher (once four different moves were chained). */
+  fin?: boolean;
   /** Quick Battle: bring the squad member with this number into the ring. */
   swap?: number;
 };
@@ -491,7 +493,7 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     strafe: Math.random() < 0.5 ? 1 : -1,
     roam: { x, y },
     ringT: rnd(3, 5),
-    combo: { n: 0, t: 0, last: -1, best: 0 },
+    combo: { n: 0, t: 0, last: -1, best: 0, ready: 0 },
     focus: 0,
     ult: 0,
     awaken: 0,
@@ -1188,20 +1190,20 @@ export function tryCast(S: State, f: Fighter, slot: number, input: Input | null 
   if (f.isPlayer) {
     // chain different moves for a combo
     const c = f.combo;
+    if (c.ready > 0) { /* a finisher is waiting: no new chain until it is used or runs out */ }
+    else {
     if (c.last !== slot) c.n = c.t > 0 ? c.n + 1 : 1;
     c.last = slot;
     c.t = 2.2;
     c.best = Math.max(c.best, c.n);
     if (c.n >= 4) {
+      // four different moves in a row: the finisher is now READY and waits for the player to fire it
       c.n = 0;
       c.last = -1;
-      for (let i = 0; i < 4; i++) f.cd[i] = Math.max(0, f.cd[i]! - 1.2);
-      S.score += 150;
-      S.events.push({ t: "combo", n: 4, finish: true });
-      const r = 150;
-      boom(S, f.x, f.y, r, f.types[0] ?? "Normal");
-      for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 300 });
+      c.ready = 7;
+      S.events.push({ t: "combo", n: 4, finish: false });
     } else S.events.push({ t: "combo", n: c.n, finish: false });
+    }
   }
   // lobs and bolts warn with their own circle/line on the ground, so they fire at once
   const own = mv.kind === "lob" || mv.kind === "bolt";
@@ -1631,6 +1633,22 @@ function moveFighter(S: State, f: Fighter, dt: number) {
   if (len(sx, sy) > 20 && !f.cast && !f.channel) f.face = Math.atan2(sy, sx);
 }
 
+/** The combo finisher, fired by the player once it is ready: a blast around the fighter that hits nearby foes and refreshes cooldowns. */
+export function fireFinisher(S: State, f: Fighter): boolean {
+  if (!f.alive || !f.isPlayer || f.combo.ready <= 0) return false;
+  f.combo.ready = 0;
+  f.combo.n = 0;
+  f.combo.last = -1;
+  f.combo.t = 0;
+  for (let i = 0; i < 4; i++) f.cd[i] = Math.max(0, f.cd[i]! - 1.2);
+  S.score += 150;
+  S.events.push({ t: "combo", n: 4, finish: true });
+  const r = 150;
+  boom(S, f.x, f.y, r, f.types[0] ?? "Normal");
+  for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 300 });
+  return true;
+}
+
 /** Client-side guess of where a fighter moves under its own player's input (used to hide network lag); touches nothing but `f`. */
 export function predictMove(S: State, f: Fighter, dt: number) {
   moveFighter({ ...S, events: [] } as State, f, dt);
@@ -1684,6 +1702,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     if (inp.dodge) startDodge(S, h, len(mx, my) > 0.1 ? mx : Math.cos(h.face), len(mx, my) > 0.1 ? my : Math.sin(h.face));
     for (let i = 0; i < 4; i++) if (inp.cast[i]) tryCast(S, h, i, inp);
     if (inp.ult) activateGimmick(S, h);
+    if (inp.fin) fireFinisher(S, h);
     // a held beam follows the aim
     if (h.channel) {
       const a = aimOf(S, h, inp);
@@ -1732,6 +1751,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     f.dodge.cd = Math.max(0, f.dodge.cd - dt);
     if (f.dodge.t > 0) f.dodge.t = Math.max(0, f.dodge.t - dt);
     f.status.frzImmune = Math.max(0, f.status.frzImmune - dt);
+    if (f.isPlayer && f.combo.ready > 0) f.combo.ready = Math.max(0, f.combo.ready - dt);
     if (f.isPlayer && f.combo.t > 0) {
       f.combo.t -= dt;
       if (f.combo.t <= 0) f.combo.n = 0, (f.combo.last = -1);

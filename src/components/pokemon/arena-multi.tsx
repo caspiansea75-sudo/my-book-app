@@ -428,7 +428,7 @@ function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; 
   );
 }
 
-type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
 type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean; team?: number };
 
 type Wire = { k: string };
@@ -518,7 +518,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, fin: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -546,6 +546,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       if (e.repeat) return;
       if (k === " " || k === "shift") c.dodge = true;
       else if (k === "q") c.ult = true;
+      else if (k === "e") c.fin = true;
       else if (k === "z" || k === "x" || k === "c") c.swapQ = "zxc".indexOf(k);
       else if (k === "+" || k === "=") setZoom(c.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(c.zoom - 0.15);
@@ -715,11 +716,12 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         my = c.joy.y;
       }
       const cast: [boolean, boolean, boolean, boolean] = [c.queue[0] || c.held[0] || c.mouse, c.queue[1] || c.held[1], c.queue[2] || c.held[2], c.queue[3] || c.held[3]];
-      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult, swap: c.swapQ >= 0 ? c.swapQ : undefined };
+      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult, fin: c.fin, swap: c.swapQ >= 0 ? c.swapQ : undefined };
       c.swapQ = -1;
       c.queue = [false, false, false, false];
       c.dodge = false;
       c.ult = false;
+      c.fin = false;
       return inp;
     };
 
@@ -924,6 +926,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             dodge: Math.max(0, mine.dodge.cd / (1.15 * mine.dodgeMul)),
             dodgeLeft: mine.dodge.cd,
             ult: mine.ult,
+            fin: mine.combo.ready,
             gimmick: mine.gimmick,
             gimmickT: Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0),
             alive: quick && SQ ? SQ[mine.team]!.filter((x) => x.alive).length : teamBattle ? V.fighters.filter((f) => f.alive && f.team === mine.team).length : alive,
@@ -1135,6 +1138,11 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
                   <span className="pb-nm">{t("গড়ান", "Roll")}</span>
                   <span className="pb-ky">Space</span>
                   {hud.dodge > 0 ? <span className="pb-cd">{hud.dodgeLeft.toFixed(1)}</span> : null}
+                </button>
+                <button type="button" className={`ab-pb fin ${hud.fin > 0 ? "show" : ""}`} style={{ ["--c" as string]: "#ffd54a" }} aria-label="Combo finisher" onPointerDown={(e) => { e.preventDefault(); ctl.current.fin = true; }}>
+                  <span className="pb-ic">💥</span>
+                  <span className="pb-nm">FINISH</span>
+                  <span className="pb-ky">E</span>
                 </button>
                 <button type="button" className={`ab-pb ult ${hud.ult >= 100 && hud.gimmickT <= 0 ? "ready full" : ""}`} style={{ ["--c" as string]: "#ffd54a", ["--f" as string]: hud.gimmickT > 0 ? 0 : 1 - Math.min(1, hud.ult / 100) }} aria-label="Gimmick" onPointerDown={(e) => { e.preventDefault(); ctl.current.ult = true; }}>
                   <span className="pb-ic">{GIMMICKS[hud.gimmick].icon}</span>

@@ -313,3 +313,7 @@
 .am-spec-bar u { display: block; height: 100%; border-radius: 99px; }
 .am-spec-leave { padding: 6px 12px; font-size: 12px; }
 .am-out { bottom: 17%; }
+
+/* combo finisher: appears once four different moves were chained, and waits for the tap */
+.ab-pb.fin { --s: calc(var(--u) * 1.05); right: calc(var(--u) * 4.6); bottom: calc(var(--u) * 0.95); display: none; }
+.ab-pb.fin.show { display: grid; animation: ab-pulse 0.7s ease-in-out infinite; box-shadow: 0 0 18px rgba(255, 213, 74, 0.8), 0 4px 14px rgba(0, 0, 0, 0.45); border-color: #ffd54a; }

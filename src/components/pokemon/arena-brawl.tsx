@@ -42,7 +42,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind };
 const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"] };
 const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water" };
 const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
@@ -58,6 +58,7 @@ type Runtime = {
   held: [boolean, boolean, boolean, boolean];
   dodge: boolean;
   ult: boolean;
+  fin: boolean;
   mouse: boolean;
   paused: boolean;
   last: number;
@@ -105,7 +106,7 @@ export function ArenaBrawl() {
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
 
   useEffect(() => {
     setSave(loadSave());
@@ -360,10 +361,11 @@ export function ArenaBrawl() {
         my = r.joy.y;
       }
       const cast: [boolean, boolean, boolean, boolean] = [r.queue[0] || r.held[0] || r.mouse, r.queue[1] || r.held[1], r.queue[2] || r.held[2], r.queue[3] || r.held[3]];
-      const inp: Input = { mx, my, aim: currentAim(r, r.aim), cast, dodge: r.dodge, ult: r.ult };
+      const inp: Input = { mx, my, aim: currentAim(r, r.aim), cast, dodge: r.dodge, ult: r.ult, fin: r.fin };
       r.queue = [false, false, false, false];
       r.dodge = false;
       r.ult = false;
+      r.fin = false;
       return inp;
     };
 
@@ -421,6 +423,7 @@ export function ArenaBrawl() {
           ult: p.ult,
           awaken: p.awaken,
           combo: p.combo.n,
+          fin: p.combo.ready,
           wave: S.wave,
           score: S.score,
           foes: S.fighters.filter((f) => f.alive && f.team !== 0).length,
@@ -473,6 +476,7 @@ export function ArenaBrawl() {
       if (e.repeat) return;
       if (k === " " || k === "shift") r.dodge = true;
       else if (k === "q") r.ult = true;
+      else if (k === "e") r.fin = true;
       else if (r.mode === "quick" && (k === "z" || k === "x" || k === "c")) r.swapQ = "zxc".indexOf(k);
       else if (k === "p" || (k === "escape" && !document.fullscreenElement)) setPausedBoth(!r.paused);
       else if (k === "f") (fs ? exitFs : () => enterFs(false))();
@@ -864,6 +868,17 @@ export function ArenaBrawl() {
                 <span className="pb-nm">{t("গড়ান", "Roll")}</span>
                 <span className="pb-ky">Space</span>
                 {hud.dodge > 0 ? <span className="pb-cd">{hud.dodgeLeft.toFixed(1)}</span> : null}
+              </button>
+              <button
+                type="button"
+                className={`ab-pb fin ${hud.fin > 0 ? "show" : ""}`}
+                style={{ ["--c" as string]: "#ffd54a" }}
+                aria-label={t("কম্বো ফিনিশার", "Combo finisher")}
+                onPointerDown={(e) => { e.preventDefault(); rt.current.fin = true; }}
+              >
+                <span className="pb-ic">💥</span>
+                <span className="pb-nm">{t("ফিনিশ", "FINISH")}</span>
+                <span className="pb-ky">E</span>
               </button>
               <button
                 type="button"

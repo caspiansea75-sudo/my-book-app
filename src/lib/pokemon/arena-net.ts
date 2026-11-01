@@ -272,6 +272,8 @@ export type InputMsg = {
   c: [number, number, number, number];
   d: number;
   u: number;
+  /** Combo finisher presses so far. */
+  fn?: number;
   /** Quick Battle: the squad member asked for, and how many requests so far (so a lost message cannot lose a swap). */
   sw?: number;
   sn?: number;
@@ -283,6 +285,7 @@ export class InputSender {
   private c: [number, number, number, number] = [0, 0, 0, 0];
   private d = 0;
   private u = 0;
+  private fn = 0;
   private sw = -1;
   private sn = 0;
   /**
@@ -293,6 +296,7 @@ export class InputSender {
     for (let i = 0; i < 4; i++) if (inp.cast[i] && !held[i]) this.c[i]!++;
     if (inp.dodge) this.d++;
     if (inp.ult) this.u++;
+    if (inp.fin) this.fn++;
     if (inp.swap !== undefined && inp.swap >= 0) {
       this.sw = inp.swap;
       this.sn++;
@@ -307,6 +311,7 @@ export class InputSender {
       c: [...this.c] as InputMsg["c"],
       d: this.d,
       u: this.u,
+      fn: this.fn,
       sw: this.sw,
       sn: this.sn,
     };
@@ -315,7 +320,7 @@ export class InputSender {
 
 /** Host side: turns the newest message of a member into the controls for the next step. */
 export class InputReceiver {
-  private last = new Map<number, { q: number; c: number[]; d: number; u: number; sn: number }>();
+  private last = new Map<number, { q: number; c: number[]; d: number; u: number; fn: number; sn: number }>();
   private latest = new Map<number, InputMsg>();
   put(fid: number, m: InputMsg) {
     const cur = this.latest.get(fid);
@@ -329,10 +334,10 @@ export class InputReceiver {
   take(fid: number): Input {
     const m = this.latest.get(fid);
     if (!m) return { mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false };
-    const prev = this.last.get(fid) ?? { q: 0, c: [...m.c], d: m.d, u: m.u, sn: m.sn ?? 0 }; // first message: no phantom presses
+    const prev = this.last.get(fid) ?? { q: 0, c: [...m.c], d: m.d, u: m.u, fn: m.fn ?? 0, sn: m.sn ?? 0 }; // first message: no phantom presses
     const cast = [0, 1, 2, 3].map((i) => m.c[i]! > prev.c[i]! || !!(m.held & (1 << i))) as [boolean, boolean, boolean, boolean];
-    const inp: Input = { mx: m.mx, my: m.my, aim: m.aim, cast, dodge: m.d > prev.d, ult: m.u > prev.u, swap: (m.sn ?? 0) > prev.sn ? m.sw : undefined };
-    this.last.set(fid, { q: m.q, c: [...m.c], d: m.d, u: m.u, sn: m.sn ?? 0 });
+    const inp: Input = { mx: m.mx, my: m.my, aim: m.aim, cast, dodge: m.d > prev.d, ult: m.u > prev.u, fin: (m.fn ?? 0) > prev.fn, swap: (m.sn ?? 0) > prev.sn ? m.sw : undefined };
+    this.last.set(fid, { q: m.q, c: [...m.c], d: m.d, u: m.u, fn: m.fn ?? 0, sn: m.sn ?? 0 });
     return inp;
   }
 }
