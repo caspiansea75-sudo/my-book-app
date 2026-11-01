@@ -302,3 +302,14 @@
 .ab-ic.tilt { width: auto; min-width: 34px; padding: 0 6px; font-size: 12px; font-weight: 700; }
 @media (pointer: coarse), (max-height: 520px) { .ab-ic.tilt { display: grid; min-width: 28px; padding: 0 5px; font-size: 11px; } }
 .mp-spec { margin-left: 6px; font-style: normal; font-size: 9px; padding: 1px 5px; border-radius: 99px; border: 1px solid #ffd54a; color: #ffd54a; vertical-align: middle; white-space: nowrap; }
+
+/* spectating after being knocked out */
+.ab-hud.spec .ab-ctl, .ab-hud.spec .ab-joy, .ab-hud.spec .ab-pad, .ab-hud.spec .ab-me, .ab-hud.spec .ab-pill { display: none !important; }
+.am-spec { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 16px; background: rgba(8, 12, 22, 0.86); border: 1px solid rgba(255, 255, 255, 0.22); color: #fff; backdrop-filter: blur(6px); max-width: calc(100% - 24px); }
+.am-spec-who { display: flex; flex-direction: column; gap: 3px; min-width: 120px; text-align: center; }
+.am-spec-who small { font-size: 10px; opacity: 0.75; letter-spacing: 0.04em; text-transform: uppercase; }
+.am-spec-who b { font-size: 15px; }
+.am-spec-bar { display: block; height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.am-spec-bar u { display: block; height: 100%; border-radius: 99px; }
+.am-spec-leave { padding: 6px 12px; font-size: 12px; }
+.am-out { bottom: 17%; }

@@ -451,6 +451,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const [team, setTeam] = useState({ wave: 0, score: 0 });
   const [winTeam, setWinTeam] = useState<{ win: number; mine: number } | null>(null);
   const [out, setOut] = useState<number | null>(null);
+  /** Who a knocked-out player is watching while the fight goes on. */
+  const [spec, setSpec] = useState<{ name: string; sp: string; hp: number; max: number; i: number; n: number; mate: boolean } | null>(null);
   const [fs, setFs] = useState(true);
   const shell = useRef<HTMLDivElement>(null);
   const nativeFs = useRef(false);
@@ -516,7 +518,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, swapQ: -1, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -540,7 +542,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const c = ctl.current;
     const down = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
+      if (["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "tab"].includes(k)) e.preventDefault();
       if (e.repeat) return;
       if (k === " " || k === "shift") c.dodge = true;
       else if (k === "q") c.ult = true;
@@ -548,6 +550,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       else if (k === "+" || k === "=") setZoom(c.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(c.zoom - 0.15);
       else if (k === "t") cycleTilt();
+      else if (k === "arrowright" || k === "]" || k === "tab") c.specStep = 1;
+      else if (k === "arrowleft" || k === "[") c.specStep = -1;
       else if (k === "0") setZoom(1);
       else if (k === "1" || k === "j") c.queue[0] = true;
       else if (k === "2" || k === "k") c.queue[1] = true;
@@ -845,8 +849,21 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         for (const z of V.zones) z.player = !!mine && z.owner === mine.id;
         c.me = mine;
         R.setAim(mine && c.preview ? { from: mine, mv: moveOf(mine, c.preview.slot), x: c.preview.x, y: c.preview.y } : null, c.aim);
+        // knocked out while the fight goes on: follow somebody who is still standing (team-mates first), and let the player flip between them
+        let watch: Fighter | undefined;
+        let wList: Fighter[] = [];
+        let wIdx = 0;
+        if (mine && !mine.alive && !quick && V.phase !== "over") {
+          wList = V.fighters.filter((f) => f.alive && f !== mine).sort((a, b) => Number(b.team === mine.team) - Number(a.team === mine.team) || Number(!!b.isPlayer) - Number(!!a.isPlayer) || a.id - b.id);
+          wIdx = wList.findIndex((f) => f.id === c.specId);
+          if (c.specStep && wList.length) wIdx = wIdx < 0 ? 0 : (wIdx + c.specStep + wList.length) % wList.length;
+          if (wIdx < 0) wIdx = 0;
+          watch = wList[wIdx];
+          c.specId = watch?.id ?? null;
+        }
+        c.specStep = 0;
         try {
-          R.render(V, dt, mine?.alive ? mine : undefined);
+          R.render(V, dt, mine?.alive ? mine : watch);
         } catch (err) {
           console.error("Arena Brawl: a frame failed to draw", err);
         }
@@ -856,6 +873,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           const ids = mine.sp.moves;
           const alive = V.fighters.filter((f) => f.alive).length;
           setOut(mine.alive || quick ? null : coop || teamBattle ? 0 : mine.place ?? alive + 1);
+          setSpec(watch ? { name: watch.name ?? watch.sp.name, sp: watch.sp.name, hp: watch.hp, max: watch.maxHp, i: wIdx + 1, n: wList.length, mate: watch.team === mine.team } : null);
           const finishing = V.fighters.some((f) => f.alive && f.team !== mine.team && f.hp / f.maxHp < 0.2 && Math.hypot(f.x - mine.x, f.y - mine.y) < 420);
           const gl = Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0);
           setHud({
@@ -1010,6 +1028,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           ref={stage}
           className="ab-stage"
           onPointerDown={(e) => {
+            if (ctl.current.me && !ctl.current.me.alive) { ctl.current.specStep = 1; return; }
             if (e.pointerType === "mouse") {
               aimFrom(e);
               ctl.current.mouse = e.button === 0;
@@ -1024,7 +1043,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         </div>
 
         {hud ? (
-          <div className="ab-hud">
+          <div className={`ab-hud ${spec ? "spec" : ""}`}>
             <div className="ab-me">
               <b>{myName}</b>
               <small>{hud.name} · {Math.ceil(hud.hp)} / {hud.max}</small>
@@ -1104,6 +1123,19 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         ) : null}
         {status === "lost" ? (
           <div className="ab-ov"><div><h2>{t("হোস্টের সংযোগ কেটে গেছে", "Lost the host")}</h2><button type="button" className="ab-btn" onClick={onLeave}>{t("ফিরে যান", "Back")}</button></div></div>
+        ) : null}
+
+        {spec && !rows && hud?.phase !== "perks" ? (
+          <div className="am-spec">
+            <button type="button" className="ab-ic" onClick={() => { ctl.current.specStep = -1; }} aria-label="Previous">◀</button>
+            <div className="am-spec-who">
+              <small>{spec.mate ? t("সঙ্গীকে দেখছেন", "Watching your team-mate") : t("দেখছেন", "Spectating")} · {spec.i}/{spec.n}</small>
+              <b>{spec.name}</b>
+              <span className="am-spec-bar"><u style={{ width: `${Math.max(0, Math.min(100, (spec.hp / spec.max) * 100))}%`, background: hpColor(spec.hp / spec.max) }} /></span>
+            </div>
+            <button type="button" className="ab-ic" onClick={() => { ctl.current.specStep = 1; }} aria-label="Next">▶</button>
+            <button type="button" className="ab-btn am-spec-leave" onClick={onLeave}>{t("ছেড়ে যান", "Leave")}</button>
+          </div>
         ) : null}
 
         {out !== null && !rows && hud?.phase !== "perks" ? (
