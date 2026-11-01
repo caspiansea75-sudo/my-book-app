@@ -333,6 +333,37 @@ function xslash(g: CanvasRenderingContext2D, e: Fx, x: number, y: number, s: num
     const L = s * 2 * k;
     const an = e.ang + sg * 0.75;
     const dx = Math.cos(an), dy = Math.sin(an);
+    // glow: wide soft strokes added on top of the picture, and a bright ball riding the tip
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round";
+    for (const [w, al] of [[34, 0.16], [20, 0.26]] as [number, number][]) {
+      g.globalAlpha = fade * al;
+      g.strokeStyle = e.c1;
+      g.lineWidth = w;
+      g.beginPath();
+      g.moveTo(-dx * L * 0.5, -dy * L * 0.5);
+      g.lineTo(dx * L * 0.5, dy * L * 0.5);
+      g.stroke();
+    }
+    const tipG = g.createRadialGradient(dx * L * 0.5, dy * L * 0.5, 0, dx * L * 0.5, dy * L * 0.5, 16 + s * 0.2);
+    tipG.addColorStop(0, e.c2);
+    tipG.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = fade;
+    g.fillStyle = tipG;
+    g.beginPath();
+    g.arc(dx * L * 0.5, dy * L * 0.5, 16 + s * 0.2, 0, PI2);
+    g.fill();
+    g.restore();
+    if (k < 1) {
+      // a shower of sparks shed along the blade as it is drawn
+      for (let i = 0; i < 3; i++) {
+        const along = rnd(-0.5, 0.5) * L;
+        const sa = an + Math.PI / 2 + rnd(-0.6, 0.6);
+        const v = rnd(80, 260);
+        emit({ kind: i % 2 ? "star" : "spark", x: x + dx * along, y: y + dy * along, vx: Math.cos(sa) * v, vy: Math.sin(sa) * v, g: 180, life: rnd(0.3, 0.7), max: 0.7, size: i % 2 ? rnd(3.5, 6) : rnd(1.5, 3), grow: 0, rot: rnd(0, 3), vr: rnd(-8, 8), color: i === 0 ? "#ffffff" : i === 1 ? e.c2 : e.c1 });
+      }
+    }
     for (const [w, col, al] of [[12, e.c1, 0.45], [5, e.c1, 1], [2.2, e.c2, 1]] as [number, string, number][]) {
       g.globalAlpha = fade * al;
       g.strokeStyle = col;
@@ -345,6 +376,22 @@ function xslash(g: CanvasRenderingContext2D, e: Fx, x: number, y: number, s: num
     if (k < 1) flavour(e, x + dx * L * 0.5, y + dy * L * 0.5, emit, 1);
   }
   burstStar(g, e, 0, 0, s * 0.9, clamp((p - 0.15) / 0.4, 0, 1), 8);
+  // where the two blades cross: a flash and a ring
+  if (p > 0.1 && p < 0.55) {
+    const q = (p - 0.1) / 0.45;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.globalAlpha = (1 - q) * 0.8;
+    const cg = g.createRadialGradient(0, 0, 0, 0, 0, s * (0.5 + q));
+    cg.addColorStop(0, "#ffffff");
+    cg.addColorStop(0.4, e.c1);
+    cg.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = cg;
+    g.beginPath();
+    g.arc(0, 0, s * (0.5 + q), 0, PI2);
+    g.fill();
+    g.restore();
+  }
 }
 
 function fist(g: CanvasRenderingContext2D, e: Fx, x: number, y: number, s: number, p: number, emit: Emit, shake: (a: number, s: number) => void) {

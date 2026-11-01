@@ -44,6 +44,8 @@ export type MoveDef = {
   fx?: string;
   /** Seconds a whirl stays and keeps hurting (lob moves). */
   linger?: number;
+  /** A type specialty: every Pokémon of this type can learn it, and no other type can. */
+  spec?: boolean;
   desc: string;
 };
 
@@ -133,7 +135,25 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "phantomforce", name: "Phantom Force", type: "Ghost", kind: "dash", power: 1.9, cd: 5.0, range: 270, desc: "Vanish and strike." }),
     m({ id: "kingsshield", name: "King's Shield", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Block almost everything for a moment." }),
     m({ id: "hyperbeam", name: "Hyper Beam", type: "Normal", kind: "bolt", power: 3.2, cd: 8, range: 560, windup: 0.7, pierce: true, desc: "An enormous beam after a long charge." }),
-    m({ id: "psychicgrip", name: "Psychic Grip", type: "Psychic", kind: "grab", power: 2.6, cd: 7, range: 380, fx: "levitate", desc: "Lift a foe with your mind, hold it, then hurl it away." }),
+    m({ id: "psychicgrip", name: "Psychic Grip", type: "Psychic", spec: true, kind: "grab", power: 2.6, cd: 7, range: 380, fx: "levitate", desc: "Lift a foe with your mind, hold it, then hurl it away." }),
+    // ---- type specialties: one signature move for each type, open to every Pokémon of that type
+    m({ id: "overdriverush", name: "Overdrive Rush", type: "Normal", spec: true, kind: "dash", power: 2.8, cd: 8, range: 310, windup: 0.4, pierce: true, desc: "Normal specialty: an all-out charge that smashes through everything in its way." }),
+    m({ id: "magmastorm", name: "Magma Storm", type: "Fire", spec: true, kind: "lob", power: 1.9, cd: 8.5, range: 340, windup: 0.5, linger: 4, status: { kind: "brn", chance: 1 }, desc: "Fire specialty: a storm of magma that sits on the spot and burns everything inside." }),
+    m({ id: "whirlpoolprison", name: "Whirlpool Prison", type: "Water", spec: true, kind: "lob", power: 1.3, cd: 8.5, range: 330, windup: 0.45, linger: 3.6, status: { kind: "cnf", chance: 0.9 }, desc: "Water specialty: a whirlpool that traps foes and leaves them dizzy." }),
+    m({ id: "sporegarden", name: "Spore Garden", type: "Grass", spec: true, kind: "lob", power: 0.9, cd: 9.5, range: 320, windup: 0.4, linger: 3.8, status: { kind: "slp", chance: 0.6 }, desc: "Grass specialty: a cloud of spores that puts foes to sleep." }),
+    m({ id: "thundercage", name: "Thunder Cage", type: "Electric", spec: true, kind: "bolt", power: 2.3, cd: 7.5, range: 460, windup: 0.45, status: { kind: "par", chance: 1 }, desc: "Electric specialty: a long strike that always paralyzes." }),
+    m({ id: "absolutezero", name: "Absolute Zero", type: "Ice", spec: true, kind: "nova", power: 1.7, cd: 8.5, range: 200, windup: 0.4, status: { kind: "frz", chance: 0.8 }, desc: "Ice specialty: freezing air bursts out all around and usually freezes foes solid." }),
+    m({ id: "finalflurry", name: "Final Flurry", type: "Fighting", spec: true, kind: "dash", power: 2.7, cd: 7, range: 290, windup: 0.3, pierce: true, desc: "Fighting specialty: a rush of blows that hits everything on the way." }),
+    m({ id: "toxicflood", name: "Toxic Flood", type: "Poison", spec: true, kind: "lob", power: 1.1, cd: 8.5, range: 330, windup: 0.45, linger: 4, status: { kind: "psn", chance: 1 }, desc: "Poison specialty: a pool of venom that poisons whoever stands in it." }),
+    m({ id: "fissurebreak", name: "Fissure Break", type: "Ground", spec: true, kind: "bolt", power: 2.8, cd: 8, range: 420, windup: 0.6, pierce: true, desc: "Ground specialty: the floor splits in a long line." }),
+    m({ id: "hurricanegale", name: "Hurricane Gale", type: "Flying", spec: true, kind: "spread", power: 0.85, cd: 7, n: 8, speed: 430, pierce: true, desc: "Flying specialty: a fan of cutting winds that pass through foes." }),
+    m({ id: "swarmburst", name: "Swarm Burst", type: "Bug", spec: true, kind: "spread", power: 0.62, cd: 7, n: 9, speed: 380, status: { kind: "psn", chance: 0.25 }, desc: "Bug specialty: a swarm bursts out and stings in every direction ahead." }),
+    m({ id: "rockwrecker", name: "Rock Wrecker", type: "Rock", spec: true, kind: "lob", power: 2.9, cd: 9, range: 340, windup: 0.7, desc: "Rock specialty: a giant boulder is dropped on the spot." }),
+    m({ id: "hauntingcurse", name: "Haunting Curse", type: "Ghost", spec: true, kind: "homing", power: 1.9, cd: 7, speed: 300, status: { kind: "cnf", chance: 0.7 }, desc: "Ghost specialty: a curse that follows its target and leaves it confused." }),
+    m({ id: "draconicfury", name: "Draconic Fury", type: "Dragon", spec: true, kind: "nova", power: 2.5, cd: 9, range: 210, windup: 0.45, desc: "Dragon specialty: a huge burst of draconic rage all around you." }),
+    m({ id: "eternalnight", name: "Eternal Night", type: "Dark", spec: true, kind: "nova", power: 0.9, cd: 10, range: 210, windup: 0.4, status: { kind: "slp", chance: 0.7 }, desc: "Dark specialty: a wave of darkness that puts foes to sleep." }),
+    m({ id: "ironfortress", name: "Iron Fortress", type: "Steel", spec: true, kind: "guard", power: 0, cd: 8, desc: "Steel specialty: harden up and shrug off almost everything for a moment." }),
+    m({ id: "moonlitwish", name: "Moonlit Wish", type: "Fairy", spec: true, kind: "heal", power: 0.55, cd: 11, desc: "Fairy specialty: moonlight heals a big part of your health." }),
     m({ id: "firespin", name: "Fire Spin", type: "Fire", kind: "lob", power: 1.4, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, status: { kind: "brn", chance: 0.35 }, fx: "firespin", desc: "A fire tornado that stays and keeps burning." }),
     m({ id: "whirlpool", name: "Whirlpool", type: "Water", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "whirlpool", desc: "A whirlpool that holds foes in its swirl." }),
     m({ id: "sandtomb", name: "Sand Tomb", type: "Ground", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "sandtomb", desc: "A column of sand that traps and scrapes." }),
@@ -650,7 +670,7 @@ export function movePool(id: string): string[] {
   }
   else {
     const set = new Set<string>(sp.moves);
-    for (const k of Object.keys(MOVES)) if ((sp.types.includes(MOVES[k]!.type) || MOVES[k]!.type === "Normal") && !SIGNATURE.has(k)) set.add(k);
+    for (const k of Object.keys(MOVES)) if ((sp.types.includes(MOVES[k]!.type) || (MOVES[k]!.type === "Normal" && !MOVES[k]!.spec)) && !SIGNATURE.has(k)) set.add(k);
     for (const k of ["shadowball", "icebeam", "thunderbolt", "flashcannon", "earthquake", "stoneedge", "psychic", "surf", "flamethrower"]) if (MOVES[k]) set.add(k);
     list = [...set];
   }

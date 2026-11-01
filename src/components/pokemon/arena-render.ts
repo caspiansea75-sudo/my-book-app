@@ -4,6 +4,7 @@
  */
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
+import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
@@ -117,6 +118,24 @@ export class ArenaRenderer {
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
+  /** Type-specialty art: timed floor drawings, auras around fighters, strikes already seen, and the "night" dimming. */
+  private decals: Decal[] = [];
+  private auras = new Map<number, { kind: string; start: number; until: number }>();
+  private specSeen = new Set<number>();
+  private nightT = 0;
+  private sctxV: SpecCtx | null = null;
+  private get sctx(): SpecCtx {
+    return (this.sctxV ??= {
+      add: (p) => { this.parts.push({ vx: 0, vy: 0, g: 0, size: 5, grow: 0, max: p.life, ...p } as unknown as Parti); },
+      ring: (x, y, color, r, life) => this.ring(x, y, color, r, life),
+      later: (t, fn) => { this.later.push({ t, fn }); },
+      shake: (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); },
+      flash: (t) => { this.flashT = Math.max(this.flashT, t); },
+      night: (t) => { this.nightT = Math.max(this.nightT, t); },
+      decal: (d) => { this.decals.push({ ...d, t: 0 }); if (this.decals.length > 14) this.decals.shift(); },
+      scorch: (x, y, r, type) => { this.scorch.push({ x, y, r, seed: Math.random() * 100, t: 9, max: 9, type }); if (this.scorch.length > 28) this.scorch.shift(); },
+    });
+  }
   private failAt = new Map<string, number>();
   private t = 0;
   private scale = 1;
@@ -542,6 +561,11 @@ export class ArenaRenderer {
           ps.atkDir = e.dir;
           this.poses.set(e.id, ps);
           this.specialCast(e);
+          if (SPEC_ART.has(e.mv)) {
+            specCast(e.mv, e, MOVES[e.mv]?.range ?? 260, this.sctx);
+            if (e.mv === "ironfortress") this.auras.set(e.id, { kind: e.mv, start: this.t, until: this.t + 1.15 });
+            if (e.mv === "moonlitwish") this.auras.set(e.id, { kind: e.mv, start: this.t, until: this.t + 1.2 });
+          }
         }
           this.ring(e.x, e.y, col(e.type), 44, 0.35);
           this.burst(e.x, e.y, col(e.type), 6, 120);
@@ -815,6 +839,10 @@ export class ArenaRenderer {
   /** Extra art for particular moves, taken from how they look in the video: embers, cracks, waves, lightning from the sky. */
   private moveFx(e: Extract<Ev, { t: "explode" }>) {
     const { x, y, r } = e;
+    if (e.fx && SPEC_ART.has(e.fx)) {
+      specBoom(e.fx, x, y, r, this.sctx);
+      return;
+    }
     switch (e.fx) {
       case "fireblast":
         // a ring of fire puffs and embers
@@ -910,13 +938,39 @@ export class ArenaRenderer {
         break;
       case "closecombat":
       case "dynamicpunch":
-      case "xscissor":
-        if (e.fx === "xscissor") this.parts.push({ kind: "cross", x, y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: Math.max(70, r * 1.1), grow: 0, color: "#6dff7a" });
+      case "xscissor": {
+        const isX = e.fx === "xscissor";
+        const col = isX ? "#6dff7a" : e.fx === "dynamicpunch" ? "#ff6a3a" : "#ffb347";
+        const col2 = isX ? "#d6ffd0" : "#ffe9a8";
+        const S0 = Math.max(70, r * 1.1);
+        if (isX) {
+          // two crossing blades, then the same cross again a moment later, turned a little (an afterimage)
+          this.parts.push({ kind: "cross", x, y, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: S0, grow: 0, color: col });
+          this.later.push({ t: 0.09, fn: () => this.parts.push({ kind: "cross", x, y, vx: 0, vy: 0, g: 0, life: 0.36, max: 0.36, size: S0 * 1.25, grow: 0, color: col2 }) });
+        }
+        // a flash, a ring on the air and a ring on the ground
+        this.parts.push({ kind: "glow", x, y, vx: 0, vy: 0, g: 0, life: 0.42, max: 0.42, size: S0 * 0.5, grow: S0 * 2.4, color: col });
+        this.parts.push({ kind: "glow", x, y, vx: 0, vy: 0, g: 0, life: 0.26, max: 0.26, size: S0 * 0.3, grow: S0 * 1.4, color: "#ffffff" });
+        this.ring(x, y, col, S0 * 0.9, 0.4);
+        this.parts.push({ kind: "gring", x, y: y + 8, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 6, grow: S0 * 3.2, color: col });
         for (let i = 0; i < 10; i++) {
           const a = (i / 10) * Math.PI * 2;
-          this.parts.push({ kind: "streak", x, y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, g: 0, life: 0.28, max: 0.28, size: 9, grow: 0, color: i % 2 ? "#ffffff" : "#ffcf4d" });
+          this.parts.push({ kind: "streak", x, y, vx: Math.cos(a) * 520, vy: Math.sin(a) * 520, g: 0, life: 0.28, max: 0.28, size: 9, grow: 0, color: i % 2 ? "#ffffff" : isX ? col : "#ffcf4d" });
+        }
+        // sparks fly out along the two diagonals the blades cut, and embers fall back down
+        for (let i = 0; i < 26; i++) {
+          const dg = (i % 4) * (Math.PI / 2) + Math.PI / 4 + rnd(-0.18, 0.18);
+          const v = rnd(160, 620);
+          this.parts.push({ kind: i % 3 ? "spark" : "star", x, y, vx: Math.cos(dg) * v, vy: Math.sin(dg) * v, g: 260, life: rnd(0.35, 0.85), max: 0.85, size: i % 3 ? rnd(1.6, 3.4) : rnd(4, 7), grow: 0, rot: rnd(0, 3), vr: rnd(-8, 8), color: i % 3 === 0 ? "#ffffff" : i % 3 === 1 ? col2 : col });
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = rnd(0, Math.PI * 2), v = rnd(60, 220);
+          this.parts.push(isX
+            ? { kind: "leaf", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, g: 160, life: rnd(0.6, 1.1), max: 1.1, size: rnd(3.5, 6), grow: 0, rot: rnd(0, 6), vr: rnd(-12, 12), color: i % 2 ? "#6fcf4a" : "#c6f27a" }
+            : { kind: "dot", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 80, g: 520, life: rnd(0.5, 0.9), max: 0.9, size: rnd(2, 3.6), grow: 0, color: i % 2 ? "#ffd27a" : "#ff8a4a" });
         }
         break;
+      }
       case "dracometeor":
       case "rockslide":
         if (e.fx === "dracometeor") {
@@ -980,6 +1034,7 @@ export class ArenaRenderer {
     this.shakeT = Math.max(0, this.shakeT - dtReal);
     this.zoomPulse = Math.max(0, this.zoomPulse - dtReal * 3);
     this.flashT = Math.max(0, this.flashT - dtReal);
+    this.nightT = Math.max(0, this.nightT - dtReal);
     this.perfectT = Math.max(0, this.perfectT - dtReal);
     if (this.z) {
       this.z.t += dtReal;
@@ -1098,6 +1153,7 @@ export class ArenaRenderer {
     this.drawZones(G, S);
     this.drawTelegraphs(G, S);
     this.drawWaves(G, dt);
+    this.decals = drawDecals(G, this.decals, dt);
     this.drawRocks(G, dt);
     this.drawTethers(G, S);
     if (T) this.finishGround(g, G);
@@ -1139,6 +1195,36 @@ export class ArenaRenderer {
         // two crossing slashes that flash in and thin out (X-Scissor)
         const k = 1 - a;
         const L = p.size * (0.5 + Math.min(1, k * 4) * 0.5);
+        // a soft glow under the blades, a halo around them, and bright tips
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        const gl = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, L);
+        gl.addColorStop(0, "rgba(255,255,255,.55)");
+        gl.addColorStop(0.35, p.color + "88");
+        gl.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = gl;
+        g.beginPath();
+        g.arc(p.x, p.y, L, 0, Math.PI * 2);
+        g.fill();
+        g.strokeStyle = p.color;
+        g.lineCap = "round";
+        g.globalAlpha = a * 0.5;
+        for (const sg of [1, -1]) {
+          g.lineWidth = 26 * a + 4;
+          g.beginPath();
+          g.moveTo(p.x - L * 0.7, p.y - L * 0.7 * sg);
+          g.lineTo(p.x + L * 0.7, p.y + L * 0.7 * sg);
+          g.stroke();
+        }
+        g.globalAlpha = a;
+        g.fillStyle = "#ffffff";
+        for (const sx of [-1, 1]) for (const sg of [1, -1]) {
+          const tx = p.x + sx * L * 0.7, ty = p.y + sx * sg * L * 0.7;
+          g.beginPath();
+          g.arc(tx, ty, 3 + 5 * a, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.restore();
         g.strokeStyle = p.color;
         g.lineCap = "round";
         for (const sg of [1, -1]) {
@@ -1363,6 +1449,14 @@ export class ArenaRenderer {
       const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 140, ARENA.CX, ARENA.CY, 560);
       gr.addColorStop(0, "rgba(80,200,255,0)");
       gr.addColorStop(1, `rgba(60,170,255,${0.4 * a})`);
+      g.fillStyle = gr;
+      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+    }
+    if (this.nightT > 0) {
+      const k = Math.min(1, this.nightT / 0.4, (1.7 - this.nightT) / 0.3 + 0.0001);
+      const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 160, ARENA.CX, ARENA.CY, 620);
+      gr.addColorStop(0, `rgba(10,4,30,${0.12 * k})`);
+      gr.addColorStop(1, `rgba(10,4,30,${0.5 * k})`);
       g.fillStyle = gr;
       g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     }
@@ -2203,6 +2297,7 @@ export class ArenaRenderer {
           g.fill();
           g.stroke();
           if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.orbFall(g, z, prog);
+          if (z.team !== -1 && SPEC_ART.has(z.mv.id)) specWindup(g, z.mv.id, z, prog, this.t);
           if ((z.mv.fx ?? z.mv.id) === "fireblast") {
             // the big blast comes down as a burning "大" of five flames, as in the video
             const sy = z.y - (1 - prog) * 320 - 20;
@@ -2310,6 +2405,9 @@ export class ArenaRenderer {
           g.strokeStyle = z.player ? c : "rgba(255,120,90,.9)";
           g.lineWidth = 2;
           g.strokeRect(0, -z.r, L, z.r * 2);
+          g.rotate(-ang);
+          g.translate(-z.x, -z.y);
+          if (SPEC_ART.has(z.mv.id)) specWindup(g, z.mv.id, z, prog, this.t);
         }
         g.restore();
       } else if (z.mv.linger && z.shape === "circle") {
@@ -2360,6 +2458,10 @@ export class ArenaRenderer {
             g.closePath();
             g.fill();
           }
+        } else if (SPEC_ART.has(z.mv.id) && z.shape === "line") {
+          const first = !this.specSeen.has(z.id);
+          if (first) { this.specSeen.add(z.id); if (this.specSeen.size > 300) this.specSeen.clear(); }
+          specStrike(g, z.mv.id, z, a, this.t, first, this.sctx);
         } else if ((z.mv.fx ?? z.mv.id) === "laser" && z.shape === "line") {
           // a thin bright laser with a glowing source
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
@@ -2642,6 +2744,10 @@ export class ArenaRenderer {
     const grow = Math.min(1, age / 0.35);
     const fade = Math.min(1, z.life / 0.45);
     const R = z.r;
+    if (SPEC_ART.has(fx)) {
+      specLinger(g, fx, z, this.t, age, grow, fade, this.sctx);
+      return;
+    }
     if (fx === "frenzyplant") {
       this.drawRoots(g, z, age, fade);
       return;
@@ -3846,7 +3952,7 @@ export class ArenaRenderer {
       }
       const c = col(p.type);
       this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t));
-      this.trail(p, c);
+      if (!specShotTrail(p, this.sctx)) this.trail(p, c);
     }
     for (const [owner, list] of streams) {
       const f = S.fighters.find((x) => x.id === owner);
@@ -4401,6 +4507,11 @@ export class ArenaRenderer {
     this.meleeFx.draw(g, f, this.t, (q) => this.parts.push(q as unknown as Parti), (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); });
     const dn = this.dances.get(f.id);
     if (dn && dn.until > this.t) this.drawDance(g, f, dn.until, dn.kind);
+    const au = this.auras.get(f.id);
+    if (au && au.until > this.t && f.alive) drawAura(g, au.kind, f, this.t - au.start, au.until - this.t, this.t, this.sctx);
+    else if (au) this.auras.delete(f.id);
+    if (f.grabT > 0 && f.alive) drawAura(g, "mindhand", f, 0.3, 1, this.t, this.sctx);
+    if (f.dash && !under && SPEC_ART.has(f.dash.mv.id)) specDash(f.dash.mv.id, f, this.sctx);
     // each type of rush leaves its own trail
     if ((f.dash && !under) || rolling) {
       const ty = f.dash?.mv.type ?? f.types[0] ?? "Normal";

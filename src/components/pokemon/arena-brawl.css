@@ -301,3 +301,4 @@
 /* the camera-angle button stays visible on phones (the other 'wide' buttons are hidden there) */
 .ab-ic.tilt { width: auto; min-width: 34px; padding: 0 6px; font-size: 12px; font-weight: 700; }
 @media (pointer: coarse), (max-height: 520px) { .ab-ic.tilt { display: grid; min-width: 28px; padding: 0 5px; font-size: 11px; } }
+.mp-spec { margin-left: 6px; font-style: normal; font-size: 9px; padding: 1px 5px; border-radius: 99px; border: 1px solid #ffd54a; color: #ffd54a; vertical-align: middle; white-space: nowrap; }

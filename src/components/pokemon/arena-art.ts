@@ -5,6 +5,7 @@
  */
 import { ARENA, type Obstacle, type Patch, type Proj, type StageKind } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
+import { specShot } from "./arena-spec";
 import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
 
 const { W, H } = ARENA;
@@ -592,6 +593,10 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
     return;
   }
 
+  if (specShot(g, p, age, t)) {
+    g.restore();
+    return;
+  }
   switch (p.mv) {
     case "confuseray": {
       // a spinning purple-pink eye of light
