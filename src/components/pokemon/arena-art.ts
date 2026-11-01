@@ -400,16 +400,16 @@ export function drawHole(g: CanvasRenderingContext2D, h: Patch, t: number) {
 export function drawObstacle(g: CanvasRenderingContext2D, o: Obstacle, t: number) {
   if (drawSceneObstacle(g, o, t)) return;
   g.save();
-  g.translate(o.x, o.y);
+  // something ran into it or hit it: it shudders for a moment (no white-out)
+  g.translate(o.x + (o.hit > 0 ? Math.sin(o.hit * 90) * 3 * Math.min(1, o.hit / 0.25) : 0), o.y);
   // shadow
   g.fillStyle = "rgba(0,0,0,.38)";
   g.beginPath();
   g.ellipse(4, o.r * 0.7, o.r * 1.05, o.r * 0.42, 0, 0, Math.PI * 2);
   g.fill();
-  const flash = o.hit > 0;
   if (o.kind === "crate") {
     const s = o.r;
-    g.fillStyle = flash ? "#fff" : "#b9854a";
+    g.fillStyle = "#b9854a";
     g.strokeStyle = "#5e3c1c";
     g.lineWidth = 3;
     g.fillRect(-s, -s, s * 2, s * 2);
@@ -436,7 +436,7 @@ export function drawObstacle(g: CanvasRenderingContext2D, o: Obstacle, t: number
     gr.addColorStop(0, "#5b6376");
     gr.addColorStop(0.5, "#98a1b8");
     gr.addColorStop(1, "#4a5266");
-    g.fillStyle = flash ? "#fff" : gr;
+    g.fillStyle = gr;
     g.fillRect(-s * 0.8, -s * 1.4, s * 1.6, s * 2.1);
     g.fillStyle = "#b7bfd3";
     g.beginPath();
@@ -467,7 +467,7 @@ export function drawObstacle(g: CanvasRenderingContext2D, o: Obstacle, t: number
       const lg = g.createLinearGradient(x - w, 0, x + w, 0);
       lg.addColorStop(0, c1);
       lg.addColorStop(1, c2);
-      g.fillStyle = flash ? "#fff" : lg;
+      g.fillStyle = lg;
       g.fill();
       g.strokeStyle = "rgba(235,215,255,.8)";
       g.lineWidth = 1.5;
@@ -478,7 +478,7 @@ export function drawObstacle(g: CanvasRenderingContext2D, o: Obstacle, t: number
     shard(0, 50, 11, "#8a5cf0", "#e0c8ff");
   } else {
     // a boulder
-    g.fillStyle = flash ? "#fff" : "#7d8088";
+    g.fillStyle = "#7d8088";
     g.strokeStyle = "#3b3e46";
     g.lineWidth = 3;
     g.beginPath();

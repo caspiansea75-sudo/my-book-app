@@ -1113,7 +1113,7 @@ export class ArenaRenderer {
       G.save();
       G.translate(sc.x, sc.y);
       G.scale(1, 0.72);
-      G.globalAlpha = Math.min(1, k * 1.6) * 0.5;
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.36;
       G.fillStyle = "#14100e";
       G.beginPath();
       for (let i = 0; i <= 14; i++) {
@@ -1124,7 +1124,7 @@ export class ArenaRenderer {
       }
       G.closePath();
       G.fill();
-      G.globalAlpha = Math.min(1, k * 1.6) * 0.45;
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.28;
       G.fillStyle = texPat(G, "rock", sc.x * 0.5, sc.y * 0.5, 0.8);
       G.fill();
       G.globalAlpha = Math.min(1, k * 1.6) * 0.5;

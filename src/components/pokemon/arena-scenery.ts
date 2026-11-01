@@ -356,19 +356,30 @@ function beach(g: G, r: R) {
 /* =========================================================================== obstacles */
 
 export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
-  const flash = o.hit > 0;
-  const sway = Math.sin(t * 1.4 + o.id) * 0.035;
+  if (o.hit <= 0) return drawSceneObstacleBody(g, o, t);
+  // hit or bumped: the whole thing shudders and settles back
+  g.save();
+  g.translate(Math.sin(o.hit * 90) * 3 * Math.min(1, o.hit / 0.25), 0);
+  const done = drawSceneObstacleBody(g, o, t);
+  g.restore();
+  return done;
+}
+
+function drawSceneObstacleBody(g: G, o: Obstacle, t: number): boolean {
+  const flash = false; // hits shake the thing instead of turning it white
+  const hitShake = o.hit > 0 ? Math.sin(o.hit * 80) * 0.16 * Math.min(1, o.hit / 0.25) : 0;
+  const sway = Math.sin(t * 1.4 + o.id) * 0.035 + hitShake;
   const R = o.r;
   switch (o.kind) {
     case "tree": {
       g.save(); g.translate(o.x, o.y);
       ell(g, 6, R * 0.55, R * 1.5, R * 0.55, "rgba(0,0,0,.34)");
-      g.fillStyle = flash ? "#fff" : "#6a4426"; g.fillRect(-R * 0.26, -R * 0.9, R * 0.52, R * 1.6);
+      g.fillStyle = "#6a4426"; g.fillRect(-R * 0.26, -R * 0.9, R * 0.52, R * 1.6);
       g.fillStyle = "rgba(0,0,0,.25)"; g.fillRect(R * 0.05, -R * 0.9, R * 0.21, R * 1.6);
       g.translate(0, -R * 1.5); g.rotate(sway);
       const rr = rng(o.id * 13 + 1);
       for (const [c, k, dy] of [["#14532d", 1.1, 4], ["#1f7a3a", 0.95, 0], ["#34a853", 0.75, -4], ["#6fcf5a", 0.5, -7]] as [string, number, number][]) {
-        for (let i = 0; i < 5; i++) { const a = (i / 5) * PI2 + rr(); g.fillStyle = flash ? "#fff" : c; g.beginPath(); g.arc(Math.cos(a) * R * 0.55 * k, Math.sin(a) * R * 0.42 * k + dy, R * 0.72 * k, 0, PI2); g.fill(); }
+        for (let i = 0; i < 5; i++) { const a = (i / 5) * PI2 + rr(); g.fillStyle = c; g.beginPath(); g.arc(Math.cos(a) * R * 0.55 * k, Math.sin(a) * R * 0.42 * k + dy, R * 0.72 * k, 0, PI2); g.fill(); }
       }
       g.fillStyle = "rgba(255,255,190,.3)"; for (let i = 0; i < 7; i++) { g.beginPath(); g.arc(-R * 0.5 + rr() * R, -R * 0.7 + rr() * R * 0.5, 2.5, 0, PI2); g.fill(); }
       g.restore();
@@ -383,7 +394,7 @@ export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
       ell(g, 4, R * 0.7, R * 1.2, R * 0.45, "rgba(20,50,90,.35)");
       const pts: [number, number][] = [[-1, 0.1], [-0.75, -0.55], [-0.2, -1.05], [0.5, -0.9], [1, -0.2], [0.85, 0.5], [0.1, 0.8], [-0.6, 0.65]];
       const lg = g.createLinearGradient(-R, -R, R, R); lg.addColorStop(0, "#e9fbff"); lg.addColorStop(0.5, "#8fd0f0"); lg.addColorStop(1, "#4f95cf");
-      g.fillStyle = flash ? "#fff" : lg; g.strokeStyle = "#e8f8ff"; g.lineWidth = 2.5;
+      g.fillStyle = lg; g.strokeStyle = "#e8f8ff"; g.lineWidth = 2.5;
       g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x * R, y * R * 1.05) : g.moveTo(x * R, y * R * 1.05))); g.closePath(); g.fill(); g.stroke();
       g.fillStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.moveTo(-R * 0.75, -R * 0.55); g.lineTo(-R * 0.2, -R * 1.0); g.lineTo(0.05 * R, -R * 0.3); g.lineTo(-R * 0.5, -R * 0.05); g.closePath(); g.fill();
       g.strokeStyle = "rgba(255,255,255,.6)"; g.lineWidth = 1.4; g.beginPath(); g.moveTo(-R * 0.1, -R * 0.1); g.lineTo(R * 0.4, R * 0.35); g.lineTo(R * 0.2, R * 0.7); g.moveTo(R * 0.4, R * 0.35); g.lineTo(R * 0.85, R * 0.1); g.stroke();
@@ -395,9 +406,9 @@ export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
       ell(g, 4, R * 0.7, R * 1.3, R * 0.45, "rgba(0,0,0,.4)");
       glow(g, 0, R * 0.5, R * 1.7, `rgba(255,100,20,${0.35 + Math.sin(t * 3 + o.id) * 0.1})`);
       for (const [dx, h, w] of [[-R * 0.6, R * 1.0, R * 0.42], [R * 0.55, R * 1.2, R * 0.42], [0, R * 1.75, R * 0.5]] as [number, number, number][]) {
-        g.fillStyle = flash ? "#fff" : "#2e2a2c"; g.strokeStyle = "#151112"; g.lineWidth = 2;
+        g.fillStyle = "#2e2a2c"; g.strokeStyle = "#151112"; g.lineWidth = 2;
         g.beginPath(); g.moveTo(dx - w, R * 0.6); g.lineTo(dx - w, R * 0.6 - h); g.lineTo(dx + w, R * 0.6 - h); g.lineTo(dx + w, R * 0.6); g.closePath(); g.fill(); g.stroke();
-        g.fillStyle = flash ? "#fff" : "#4a4346"; g.beginPath(); g.ellipse(dx, R * 0.6 - h, w, w * 0.4, 0, 0, PI2); g.fill(); g.stroke();
+        g.fillStyle = "#4a4346"; g.beginPath(); g.ellipse(dx, R * 0.6 - h, w, w * 0.4, 0, 0, PI2); g.fill(); g.stroke();
         g.strokeStyle = "rgba(0,0,0,.45)"; g.beginPath(); g.moveTo(dx, R * 0.6 - h + w * 0.4); g.lineTo(dx, R * 0.6); g.stroke();
         g.fillStyle = "rgba(255,110,30,.8)"; g.fillRect(dx - w, R * 0.52, w * 2, 4);
       }
@@ -408,7 +419,7 @@ export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
       g.save(); g.translate(o.x, o.y);
       ell(g, 8, R * 0.6, R * 1.9, R * 0.5, "rgba(0,0,0,.28)");
       const topX = R * 0.7, topY = -R * 3.2;
-      g.strokeStyle = flash ? "#fff" : "#8a6234"; g.lineWidth = R * 0.5; g.lineCap = "round";
+      g.strokeStyle = "#8a6234"; g.lineWidth = R * 0.5; g.lineCap = "round";
       g.beginPath(); g.moveTo(0, R * 0.6); g.quadraticCurveTo(-R * 0.3, -R * 1.4, topX, topY); g.stroke();
       g.strokeStyle = "rgba(60,36,14,.5)"; g.lineWidth = 2;
       for (let k = 1; k < 7; k++) { const u = k / 7; const px = (1 - u) * (1 - u) * 0 + 2 * (1 - u) * u * -R * 0.3 + u * u * topX, py = (1 - u) * (1 - u) * R * 0.6 + 2 * (1 - u) * u * -R * 1.4 + u * u * topY; g.beginPath(); g.moveTo(px - R * 0.25, py); g.lineTo(px + R * 0.25, py + 2); g.stroke(); }
@@ -417,7 +428,7 @@ export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
         const a = (i / 7) * PI2 + sway * 4, len = R * 2.5;
         g.save(); g.rotate(a);
         const lg = g.createLinearGradient(0, 0, len, 0); lg.addColorStop(0, "#2f8a3a"); lg.addColorStop(1, "#7fd04a");
-        g.fillStyle = flash ? "#fff" : lg; g.strokeStyle = "#1c5a26"; g.lineWidth = 1.5;
+        g.fillStyle = lg; g.strokeStyle = "#1c5a26"; g.lineWidth = 1.5;
         g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(len * 0.5, -R * 0.9, len, R * 0.45); g.quadraticCurveTo(len * 0.5, -R * 0.1, 0, 0); g.fill(); g.stroke();
         g.restore();
       }
@@ -428,7 +439,7 @@ export function drawSceneObstacle(g: G, o: Obstacle, t: number): boolean {
     case "cactus": {
       g.save(); g.translate(o.x, o.y);
       ell(g, 4, R * 0.6, R * 1.0, R * 0.38, "rgba(0,0,0,.3)");
-      const body = flash ? "#fff" : "#3f9a4a";
+      const body = "#3f9a4a";
       g.fillStyle = body; g.strokeStyle = "#1f5a2a"; g.lineWidth = 2;
       const arm = (x: number, y: number, h: number, w: number) => { g.beginPath(); g.roundRect(x - w, y - h, w * 2, h, w); g.fill(); g.stroke(); };
       arm(0, R * 0.6, R * 2.3, R * 0.42);
