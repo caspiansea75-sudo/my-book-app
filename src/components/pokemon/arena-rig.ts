@@ -126,12 +126,6 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
   g.translate(x0 + w / 2, y0 + h);
   g.transform(1, 0, -topDx / h, 1, 0, 0);
   g.scale(1, scaleY);
-  if (o.wk) {
-    // stepping without any cut: the whole body hops from foot to foot, rocking and shifting its weight
-    const wp = o.wk.p;
-    g.translate(Math.sin(wp) * o.wk.a * size * 0.35, -Math.abs(Math.sin(wp)) * o.wk.a * size * 0.9);
-    g.rotate(Math.sin(wp) * 0.05);
-  }
   const X0 = -w / 2;
   const Y0 = -h;
   const smoothOld = g.imageSmoothingEnabled;
@@ -162,15 +156,32 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
       const fp = o.t * 2.6 * p.rate + p.phase + o.id;
       wave = (u) => Math.sin(fp + (1 - u) * 5.2) * 0.034 * size * (1 - u * 0.55) * p.wave * amp;
     }
+    const cutU = 0.4; // below this height the feet may split (stand-in pictures that walk)
+    const wk = o.wk;
+    const bobTop = wk ? -Math.abs(Math.sin(wk.p)) * wk.a * size * 0.5 : 0;
+    const topPart = wk ? Math.floor(sh * (1 - cutU)) : sh; // source rows above the feet
     if (wave) {
       g.imageSmoothingEnabled = true;
       for (let i = 0; i < N; i++) {
-        const a = Math.floor((i * sh) / N);
-        const b = Math.min(sh, Math.ceil(((i + 1) * sh) / N) + 1);
+        const a = Math.floor((i * topPart) / N);
+        const b = Math.min(topPart, Math.ceil(((i + 1) * topPart) / N) + 1);
         const u = 1 - (a + (b - a) / 2) / sh;
-        g.drawImage(src, 0, a, sw, b - a, X0 + wave(u), Y0 + (a * h) / sh, w, ((b - a) * h) / sh);
+        g.drawImage(src, 0, a, sw, b - a, X0 + wave(u), Y0 + (a * h) / sh + bobTop, w, ((b - a) * h) / sh);
       }
-    } else g.drawImage(src, 0, 0, sw, sh, X0, Y0, w, h);
+    } else g.drawImage(src, 0, 0, sw, topPart, X0, Y0 + bobTop, w, (topPart * h) / sh);
+    if (wk && topPart < sh) {
+      // the lower part: a left foot and a right foot that step in turn (with a little overlap so there is no gap)
+      g.imageSmoothingEnabled = true;
+      const half = sw / 2;
+      for (const side of [0, 1]) {
+        const sn = Math.sin(wk.p + side * Math.PI);
+        const lift = Math.max(0, sn) * wk.a * size * 1.2;
+        const swing = sn * wk.a * size * 0.4;
+        const sxp = side ? Math.floor(half) - 1 : 0;
+        const sxw = side ? sw - sxp : Math.ceil(half) + 1;
+        g.drawImage(src, sxp, topPart - 1, sxw, sh - topPart + 1, X0 + (sxp * w) / sw + swing, Y0 + ((topPart - 1) * h) / sh - lift + bobTop * 0.4, (sxw * w) / sw, ((sh - topPart + 1) * h) / sh);
+      }
+    }
   }
   g.imageSmoothingEnabled = smoothOld;
   g.restore();
