@@ -295,8 +295,9 @@ const TALL_OBS = new Set<ObsKind>(["pillar", "tree", "pine", "palm", "crystal", 
 const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, rock: 24, tree: 27, pine: 24, iceboulder: 28, basalt: 26, palm: 20, cactus: 18 };
 
 /** An explosion, which also splinters any crates it reaches. */
-function boom(S: State, x: number, y: number, r: number, type: string, fx?: string) {
-  S.events.push({ t: "explode", x, y, r, type, fx });
+/** `silent`: the blast still breaks crates and wears things down, but no explosion is drawn (used by gimmick transformations). */
+function boom(S: State, x: number, y: number, r: number, type: string, fx?: string, silent = false) {
+  if (!silent) S.events.push({ t: "explode", x, y, r, type, fx });
   for (const o of S.obs) {
     if (o.hp <= 0 || len(o.x - x, o.y - y) > r + o.r * 0.6) continue;
     if (o.kind === "crate") breakCrate(S, o);
@@ -1232,7 +1233,7 @@ function doAwaken(S: State, f: Fighter) {
   const type = f.types[0] ?? "Normal";
   const r = 230;
   S.events.push({ t: "awaken", x: f.x, y: f.y, id: f.id });
-  boom(S, f.x, f.y, r, type);
+  boom(S, f.x, f.y, r, type, undefined, true);
   S.freeze = Math.max(S.freeze, 0.1);
   for (const o of foesOf(S, f)) {
     if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, 30 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 420 });
@@ -1257,7 +1258,7 @@ function doMega(S: State, f: Fighter) {
   f.override[3] = { id: "megaburst", name: `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: "An explosion of Mega energy all around you." };
   f.cd[3] = 0;
   S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type });
-  boom(S, f.x, f.y, 190, type);
+  boom(S, f.x, f.y, 190, type, undefined, true);
   S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 190 + o.r) strike(S, f, o, 22 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 380 });
 }
@@ -1319,7 +1320,7 @@ function doDynamax(S: State, f: Fighter) {
     : { id: "maxstrike", name: `Max ${type}`, type, kind: "lob", power: 2.8, cd: 4.2, range: 380, windup: 0.5, desc: "A Max Move strike where you aim." };
   f.cd[3] = 0;
   S.events.push({ t: "dynamax", x: f.x, y: f.y, id: f.id, gmax: f.gmax });
-  boom(S, f.x, f.y, 210, type);
+  boom(S, f.x, f.y, 210, type, undefined, true);
   S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 210 + o.r) strike(S, f, o, 26 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 520 });
 }
@@ -1349,7 +1350,7 @@ function doTera(S: State, f: Fighter) {
   f.cd[3] = 0;
   f.invuln = Math.max(f.invuln, 0.5);
   S.events.push({ t: "tera", x: f.x, y: f.y, id: f.id, type });
-  boom(S, f.x, f.y, 170, type);
+  boom(S, f.x, f.y, 170, type, undefined, true);
   S.freeze = Math.max(S.freeze, f.isPlayer ? 0.85 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 170 + o.r) strike(S, f, o, 20 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 360 });
 }

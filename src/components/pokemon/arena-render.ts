@@ -725,12 +725,7 @@ export class ArenaRenderer {
         case "awaken":
           if (mine?.id === e.id) this.ultimate("Awakening", "#ffe08a");
           this.morphs.set(e.id, { kind: "awaken", t: 0, max: 0.6, swap: 0.2, color: "#ffe08a" });
-          this.ring(e.x, e.y, "#fff2a8", 260, 0.7);
-          this.ring(e.x, e.y, "#ffcf4d", 190, 0.9);
-          this.burst(e.x, e.y, "#ffe08a", 40, 420);
-          this.shake = 14;
-          this.shakeT = 0.45;
-          this.flashT = 0.3;
+          // only the transformation itself is animated (no burst, shake or flash)
           if (mine?.id !== e.id) this.say("AWAKEN!", "#ffe08a");
           break;
         case "item": {
@@ -747,17 +742,7 @@ export class ArenaRenderer {
           if (mine?.id === e.id) this.ultimate(e.name, e.z ? "#ffd54a" : "#ff9be6");
           const c = col(e.type);
           this.morphs.set(e.id, { kind: "mega", t: 0, max: 1.4, swap: 0.62, color: e.z ? "#ffd54a" : "#ff9be6", z: e.z });
-          this.ring(e.x, e.y, "#ffffff", 280, 0.7);
-          this.ring(e.x, e.y, e.z ? "#ffd54a" : "#ff9be6", 210, 0.9);
-          this.ring(e.x, e.y, "#7fe3ff", 150, 1.0);
-          for (let i = 0; i < 36; i++) {
-            const a = (i / 36) * Math.PI * 2;
-            this.parts.push({ kind: i % 3 ? "dot" : "streak", x: e.x, y: e.y, vx: Math.cos(a) * rnd(140, 420), vy: Math.sin(a) * rnd(140, 420), g: 0, life: 0.8, max: 0.8, size: rnd(3, 6), grow: 0, color: ["#ffffff", "#ff9be6", "#7fe3ff", c][i % 4]! });
-          }
-          this.shake = 14;
-          this.shakeT = 0.45;
-          this.flashT = 0.35;
-          this.zoomPulse = 1;
+          // only the transformation itself is animated (no burst, shake or flash)
           if (mine?.id !== e.id) this.say(e.name.toUpperCase() + "!", e.z ? "#ffd54a" : "#ff9be6");
           break;
         }
@@ -797,28 +782,12 @@ export class ArenaRenderer {
         case "dynamax":
           if (mine?.id === e.id) this.ultimate(e.gmax ? "Gigantamax" : "Dynamax", "#ff4d73");
           this.morphs.set(e.id, { kind: "dyna", t: 0, max: 1.5, swap: 0.5, color: "#ff3b5c", gmax: e.gmax });
-          this.ring(e.x, e.y, "#ff3b5c", 300, 0.8);
-          this.ring(e.x, e.y, "#ffffff", 200, 0.6);
-          this.burst(e.x, e.y, "#ff5c7a", 40, 380);
-          this.shake = 16;
-          this.shakeT = 0.5;
-          this.flashT = 0.3;
-          this.zoomPulse = 1;
           if (mine?.id !== e.id) this.say(e.gmax ? "GIGANTAMAX!" : "DYNAMAX!", "#ff6a86");
           break;
         case "tera": {
           if (mine?.id === e.id) this.ultimate(`Terastallize: ${e.type}`, "#8fe3ff");
           const c = col(e.type);
           this.morphs.set(e.id, { kind: "tera", t: 0, max: 1.3, swap: 0.5, color: c });
-          this.ring(e.x, e.y, c, 260, 0.8);
-          this.ring(e.x, e.y, "#ffffff", 170, 0.6);
-          for (let i = 0; i < 24; i++) {
-            const a = (i / 24) * Math.PI * 2;
-            this.parts.push({ kind: "dot", x: e.x, y: e.y, vx: Math.cos(a) * rnd(120, 380), vy: Math.sin(a) * rnd(120, 380) - 40, g: 120, life: 0.9, max: 0.9, size: rnd(3, 7), grow: 0, color: i % 2 ? c : "#ffffff" });
-          }
-          this.shake = 12;
-          this.shakeT = 0.4;
-          this.flashT = 0.25;
           if (mine?.id !== e.id) this.say(`TERASTALLIZE! ${e.type.toUpperCase()}`, c);
           break;
         }
