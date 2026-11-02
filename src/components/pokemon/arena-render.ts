@@ -105,6 +105,7 @@ function extendedGround(stage: StageKind): HTMLCanvasElement {
 }
 const NAME_COLORS = ["#ff8a8a", "#74c0fc", "#ffe066", "#d0bfff", "#69dbb2"];
 
+const SHOW_SCORCH = false;
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
   private parts: Parti[] = [];
@@ -1119,6 +1120,7 @@ export class ArenaRenderer {
     drawArenaFx(G, S, this.t);
     // blast marks: a dark patch with a glowing rim that cools
     for (const sc of this.scorch) {
+      if (!SHOW_SCORCH) break; // blast patches are off: impacts are the type-specific marks only
       const k = sc.t / sc.max;
       G.save();
       G.translate(sc.x, sc.y);

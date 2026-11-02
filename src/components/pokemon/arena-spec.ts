@@ -693,6 +693,8 @@ export function drawAura(g: CanvasRenderingContext2D, kind: string, f: { x: numb
 export function drawDecals(g: CanvasRenderingContext2D, list: Decal[], dt: number): Decal[] {
   const keep: Decal[] = [];
   for (const d of list) {
+    // no craters or quake rings: impacts are shown only by the type-specific marks and particles
+    if (d.kind === "crater" || d.kind === "quake") continue;
     d.t += dt;
     if (d.t >= d.life) continue;
     keep.push(d);
