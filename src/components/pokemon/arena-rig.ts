@@ -101,14 +101,31 @@ export type RigOpts = {
   wk?: { p: number; a: number };
 };
 
+const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/** How many slices to cut a length of `len` picture pixels into: thin slices, so each step between two of them is tiny. */
+const slices = (len: number, q: number, lo: number, hi: number) => clamp(Math.ceil(len / (q > 0.7 ? 2 : q > 0.45 ? 3 : 5)), lo, hi);
+
+/** One slice of the picture, moved by (dx, dy). It is drawn a little larger (`ox` to the right, `oy` downwards) so it
+ *  slides under the next slice: the soft edge of a slice is always covered by solid picture, so no hairline gap or dark
+ *  seam can open up between two slices, however differently they move. Slices must be drawn left to right, top to bottom. */
+function slice(g: CanvasRenderingContext2D, src: Pic, sw: number, sh: number, X0: number, Y0: number, w: number, h: number, sx: number, sy: number, sWide: number, sHigh: number, dx: number, dy: number, ox: number, oy: number) {
+  const ex = Math.min(sw - sx, sWide + ox);
+  const ey = Math.min(sh - sy, sHigh + oy);
+  if (ex <= 0 || ey <= 0) return;
+  g.drawImage(src, sx, sy, ex, ey, X0 + (sx * w) / sw + dx, Y0 + (sy * h) / sh + dy, (ex * w) / sw, (ey * h) / sh);
+}
+
 /** Draw a picture through the rig. (x0, y0, w, h) is where a plain picture would go, in the body's own space.
  *  Smooth things (leaning, sway, breathing, squash) are done with a single transform, so there are no cuts at all.
- *  Strips are used only where a bend really is needed (a flapping wing, a swaying tail, a rippling hem, stepping feet),
- *  they are thin, overlap, and are blended, so no seams show. */
+ *  Where a bend really is needed (a flapping wing, a swaying tail, a rippling hem, stepping feet) the picture is cut into
+ *  thin slices that overlap each other, and every slice is drawn the same way as the rest of the picture. The feet
+ *  are not two blocks any more: the legs are a soft grid where the movement fades in from the waist down and from one
+ *  foot to the other, so there is no step between the body and the feet or between the left and the right foot. */
 export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh: number, x0: number, y0: number, w: number, h: number, st: RigState, p: Persona, o: RigOpts) {
   const size = Math.max(w, h);
   const amp = o.animated ? 0.55 : 1;
-  const N = o.q > 0.7 ? 28 : o.q > 0.45 ? 20 : 12;
   const mv = o.moving ? 1 : 0;
   const lagX = clamp(st.sx, -size * p.lag, size * p.lag) * o.face * amp;
   const lagY = clamp(st.sy, -size * p.lag * 0.6, size * p.lag * 0.6) * amp;
@@ -128,11 +145,12 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
   g.scale(1, scaleY);
   const X0 = -w / 2;
   const Y0 = -h;
-  const smoothOld = g.imageSmoothingEnabled;
+  // every part is drawn with the same filtering as the plain picture, so the look never changes where two parts meet
+  const OV = 2; // how many picture pixels a slice slides under its neighbour
 
   if (o.loco === "fly") {
     // wings: thin columns, the tips lag behind the shoulders and the beat travels outwards
-    g.imageSmoothingEnabled = true;
+    const N = slices(sw, o.q, 12, 56);
     const fp = o.t * 12 * p.rate + p.phase + o.id;
     const strength = 0.15 * p.wave * (o.moving ? 1 : 0.55) * amp;
     for (let j = 0; j < N; j++) {
@@ -140,8 +158,8 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
       const ac = Math.abs(c);
       const dy = -Math.sin(fp - ac * 1.1) * strength * h * Math.pow(ac, 1.3) - Math.sin(fp) * strength * h * 0.2;
       const sxp = Math.floor((j * sw) / N);
-      const sxw = Math.min(sw - sxp, Math.ceil(sw / N) + 1);
-      g.drawImage(src, sxp, 0, sxw, sh, X0 + (sxp * w) / sw, Y0 + dy, (sxw * w) / sw, h);
+      const sxe = j === N - 1 ? sw : Math.floor(((j + 1) * sw) / N);
+      slice(g, src, sw, sh, X0, Y0, w, h, sxp, 0, sxe - sxp, sh, 0, dy, OV, 0);
     }
   } else {
     // a bend along the body: how far each row is pushed sideways, by height (u: 0 feet .. 1 head)
@@ -156,33 +174,46 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
       const fp = o.t * 2.6 * p.rate + p.phase + o.id;
       wave = (u) => Math.sin(fp + (1 - u) * 5.2) * 0.034 * size * (1 - u * 0.55) * p.wave * amp;
     }
-    const cutU = 0.4; // below this height the feet may split (stand-in pictures that walk)
     const wk = o.wk;
     const bobTop = wk ? -Math.abs(Math.sin(wk.p)) * wk.a * size * 0.5 : 0;
-    const topPart = wk ? Math.floor(sh * (1 - cutU)) : sh; // source rows above the feet
+    // rows above `waist` move as one body; the legs below it are the soft grid
+    const waist = wk ? Math.floor(sh * 0.58) : sh;
     if (wave) {
-      g.imageSmoothingEnabled = true;
+      const N = slices(waist, o.q, 12, 64);
       for (let i = 0; i < N; i++) {
-        const a = Math.floor((i * topPart) / N);
-        const b = Math.min(topPart, Math.ceil(((i + 1) * topPart) / N) + 1);
+        const a = Math.floor((i * waist) / N);
+        const b = i === N - 1 ? waist : Math.floor(((i + 1) * waist) / N);
         const u = 1 - (a + (b - a) / 2) / sh;
-        g.drawImage(src, 0, a, sw, b - a, X0 + wave(u), Y0 + (a * h) / sh + bobTop, w, ((b - a) * h) / sh);
+        slice(g, src, sw, sh, X0, Y0, w, h, 0, a, sw, b - a, wave(u), bobTop, 0, i === N - 1 && waist >= sh ? 0 : OV);
       }
-    } else g.drawImage(src, 0, 0, sw, topPart, X0, Y0 + bobTop, w, (topPart * h) / sh);
-    if (wk && topPart < sh) {
-      // the lower part: a left foot and a right foot that step in turn (with a little overlap so there is no gap)
-      g.imageSmoothingEnabled = true;
-      const half = sw / 2;
+    } else slice(g, src, sw, sh, X0, Y0, w, h, 0, 0, sw, waist, 0, bobTop, 0, wk ? OV : 0);
+    if (wk && waist < sh) {
+      const R = o.q > 0.7 ? 7 : o.q > 0.45 ? 5 : 3;
+      const C = o.q > 0.7 ? 14 : o.q > 0.45 ? 10 : 6;
+      // the left foot and the right foot step in turn
+      const lift: number[] = [];
+      const swing: number[] = [];
       for (const side of [0, 1]) {
         const sn = Math.sin(wk.p + side * Math.PI);
-        const lift = Math.max(0, sn) * wk.a * size * 1.2;
-        const swing = sn * wk.a * size * 0.4;
-        const sxp = side ? Math.floor(half) - 1 : 0;
-        const sxw = side ? sw - sxp : Math.ceil(half) + 1;
-        g.drawImage(src, sxp, topPart - 1, sxw, sh - topPart + 1, X0 + (sxp * w) / sw + swing, Y0 + ((topPart - 1) * h) / sh - lift + bobTop * 0.4, (sxw * w) / sw, ((sh - topPart + 1) * h) / sh);
+        lift.push(Math.max(0, sn) * wk.a * size * 1.2);
+        swing.push(sn * wk.a * size * 0.4);
+      }
+      const legH = sh - waist;
+      for (let r = 0; r < R; r++) {
+        const sy0 = waist + Math.floor((r * legH) / R);
+        const sy1 = r === R - 1 ? sh : waist + Math.floor(((r + 1) * legH) / R);
+        // 0 at the waist (moves with the body) .. 1 at the toes (moves with its own foot)
+        const ramp = smooth(0, 0.85, (r + 0.5) / R);
+        for (let c = 0; c < C; c++) {
+          const sx0 = Math.floor((c * sw) / C);
+          const sx1 = c === C - 1 ? sw : Math.floor(((c + 1) * sw) / C);
+          const wR = smooth(0.3, 0.7, (c + 0.5) / C); // 0 left foot .. 1 right foot, blended in the middle
+          const footDy = mix(-lift[0]! + bobTop * 0.4, -lift[1]! + bobTop * 0.4, wR);
+          const footDx = mix(swing[0]!, swing[1]!, wR);
+          slice(g, src, sw, sh, X0, Y0, w, h, sx0, sy0, sx1 - sx0, sy1 - sy0, footDx * ramp, mix(bobTop, footDy, ramp), OV, r === R - 1 ? 0 : OV);
+        }
       }
     }
   }
-  g.imageSmoothingEnabled = smoothOld;
   g.restore();
 }
