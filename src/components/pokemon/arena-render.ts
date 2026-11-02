@@ -743,11 +743,12 @@ export class ArenaRenderer {
           if (e.kind !== "none") this.say(`${FIELDS[e.kind].icon} ${FIELDS[e.kind].name}`, "#ffffff");
           break;
         case "mega": {
-          if (mine?.id === e.id) this.ultimate(e.name, e.z ? "#ffd54a" : "#ff9be6");
+          const mc = e.origin ? "#9ad7ff" : e.z ? "#ffd54a" : "#ff9be6";
+          if (mine?.id === e.id) this.ultimate(e.name, mc);
           const c = col(e.type);
-          this.morphs.set(e.id, { kind: "mega", t: 0, max: 1.4, swap: 0.62, color: e.z ? "#ffd54a" : "#ff9be6", z: e.z });
+          this.morphs.set(e.id, { kind: "mega", t: 0, max: e.origin ? 1.8 : 1.4, swap: e.origin ? 0.8 : 0.62, color: mc, z: e.z });
           // only the transformation itself is animated (no burst, shake or flash)
-          if (mine?.id !== e.id) this.say(e.name.toUpperCase() + "!", e.z ? "#ffd54a" : "#ff9be6");
+          if (mine?.id !== e.id) this.say(e.name.toUpperCase() + "!", mc);
           break;
         }
         case "zstart":

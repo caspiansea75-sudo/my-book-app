@@ -3,7 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { DIGGERS, FIELDS, FOE_POOL, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
 export const W = 960;
@@ -189,7 +189,7 @@ export type Ev =
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
-  | { t: "mega"; x: number; y: number; id: number; name: string; z: boolean; type: string }
+  | { t: "mega"; x: number; y: number; id: number; name: string; z: boolean; type: string; origin?: boolean }
   | { t: "zstart"; x: number; y: number; type: string; name: string }
   | { t: "zhit"; x: number; y: number; type: string }
   | { t: "dynamax"; x: number; y: number; id: number; gmax: boolean }
@@ -1266,9 +1266,12 @@ function doMega(S: State, f: Fighter) {
   f.invuln = Math.max(f.invuln, 0.5);
   const type = f.types[0] ?? "Normal";
   // the Mega form's own special move: a huge burst of its type all around it
-  f.override[3] = { id: "megaburst", name: `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: "An explosion of Mega energy all around you." };
+  if (form.origin) {
+    const o = ALT_BURST[form.id] ?? [`${form.name} Burst`, type];
+    f.override[3] = { id: "megaburst", name: o[0]!, type: o[1]!, kind: "nova", power: 3.1, cd: 4.2, range: 240, desc: "The alternate forme unleashes its full power all around you." };
+  } else f.override[3] = { id: "megaburst", name: `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: "An explosion of Mega energy all around you." };
   f.cd[3] = 0;
-  S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type });
+  S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type, origin: !!form.origin });
   boom(S, f.x, f.y, 190, type, undefined, true);
   S.freeze = Math.max(S.freeze, f.isPlayer ? 0.95 : 0.35);
   for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 190 + o.r) strike(S, f, o, 22 * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: 380 });

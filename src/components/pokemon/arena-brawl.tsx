@@ -7,7 +7,7 @@ import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
-import { FIELDS, GIMMICKS, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
+import { FIELDS, GIMMICKS, GMAX, gimInfo, isOriginSpecies, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
 import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, step, swapTo, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
@@ -42,7 +42,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind };
 const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"] };
 const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water" };
 const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
@@ -410,6 +410,7 @@ export function ArenaBrawl() {
         setHud({
           pill,
           gimmick: p.gimmick,
+          origin: p.megaForm?.alt ?? false,
           gimmickT: left,
           formName: p.form?.name ?? null,
           moves,
@@ -702,7 +703,7 @@ export function ArenaBrawl() {
             <div className="ab-gim-row">
               {(["awaken", "mega", "zmove", "dynamax", "tera"] as GimmickKind[]).map((g) => {
                 const ok = avail.includes(g);
-                const info = GIMMICKS[g];
+                const info = gimInfo(g, isOriginSpecies(pick));
                 return (
                   <button key={g} type="button" disabled={!ok} className={`ab-gbtn ${gimmick === g ? "on" : ""}`} onClick={() => { sfx.pick(); setGimmick(g); }} title={ok ? "" : t("এই পোকেমনের মেগা রূপ নেই", "This Pokémon has no Mega form")}>
                     <span>{info.icon}</span>
@@ -711,7 +712,7 @@ export function ArenaBrawl() {
                 );
               })}
             </div>
-            <p>{t(GIMMICKS[gimmick].blurbBn, GIMMICKS[gimmick].blurb)}</p>
+            <p>{t(gimInfo(gimmick, isOriginSpecies(pick)).blurbBn, gimInfo(gimmick, isOriginSpecies(pick)).blurb)}</p>
             {gimmick === "mega" && forms.length ? (
               <div className="ab-chips">
                 {forms.map((m) => (
@@ -806,7 +807,7 @@ export function ArenaBrawl() {
                 <i className="ghost" style={{ width: `${Math.max(0, (hud.ghost / hud.max) * 100)}%` }} />
                 <i className="fill" style={{ width: `${Math.max(0, pct * 100)}%`, background: hpColor(pct) }} />
               </div>
-              {hud.gimmickT > 0 ? <div className="ab-awk">{GIMMICKS[hud.gimmick].icon} {t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].short)} {hud.gimmickT.toFixed(1)}s</div> : null}
+              {hud.gimmickT > 0 ? <div className="ab-awk">{gimInfo(hud.gimmick, hud.origin).icon} {t(gimInfo(hud.gimmick, hud.origin).bn, gimInfo(hud.gimmick, hud.origin).short)} {hud.gimmickT.toFixed(1)}s</div> : null}
             </div>
             {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
@@ -884,11 +885,11 @@ export function ArenaBrawl() {
                 type="button"
                 className={`ab-pb ult ${hud.ult >= 100 && hud.gimmickT <= 0 ? "ready full" : ""}`}
                 style={{ ["--c" as string]: "#ffd54a", ["--f" as string]: hud.gimmickT > 0 ? 0 : 1 - Math.min(1, hud.ult / 100) }}
-                aria-label={t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].label)}
+                aria-label={t(gimInfo(hud.gimmick, hud.origin).bn, gimInfo(hud.gimmick, hud.origin).label)}
                 onPointerDown={(e) => { e.preventDefault(); rt.current.ult = true; }}
               >
-                <span className="pb-ic">{GIMMICKS[hud.gimmick].icon}</span>
-                <span className="pb-nm">{hud.gimmickT > 0 ? `${hud.gimmickT.toFixed(0)}s` : hud.ult >= 100 ? GIMMICKS[hud.gimmick].short : `${Math.floor(hud.ult)}%`}</span>
+                <span className="pb-ic">{gimInfo(hud.gimmick, hud.origin).icon}</span>
+                <span className="pb-nm">{hud.gimmickT > 0 ? `${hud.gimmickT.toFixed(0)}s` : hud.ult >= 100 ? gimInfo(hud.gimmick, hud.origin).short : `${Math.floor(hud.ult)}%`}</span>
                 <span className="pb-ky">Q</span>
               </button>
             </div>

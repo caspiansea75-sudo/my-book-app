@@ -513,6 +513,14 @@ export const GIMMICKS: Record<GimmickKind, { icon: string; label: string; bn: st
   tera: { icon: "🔮", label: "Terastallize", bn: "টেরাস্টালাইজ", short: "TERA", blurb: "Become a crystal of any type for 25 seconds: a crystal shield, a stronger same-type bonus, and your 4th move turns into Tera Blast.", blurbBn: "২৫ সেকেন্ডের জন্য যেকোনো টাইপের ক্রিস্টাল: ক্রিস্টাল ঢাল, শক্তিশালী একই-টাইপ বোনাস, আর ৪র্থ চাল হয় টেরা ব্লাস্ট।" },
 };
 
+/** The gimmick's name and look: Origin Formes get their own instead of "Mega Evolution". */
+export const LEGEND_GIMMICK = { icon: "🌟", label: "Legendary Forme", bn: "কিংবদন্তি ফর্ম", short: "FORME", blurb: "Take your legendary alternate forme for 15 seconds: new look, stronger stats and a burst of your own.", blurbBn: "১৫ সেকেন্ডের জন্য আপনার কিংবদন্তি বিকল্প রূপ নিন: নতুন চেহারা, বেশি শক্তি ও নিজস্ব বিস্ফোরণ।" };
+export const ORIGIN_GIMMICK = { icon: "🌌", label: "Origin Forme", bn: "অরিজিন ফর্ম", short: "ORIGIN", blurb: "Return to your true, original shape for 15 seconds: much stronger, tougher and faster, with a legendary burst of your own.", blurbBn: "১৫ সেকেন্ডের জন্য আপনার আসল রূপে ফিরুন: অনেক শক্তিশালী, মজবুত ও দ্রুত, সঙ্গে নিজস্ব কিংবদন্তি বিস্ফোরণ।" };
+export const gimInfo = (kind: GimmickKind, alt?: string | boolean | null) => (kind === "mega" && alt ? (alt === "legend" ? LEGEND_GIMMICK : ORIGIN_GIMMICK) : GIMMICKS[kind]);
+/** "origin" / "legend" when this species has an alternate forme instead of a Mega, else null. */
+export const altKind = (id: string): "origin" | "legend" | null => ORIGIN_MEGAS[id]?.[0]?.alt ?? null;
+export const isOriginSpecies = (id: string) => altKind(id);
+
 export const TERA_TYPES = ["Normal", "Fire", "Water", "Electric", "Grass", "Ice", "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug", "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy"];
 
 export type MegaForm = {
@@ -530,10 +538,52 @@ export type MegaForm = {
   z?: boolean;
   /** Introduced with Legends Z-A or its Mega Dimension DLC. */
   za?: boolean;
+  /** An Origin Forme (Dialga, Palkia, Giratina): shown as its own gimmick. */
+  origin?: boolean;
+  /** Which gimmick name it wears: "origin" (Creation Trio) or "legend" (other legendary formes). */
+  alt?: "origin" | "legend";
 };
 const mf = (id: string, name: string, o: Partial<MegaForm> = {}): MegaForm => ({ id, name, sprite: id, ...o });
 
+/** Origin Formes: the ancient true shape of the Creation Trio, used through the same form machinery as Mega Evolution. */
+const lg = (id: string, name: string, o: Partial<MegaForm>) => mf(id, name, { ...o, origin: true, alt: "legend" });
+const ORIGIN_MEGAS: Record<string, MegaForm[]> = {
+  dialga: [mf("dialga-origin", "Origin Forme Dialga", { types: ["Steel", "Dragon"], p: 1.3, d: 1.28, s: 1.06, origin: true, alt: "origin" })],
+  palkia: [mf("palkia-origin", "Origin Forme Palkia", { types: ["Water", "Dragon"], p: 1.34, d: 1.18, s: 1.1, origin: true, alt: "origin" })],
+  giratina: [mf("giratina-origin", "Origin Forme Giratina", { types: ["Ghost", "Dragon"], p: 1.3, d: 1.2, s: 1.14, origin: true, alt: "origin" })],
+  zygarde: [lg("zygarde-complete", "Zygarde Complete Forme", { types: ["Dragon", "Ground"], p: 1.3, d: 1.34, s: 1.0 })],
+  zacian: [lg("zacian-crowned", "Crowned Sword Zacian", { types: ["Fairy", "Steel"], p: 1.4, d: 1.15, s: 1.12 })],
+  zamazenta: [lg("zamazenta-crowned", "Crowned Shield Zamazenta", { types: ["Fighting", "Steel"], p: 1.28, d: 1.38, s: 1.05 })],
+  kyurem: [
+    lg("kyurem-black", "Black Kyurem", { types: ["Dragon", "Ice"], p: 1.4, d: 1.1, s: 1.0 }),
+    lg("kyurem-white", "White Kyurem", { types: ["Dragon", "Ice"], p: 1.36, d: 1.08, s: 1.05 }),
+  ],
+  necrozma: [
+    lg("necrozma-ultra", "Ultra Necrozma", { types: ["Psychic", "Dragon"], p: 1.4, d: 1.1, s: 1.15 }),
+    lg("necrozma-duskmane", "Dusk Mane Necrozma", { types: ["Psychic", "Steel"], p: 1.3, d: 1.32, s: 1.0 }),
+    lg("necrozma-dawnwings", "Dawn Wings Necrozma", { types: ["Psychic", "Ghost"], p: 1.32, d: 1.12, s: 1.1 }),
+  ],
+  deoxys: [
+    lg("deoxys-attack", "Attack Forme Deoxys", { p: 1.5, d: 0.85, s: 1.12 }),
+    lg("deoxys-defense", "Defense Forme Deoxys", { p: 1.1, d: 1.5, s: 0.95 }),
+    lg("deoxys-speed", "Speed Forme Deoxys", { p: 1.15, d: 1.0, s: 1.35 }),
+  ],
+  eternatus: [lg("eternatus-eternamax", "Eternamax Eternatus", { types: ["Poison", "Dragon"], p: 1.4, d: 1.25, s: 0.95 })],
+  urshifu: [lg("urshifu-rapidstrike", "Rapid Strike Urshifu", { types: ["Fighting", "Water"], p: 1.3, d: 1.1, s: 1.18 })],
+};
+
+/** The slot-4 burst each alternate forme gets: [name, type]. */
+export const ALT_BURST: Record<string, [string, string]> = {
+  "dialga-origin": ["Roar of Time: Origin", "Steel"], "palkia-origin": ["Spacial Rend: Origin", "Water"], "giratina-origin": ["Shadow Force: Origin", "Ghost"],
+  "zygarde-complete": ["Core Enforcer", "Dragon"], "zacian-crowned": ["Behemoth Blade", "Steel"], "zamazenta-crowned": ["Behemoth Bash", "Steel"],
+  "kyurem-black": ["Fusion Bolt", "Electric"], "kyurem-white": ["Fusion Flare", "Fire"],
+  "necrozma-ultra": ["Photon Geyser", "Psychic"], "necrozma-duskmane": ["Sunsteel Strike", "Steel"], "necrozma-dawnwings": ["Moongeist Beam", "Ghost"],
+  "deoxys-attack": ["Psycho Boost", "Psychic"], "deoxys-defense": ["Cosmic Guard", "Psychic"], "deoxys-speed": ["Psycho Boost", "Psychic"],
+  "eternatus-eternamax": ["Eternabeam", "Dragon"], "urshifu-rapidstrike": ["Surging Strikes", "Water"],
+};
+
 export const MEGAS: Record<string, MegaForm[]> = {
+  ...ORIGIN_MEGAS,
   charizard: [mf("charizard-megax", "Mega Charizard X", { types: ["Fire", "Dragon"], p: 1.34, d: 1.3, s: 1.0 }), mf("charizard-megay", "Mega Charizard Y", { p: 1.36, d: 1.12, s: 1.08 })],
   venusaur: [mf("venusaur-mega", "Mega Venusaur", { p: 1.2, d: 1.35, s: 1.0 })],
   blastoise: [mf("blastoise-mega", "Mega Blastoise", { p: 1.3, d: 1.2, s: 1.0 })],

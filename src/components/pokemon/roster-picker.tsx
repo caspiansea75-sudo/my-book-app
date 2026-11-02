@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { sfx } from "@/components/pokemon/arena-sfx";
-import { GMAX, LEGENDARY, MEGAS, ROSTER, type Species } from "@/lib/pokemon/arena-data";
+import { GMAX, LEGENDARY, MEGAS, isOriginSpecies, ROSTER, type Species } from "@/lib/pokemon/arena-data";
 import { TYPES } from "@/lib/pokemon/shared";
 
 type Group = "all" | "legend" | "mega" | "gmax" | "recent";
@@ -114,7 +114,7 @@ export function RosterPicker({ pick, onPick, isLocked, hideLocked }: { pick: str
               <span style={{ display: "flex", gap: 2 }}>{s.types.map((ty) => <TypeIcon key={ty} type={ty} size={14} />)}</span>
               {locked ? <small style={{ fontSize: 10, opacity: 0.8 }}>{t("ওয়েভ", "Wave")} {s.unlock}</small> : null}
               {!locked && LEGENDARY.has(s.id) ? <i className="rp-tag" title="Legendary">★</i> : null}
-              {!locked && MEGAS[s.id] ? <i className="rp-tag m" title="Mega">M</i> : null}
+              {!locked && MEGAS[s.id] ? <i className="rp-tag m" title={isOriginSpecies(s.id) === "origin" ? "Origin Forme" : isOriginSpecies(s.id) ? "Legendary Forme" : "Mega"}>{isOriginSpecies(s.id) === "origin" ? "O" : isOriginSpecies(s.id) ? "F" : "M"}</i> : null}
             </button>
           );
         })}

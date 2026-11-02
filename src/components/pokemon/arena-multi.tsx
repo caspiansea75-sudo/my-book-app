@@ -9,7 +9,7 @@ import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaSeatSet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
 import { PERK_BN } from "@/components/pokemon/arena-brawl";
-import { GIMMICKS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
+import { GIMMICKS, MEGAS, gimInfo, isOriginSpecies, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
 import type { QuickPick } from "@/lib/pokemon/arena-engine";
 import { ARENA, applyPerk, begin, moveOf, newMpGame, newMpQuick, nextWave, noInput, predictMove, squadView, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
 import { InputReceiver, InputSender, SnapshotDecoder, SnapshotEncoder, type InputMsg, type Snap } from "@/lib/pokemon/arena-net";
@@ -109,8 +109,8 @@ function PickPanel({ pick, onChange }: { pick: ArenaPick; onChange: (p: ArenaPic
         <div className="ab-gim-row">
           {(["awaken", "mega", "zmove", "dynamax", "tera"] as GimmickKind[]).map((g) => (
             <button key={g} type="button" disabled={!avail.includes(g)} className={`ab-gbtn ${pick.gimmick === g ? "on" : ""}`} onClick={() => set({ gimmick: g })}>
-              <span>{GIMMICKS[g].icon}</span>
-              <em>{t(GIMMICKS[g].bn, GIMMICKS[g].label)}</em>
+              <span>{gimInfo(g, isOriginSpecies(pick.species)).icon}</span>
+              <em>{t(gimInfo(g, isOriginSpecies(pick.species)).bn, gimInfo(g, isOriginSpecies(pick.species)).label)}</em>
             </button>
           ))}
         </div>
@@ -428,7 +428,7 @@ function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; 
   );
 }
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; origin?: string | false; origin?: boolean; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
 type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean; team?: number };
 
 type Wire = { k: string };
@@ -928,6 +928,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             ult: mine.ult,
             fin: mine.combo.ready,
             gimmick: mine.gimmick,
+            origin: mine.megaForm?.alt ?? false,
             gimmickT: Math.max(mine.awaken, mine.mega, mine.dyna, mine.tera?.t ?? 0),
             alive: quick && SQ ? SQ[mine.team]!.filter((x) => x.alive).length : teamBattle ? V.fighters.filter((f) => f.alive && f.team === mine.team).length : alive,
             total: quick ? 3 : teamBattle ? V.fighters.filter((f) => f.team === mine.team).length : V.fighters.length,
@@ -1085,7 +1086,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
                 <i className="ghost" style={{ width: `${Math.max(0, (hud.ghost / hud.max) * 100)}%` }} />
                 <i className="fill" style={{ width: `${Math.max(0, pct * 100)}%`, background: hpColor(pct) }} />
               </div>
-              {hud.gimmickT > 0 ? <div className="ab-awk">{GIMMICKS[hud.gimmick].icon} {t(GIMMICKS[hud.gimmick].bn, GIMMICKS[hud.gimmick].short)} {hud.gimmickT.toFixed(1)}s</div> : null}
+              {hud.gimmickT > 0 ? <div className="ab-awk">{gimInfo(hud.gimmick, hud.origin).icon} {t(gimInfo(hud.gimmick, hud.origin).bn, gimInfo(hud.gimmick, hud.origin).short)} {hud.gimmickT.toFixed(1)}s</div> : null}
             </div>
             {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
@@ -1145,8 +1146,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
                   <span className="pb-ky">E</span>
                 </button>
                 <button type="button" className={`ab-pb ult ${hud.ult >= 100 && hud.gimmickT <= 0 ? "ready full" : ""}`} style={{ ["--c" as string]: "#ffd54a", ["--f" as string]: hud.gimmickT > 0 ? 0 : 1 - Math.min(1, hud.ult / 100) }} aria-label="Gimmick" onPointerDown={(e) => { e.preventDefault(); ctl.current.ult = true; }}>
-                  <span className="pb-ic">{GIMMICKS[hud.gimmick].icon}</span>
-                  <span className="pb-nm">{hud.gimmickT > 0 ? `${hud.gimmickT.toFixed(0)}s` : hud.ult >= 100 ? GIMMICKS[hud.gimmick].short : `${Math.floor(hud.ult)}%`}</span>
+                  <span className="pb-ic">{gimInfo(hud.gimmick, hud.origin).icon}</span>
+                  <span className="pb-nm">{hud.gimmickT > 0 ? `${hud.gimmickT.toFixed(0)}s` : hud.ult >= 100 ? gimInfo(hud.gimmick, hud.origin).short : `${Math.floor(hud.ult)}%`}</span>
                   <span className="pb-ky">Q</span>
                 </button>
               </div>
