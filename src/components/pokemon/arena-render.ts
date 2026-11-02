@@ -5,6 +5,7 @@
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
 import { cloudSprite, texPat, typeTex } from "./arena-tex";
+import { OWN_SHOT_ART, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./arena-vfx";
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
@@ -129,6 +130,7 @@ export class ArenaRenderer {
   private decals: Decal[] = [];
   private auras = new Map<number, { kind: string; start: number; until: number }>();
   private specSeen = new Set<number>();
+  private vfxSeen = new Set<number>();
   private nightT = 0;
   private sctxV: SpecCtx | null = null;
   private get sctx(): SpecCtx {
@@ -576,6 +578,9 @@ export class ArenaRenderer {
             specCast(e.mv, e, MOVES[e.mv]?.range ?? 260, this.sctx);
             if (e.mv === "ironfortress") this.auras.set(e.id, { kind: e.mv, start: this.t, until: this.t + 1.15 });
             if (e.mv === "moonlitwish") this.auras.set(e.id, { kind: e.mv, start: this.t, until: this.t + 1.2 });
+          } else {
+            const md = MOVES[e.mv];
+            if (md) vfxCast(md, e, this.sctx);
           }
         }
           this.ring(e.x, e.y, col(e.type), 44, 0.35);
@@ -594,6 +599,8 @@ export class ArenaRenderer {
           this.burst(e.x, e.y, c, e.heavy ? 18 : 9, e.heavy ? 280 : 190);
           if (e.dmg > 0) {
             this.elementBurst(e.x, e.y, e.type, e.heavy ? 56 : 30);
+            const vmd = e.mv ? MOVES[e.mv] : undefined;
+            if (vmd && !SPEC_ART.has(vmd.id)) vfxHit(vmd.id, vmd, e.x, e.y, e.heavy, e.dx, e.dy, this.sctx);
             this.parts.push({ kind: "splat", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: e.heavy ? 60 : 38, grow: 0, color: c, edge: e.type, seed: Math.random() * 99, rot: rnd(0, 6.28) });
             this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.22, max: 0.22, size: e.heavy ? 26 : 16, grow: e.heavy ? 150 : 90, color: c });
             if (e.crit || e.heavy) this.parts.push({ kind: "cross", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.24, max: 0.24, size: e.crit ? 56 : 40, grow: 0, color: e.crit ? "#ffe08a" : "#ffffff" });
@@ -2443,6 +2450,12 @@ export class ArenaRenderer {
   private drawZones(g: CanvasRenderingContext2D, S: State) {
     for (const z of S.zones) {
       const c = col(z.type);
+      if (z.struck && z.team !== -1 && !SPEC_ART.has(z.mv.id) && !this.vfxSeen.has(z.id)) {
+        this.vfxSeen.add(z.id);
+        if (this.vfxSeen.size > 300) this.vfxSeen.clear();
+        const line = z.shape === "line";
+        vfxStrike(z.mv, line ? (z.x + z.x2) / 2 : z.x, line ? (z.y + z.y2) / 2 : z.y, line ? z.r * 1.6 : z.r, this.sctx);
+      }
       if (!z.struck) {
         const prog = Math.max(0, Math.min(1, 1 - Math.max(0, z.delay) / Math.max(0.05, z.total)));
         const pulse = 0.5 + Math.sin(this.t * 14) * 0.5;
@@ -4129,7 +4142,11 @@ export class ArenaRenderer {
       }
       const c = col(p.type);
       this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t));
-      if (!specShotTrail(p, this.sctx)) this.trail(p, c);
+      if (!specShotTrail(p, this.sctx)) {
+        const tmd = MOVES[p.mv];
+        if (tmd && !OWN_SHOT_ART.has(p.mv)) vfxTrail(tmd, p, this.sctx);
+        else this.trail(p, c);
+      }
     }
     for (const [owner, list] of streams) {
       const f = S.fighters.find((x) => x.id === owner);
@@ -4689,6 +4706,7 @@ export class ArenaRenderer {
     else if (au) this.auras.delete(f.id);
     if (f.grabT > 0 && f.alive) drawAura(g, "mindhand", f, 0.3, 1, this.t, this.sctx);
     if (f.dash && !under && SPEC_ART.has(f.dash.mv.id)) specDash(f.dash.mv.id, f, this.sctx);
+    else if (f.dash && !under) vfxDash(f.dash.mv, f, this.sctx);
     // each type of rush leaves its own trail
     if ((f.dash && !under) || rolling) {
       const ty = f.dash?.mv.type ?? f.types[0] ?? "Normal";

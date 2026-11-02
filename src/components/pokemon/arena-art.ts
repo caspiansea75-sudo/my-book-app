@@ -7,6 +7,9 @@ import { ARENA, type Obstacle, type Patch, type Proj, type StageKind } from "@/l
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import { specShot } from "./arena-spec";
 import { texPat, typeTex } from "./arena-tex";
+import { paintFloor } from "./arena-floor";
+import { vfxShot } from "./arena-vfx";
+import { MOVES } from "@/lib/pokemon/arena-data";
 import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
 
 const { W, H } = ARENA;
@@ -80,20 +83,7 @@ function buildGrass(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const r = rng(11);
   stands(g, r);
-  g.fillStyle = "#2f6b2c";
-  g.fillRect(30, 30, W - 60, H - 60);
-  // mown stripes
-  for (let x = 30; x < W - 30; x += 60) {
-    g.fillStyle = (x / 60) % 2 ? "rgba(255,255,255,.045)" : "rgba(0,0,0,.07)";
-    g.fillRect(x, 30, 60, H - 60);
-  }
-  // blades and flecks
-  for (let i = 0; i < 2600; i++) {
-    const x = 30 + r() * (W - 60);
-    const y = 30 + r() * (H - 60);
-    g.fillStyle = r() < 0.5 ? "rgba(20,70,20,.35)" : "rgba(130,190,90,.22)";
-    g.fillRect(x, y, 2, 2 + r() * 3);
-  }
+  paintFloor(g, "grass", 30, 30, W - 60, H - 60);
   pitchLines(g, "rgba(240,248,235,.78)", 3);
   vignette(g, 0.42);
   return c;
@@ -104,37 +94,7 @@ function buildStone(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const r = rng(23);
   stands(g, r);
-  g.fillStyle = "#1b2231";
-  g.fillRect(30, 30, W - 60, H - 60);
-  // irregular rows of stone slabs, as in the video
-  let y = 30;
-  while (y < H - 30) {
-    const h = 40 + Math.floor(r() * 40);
-    let x = 30;
-    while (x < W - 30) {
-      const w = 54 + Math.floor(r() * 90);
-      const ww = Math.min(w, W - 30 - x);
-      const v = 54 + Math.floor(r() * 26);
-      g.fillStyle = `rgb(${v} ${v + 6} ${v + 22})`;
-      g.fillRect(x + 1, y + 1, ww - 2, Math.min(h, H - 30 - y) - 2);
-      g.fillStyle = "rgba(255,255,255,.07)";
-      g.fillRect(x + 3, y + 3, ww - 6, 3);
-      if (r() < 0.35) {
-        g.strokeStyle = "rgba(10,14,24,.55)";
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(x + r() * ww, y + 4);
-        g.lineTo(x + r() * ww, y + h - 4);
-        g.stroke();
-      }
-      if (r() < 0.18) {
-        g.fillStyle = "rgba(80,130,70,.35)";
-        g.fillRect(x + r() * (ww - 8), y + h - 6, 6 + r() * 6, 3);
-      }
-      x += ww;
-    }
-    y += h;
-  }
+  paintFloor(g, "stone", 30, 30, W - 60, H - 60);
   pitchLines(g, "rgba(12,16,28,.8)", 4);
   g.strokeStyle = "rgba(130,170,255,.45)";
   g.lineWidth = 4;
@@ -148,18 +108,7 @@ function buildDirt(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const r = rng(37);
   stands(g, r, false);
-  g.fillStyle = "#7a5a3b";
-  g.fillRect(30, 30, W - 60, H - 60);
-  for (let i = 0; i < 160; i++) {
-    g.fillStyle = r() < 0.5 ? "rgba(60,40,22,.22)" : "rgba(170,130,90,.2)";
-    g.beginPath();
-    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 14 + r() * 50, 8 + r() * 28, r() * 3, 0, Math.PI * 2);
-    g.fill();
-  }
-  for (let i = 0; i < 700; i++) {
-    g.fillStyle = r() < 0.5 ? "rgba(40,28,16,.5)" : "rgba(200,170,130,.45)";
-    g.fillRect(30 + r() * (W - 60), 30 + r() * (H - 60), 2 + r() * 2, 2);
-  }
+  paintFloor(g, "dirt", 30, 30, W - 60, H - 60);
   pitchLines(g, "rgba(240,225,195,.72)", 3);
   vignette(g, 0.48);
   return c;
@@ -169,32 +118,8 @@ function buildCrystal(): HTMLCanvasElement {
   const c = canvas();
   const g = c.getContext("2d")!;
   const r = rng(53);
-  g.fillStyle = "#0b0a16";
-  g.fillRect(0, 0, W, H);
-  // cracked cave rock
-  for (let i = 0; i < 90; i++) {
-    const x = r() * W;
-    const y = r() * H;
-    const n = 5 + Math.floor(r() * 3);
-    const rad = 40 + r() * 70;
-    g.beginPath();
-    for (let k = 0; k < n; k++) {
-      const a = (k / n) * Math.PI * 2 + r() * 0.5;
-      const rr = rad * (0.6 + r() * 0.5);
-      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.75);
-    }
-    g.closePath();
-    const v = 22 + Math.floor(r() * 22);
-    g.fillStyle = `rgb(${v} ${v} ${v + 18})`;
-    g.fill();
-    g.strokeStyle = "rgba(0,0,10,.7)";
-    g.lineWidth = 2;
-    g.stroke();
-  }
-  for (let i = 0; i < 160; i++) {
-    g.fillStyle = `rgba(180,150,255,${0.15 + r() * 0.3})`;
-    g.fillRect(r() * W, r() * H, 2, 2);
-  }
+  stands(g, r, false);
+  paintFloor(g, "crystal", 30, 30, W - 60, H - 60);
   g.strokeStyle = "rgba(160,120,255,.35)";
   g.lineWidth = 4;
   g.strokeRect(30, 30, W - 60, H - 60);
@@ -207,41 +132,7 @@ function buildIce(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const r = rng(71);
   stands(g, r, false);
-  const gr = g.createLinearGradient(0, 30, 0, H - 30);
-  gr.addColorStop(0, "#9fd6f0");
-  gr.addColorStop(1, "#5a9fcc");
-  g.fillStyle = gr;
-  g.fillRect(30, 30, W - 60, H - 60);
-  // frozen plates and hairline cracks
-  for (let i = 0; i < 60; i++) {
-    g.fillStyle = r() < 0.5 ? "rgba(255,255,255,.12)" : "rgba(40,90,150,.10)";
-    g.beginPath();
-    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 30 + r() * 90, 16 + r() * 40, r() * 3, 0, Math.PI * 2);
-    g.fill();
-  }
-  g.strokeStyle = "rgba(255,255,255,.5)";
-  g.lineWidth = 1.2;
-  for (let i = 0; i < 34; i++) {
-    let x = 30 + r() * (W - 60), y = 30 + r() * (H - 60);
-    g.beginPath();
-    g.moveTo(x, y);
-    for (let k = 0; k < 5; k++) {
-      x += (r() - 0.5) * 70;
-      y += (r() - 0.5) * 50;
-      g.lineTo(x, y);
-    }
-    g.stroke();
-  }
-  // snowdrifts along the edges
-  g.fillStyle = "rgba(255,255,255,.85)";
-  for (let i = 0; i < 70; i++) {
-    const side = Math.floor(r() * 4);
-    const x = side < 2 ? 30 + r() * (W - 60) : side === 2 ? 30 + r() * 26 : W - 30 - r() * 26;
-    const y = side === 0 ? 30 + r() * 20 : side === 1 ? H - 30 - r() * 20 : 30 + r() * (H - 60);
-    g.beginPath();
-    g.ellipse(x, y, 16 + r() * 28, 8 + r() * 12, 0, 0, Math.PI * 2);
-    g.fill();
-  }
+  paintFloor(g, "ice", 30, 30, W - 60, H - 60);
   pitchLines(g, "rgba(255,255,255,.55)", 3);
   g.strokeStyle = "rgba(200,240,255,.8)";
   g.lineWidth = 4;
@@ -255,33 +146,7 @@ function buildLava(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const r = rng(83);
   stands(g, r, false);
-  g.fillStyle = "#241512";
-  g.fillRect(30, 30, W - 60, H - 60);
-  for (let i = 0; i < 120; i++) {
-    const v = 28 + Math.floor(r() * 24);
-    g.fillStyle = `rgb(${v + 14} ${v} ${v - 6})`;
-    g.beginPath();
-    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 20 + r() * 70, 12 + r() * 40, r() * 3, 0, Math.PI * 2);
-    g.fill();
-  }
-  // glowing fissures
-  g.lineCap = "round";
-  for (let i = 0; i < 22; i++) {
-    let x = 40 + r() * (W - 80), y = 40 + r() * (H - 80);
-    const pts: [number, number][] = [[x, y]];
-    for (let k = 0; k < 6; k++) {
-      x += (r() - 0.5) * 90;
-      y += (r() - 0.5) * 60;
-      pts.push([x, y]);
-    }
-    for (const [w, col2] of [[7, "rgba(255,80,20,.25)"], [3.5, "rgba(255,150,40,.8)"], [1.4, "rgba(255,240,170,.95)"]] as const) {
-      g.strokeStyle = col2;
-      g.lineWidth = w;
-      g.beginPath();
-      pts.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py)));
-      g.stroke();
-    }
-  }
+  paintFloor(g, "lava", 30, 30, W - 60, H - 60);
   pitchLines(g, "rgba(255,170,80,.28)", 3);
   g.strokeStyle = "rgba(255,120,40,.6)";
   g.lineWidth = 4;
@@ -295,28 +160,7 @@ function buildCoast(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const r = rng(97);
   stands(g, r, false);
-  g.fillStyle = "#e3cf9b";
-  g.fillRect(30, 30, W - 60, H - 60);
-  for (let i = 0; i < 180; i++) {
-    g.fillStyle = r() < 0.5 ? "rgba(190,160,100,.28)" : "rgba(255,245,210,.3)";
-    g.beginPath();
-    g.ellipse(30 + r() * (W - 60), 30 + r() * (H - 60), 14 + r() * 50, 6 + r() * 20, r() * 0.6, 0, Math.PI * 2);
-    g.fill();
-  }
-  for (let i = 0; i < 500; i++) {
-    g.fillStyle = r() < 0.5 ? "rgba(120,90,50,.45)" : "rgba(255,255,255,.55)";
-    g.fillRect(30 + r() * (W - 60), 30 + r() * (H - 60), 2, 2);
-  }
-  // shells and driftwood
-  g.strokeStyle = "rgba(120,80,40,.6)";
-  g.lineWidth = 4;
-  for (let i = 0; i < 6; i++) {
-    const x = 60 + r() * (W - 120), y = 60 + r() * (H - 120), a = r() * 3;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + Math.cos(a) * 34, y + Math.sin(a) * 34);
-    g.stroke();
-  }
+  paintFloor(g, "coast", 30, 30, W - 60, H - 60);
   pitchLines(g, "rgba(255,255,255,.5)", 3);
   vignette(g, 0.4);
   return c;
@@ -598,6 +442,13 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
   if (specShot(g, p, age, t)) {
     g.restore();
     return;
+  }
+  {
+    const vm = MOVES[p.mv];
+    if (vm && vfxShot(g, vm, ang, r, age, t)) {
+      g.restore();
+      return;
+    }
   }
   switch (p.mv) {
     case "confuseray": {

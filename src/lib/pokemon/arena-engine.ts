@@ -169,7 +169,7 @@ export type Zone = {
 
 export type Ev =
   | { t: "cast"; id: number; dir: number; mv: string; tx: number; ty: number; x: number; y: number; type: string; kind: string; byPlayer: boolean }
-  | { t: "hit"; id: number; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean }
+  | { t: "hit"; id: number; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean; mv?: string }
   | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string }
   | { t: "crate"; x: number; y: number; kind?: string }
   | { t: "fall"; x: number; y: number; id: number; player: boolean }
@@ -854,7 +854,7 @@ function applyStatus(S: State, f: Fighter, kind: StatusKind) {
 }
 
 /** One hit lands (or does not): dodged, shielded, resisted, critical… returns the damage dealt. */
-function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: string, o: { kx: number; ky: number; kb: number; status?: { kind: StatusKind; chance: number }; fromPlayerAttack?: boolean }): number {
+function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: string, o: { kx: number; ky: number; kb: number; status?: { kind: StatusKind; chance: number }; fromPlayerAttack?: boolean; mv?: string }): number {
   if (!dst.alive) return 0;
   if (dst.invuln > 0) {
     // a roll that slips through an attack is a perfect dodge: time slows and the next blows hit harder
@@ -899,7 +899,7 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   if (heavy) S.freeze = Math.max(S.freeze, src.isPlayer || dst.isPlayer ? 0.07 : 0.03);
   if (dst.status.slp > 0 && dmg > 0) dst.status.slp = Math.max(0, dst.status.slp - 1.1); // a hit shakes them awake
   if (o.status && Math.random() < o.status.chance) applyStatus(S, dst, o.status.kind);
-  S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy });
+  S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy, mv: o.mv });
   if (src.isPlayer) S.score += Math.round(dmg * 0.5);
   if (dst.hp <= 0) kill(S, src, dst);
   return dmg;
@@ -993,7 +993,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
   if (f.mega > 0 && f.form?.z && mv.kind !== "heal" && mv.kind !== "guard" && mv.kind !== "buff") {
     const r = 95;
     boom(S, f.x, f.y, r, f.types[0] ?? "Normal");
-    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, baseDamage(f, mv, 0.4), f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 200 });
+    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= r + o.r) strike(S, f, o, baseDamage(f, mv, 0.4), f.types[0] ?? "Normal", { kx: o.x - f.x, ky: o.y - f.y, kb: 200, mv: mv.id });
   }
   switch (mv.kind) {
     case "proj":
@@ -1027,7 +1027,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       boom(S, f.x, f.y, r, mv.type, mv.fx ?? mv.id);
       for (const o of foesOf(S, f)) {
         const d = len(o.x - f.x, o.y - f.y);
-        if (d <= r + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 240, status: mv.status });
+        if (d <= r + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 240, status: mv.status, mv: mv.id });
       }
       break;
     }
@@ -1824,14 +1824,14 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
           const mv = f.dash.mv;
           S.events.push({ t: "dig", x: f.x, y: f.y, id: f.id, phase: "up", type: mv.type });
           boom(S, f.x, f.y, 95, mv.type, mv.fx ?? mv.id);
-          for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 95 + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 460, status: mv.status });
+          for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 95 + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 460, status: mv.status, mv: mv.id });
           f.dash = null;
         }
       } else {
         for (const o of foesOf(S, f)) {
           if (!f.dash.hit.has(o.id) && len(o.x - f.x, o.y - f.y) <= f.r + o.r + 6) {
             f.dash.hit.add(o.id);
-            strike(S, f, o, baseDamage(f, f.dash.mv), f.dash.mv.type, { kx: f.dash.dx, ky: f.dash.dy, kb: 330, status: f.dash.mv.status });
+            strike(S, f, o, baseDamage(f, f.dash.mv), f.dash.mv.type, { kx: f.dash.dx, ky: f.dash.dy, kb: 330, status: f.dash.mv.status, mv: f.dash.mv.id });
           }
         }
         if (f.dash.t >= f.dash.total) f.dash = null;
@@ -1910,13 +1910,13 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       if (!o.alive || o.team === pr.team || pr.hits.has(o.id)) continue;
       if (len(o.x - pr.x, o.y - pr.y) <= o.r + pr.r) {
         pr.hits.add(o.id);
-        if (src) strike(S, src, o, pr.dmg, pr.type, { kx: pr.vx, ky: pr.vy, kb: pr.kb, status: pr.status });
+        if (src) strike(S, src, o, pr.dmg, pr.type, { kx: pr.vx, ky: pr.vy, kb: pr.kb, status: pr.status, mv: pr.mv });
         if (!pr.pierce) {
           pr.life = 0;
           boom(S, pr.x, pr.y, pr.aoe > 0 ? pr.aoe : 34, pr.type);
           if (pr.aoe > 0 && src) {
             for (const o2 of S.fighters) {
-              if (o2.alive && o2.team !== pr.team && o2.id !== o.id && len(o2.x - pr.x, o2.y - pr.y) <= pr.aoe + o2.r) strike(S, src, o2, pr.dmg * 0.6, pr.type, { kx: o2.x - pr.x, ky: o2.y - pr.y, kb: 200, status: pr.status });
+              if (o2.alive && o2.team !== pr.team && o2.id !== o.id && len(o2.x - pr.x, o2.y - pr.y) <= pr.aoe + o2.r) strike(S, src, o2, pr.dmg * 0.6, pr.type, { kx: o2.x - pr.x, ky: o2.y - pr.y, kb: 200, status: pr.status, mv: pr.mv });
             }
           }
           break;
@@ -2000,7 +2000,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
               const across = Math.abs(rx * uy - ry * ux);
               inside = along > -10 && along < len(z.x2 - z.x, z.y2 - z.y) && across <= z.r + o.r;
             }
-            if (inside) strike(S, src, o, z.dmg, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: z.kb, status: z.status });
+            if (inside) strike(S, src, o, z.dmg, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: z.kb, status: z.status, mv: z.mv.id });
           }
         }
         if (z.shape === "line") boom(S, z.x2, z.y2, 26, z.type);
@@ -2016,7 +2016,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
           if (src) {
             for (const o of S.fighters) {
               if (!o.alive || o.team === z.team || len(o.x - z.x, o.y - z.y) > z.r + o.r) continue;
-              strike(S, src, o, z.dmg * 0.55, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: 30, status: z.status });
+              strike(S, src, o, z.dmg * 0.55, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: 30, status: z.status, mv: z.mv.id });
             }
           }
         }

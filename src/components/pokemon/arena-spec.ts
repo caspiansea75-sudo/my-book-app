@@ -6,6 +6,7 @@
  */
 
 import { texPat } from "./arena-tex";
+import { drawVfxDecal, type VfxDecal } from "./arena-vfx";
 
 export const SPEC_ART = new Set([
   "overdriverush", "magmastorm", "whirlpoolprison", "sporegarden", "thundercage", "absolutezero", "finalflurry", "toxicflood",
@@ -14,7 +15,7 @@ export const SPEC_ART = new Set([
 ]);
 
 export type SP = { kind: string; x: number; y: number; vx?: number; vy?: number; g?: number; life: number; size?: number; grow?: number; color: string; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; text?: string; weight?: number };
-export type Decal = { kind: "snow" | "night" | "runes" | "claws" | "crater" | "quake"; x: number; y: number; r: number; t: number; life: number; seed: number; ang: number };
+export type Decal = { vfx?: VfxDecal; kind: "snow" | "night" | "runes" | "claws" | "crater" | "quake" | "vfx"; x: number; y: number; r: number; t: number; life: number; seed: number; ang: number };
 
 export interface SpecCtx {
   add(p: SP): void;
@@ -680,6 +681,10 @@ export function drawDecals(g: CanvasRenderingContext2D, list: Decal[], dt: numbe
     keep.push(d);
     const u = d.t / d.life;
     const fade = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
+    if (d.kind === "vfx") {
+      if (d.vfx) { g.save(); g.globalAlpha = fade; drawVfxDecal(g, d as Decal & { vfx: VfxDecal }, u); g.restore(); }
+      continue;
+    }
     g.save();
     g.globalAlpha = fade;
     g.globalCompositeOperation = "lighter";
