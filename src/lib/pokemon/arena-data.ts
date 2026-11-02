@@ -44,6 +44,8 @@ export type MoveDef = {
   fx?: string;
   /** Seconds a whirl stays and keeps hurting (lob moves). */
   linger?: number;
+  /** Share of the damage this move deals that comes back to the user as HP (drain moves). */
+  drain?: number;
   /** A type specialty: every Pokémon of this type can learn it, and no other type can. */
   spec?: boolean;
   desc: string;
@@ -176,7 +178,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "hydrocannon", name: "Hydro Cannon", type: "Water", kind: "bolt", power: 2.7, cd: 6.5, range: 500, windup: 0.6, pierce: true, desc: "A long burst of water." }),
     m({ id: "bubblebeam", name: "Bubble Beam", type: "Water", kind: "beam", power: 0.38, cd: 2.2, n: 8, range: 240, desc: "A stream of bubbles." }),
     m({ id: "energyball", name: "Energy Ball", type: "Grass", kind: "proj", power: 1.3, cd: 1.8, speed: 480, desc: "A ball of green energy." }),
-    m({ id: "gigadrain", name: "Giga Drain", type: "Grass", kind: "homing", power: 1.1, cd: 2.4, speed: 420, desc: "Seeks a foe and drains it." }),
+    m({ id: "gigadrain", name: "Giga Drain", type: "Grass", kind: "homing", power: 1.1, cd: 2.4, speed: 420, drain: 0.5, desc: "Seeks a foe and drains it: you heal half of the damage it deals." }),
     m({ id: "woodhammer", name: "Wood Hammer", type: "Grass", kind: "dash", power: 1.8, cd: 4, range: 230, desc: "Charge with a heavy body." }),
     m({ id: "seedbomb", name: "Seed Bomb", type: "Grass", kind: "lob", power: 1.6, cd: 4.4, range: 320, windup: 0.45, desc: "Seeds burst on the spot." }),
     m({ id: "petaldance", name: "Petal Dance", type: "Grass", kind: "nova", power: 1.9, cd: 5, range: 160, windup: 0.3, fx: "closecombat", desc: "A storm of petals all around." }),
@@ -197,7 +199,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "frostbreath", name: "Frost Breath", type: "Ice", kind: "spread", power: 0.6, cd: 1.7, n: 5, speed: 540, desc: "A fan of cold breath." }),
     m({ id: "freezedry", name: "Freeze-Dry", type: "Ice", kind: "beam", power: 0.46, cd: 3, n: 8, range: 280, status: { kind: "frz", chance: 0.15 }, desc: "A frosty stream." }),
     m({ id: "focusblast", name: "Focus Blast", type: "Fighting", kind: "lob", power: 2.1, cd: 5.4, range: 330, windup: 0.5, fx: "dynamicpunch", desc: "A focused blast that lands where you aim." }),
-    m({ id: "drainpunch", name: "Drain Punch", type: "Fighting", kind: "dash", power: 1.3, cd: 2.6, range: 210, desc: "A punch that drains HP." }),
+    m({ id: "drainpunch", name: "Drain Punch", type: "Fighting", kind: "dash", power: 1.3, cd: 2.6, range: 210, drain: 0.5, desc: "A punch that drains HP: you heal half of the damage it deals." }),
     m({ id: "superpower", name: "Superpower", type: "Fighting", kind: "dash", power: 1.9, cd: 4.4, range: 230, desc: "All your strength in one rush." }),
     m({ id: "sacredsword", name: "Sacred Sword", type: "Fighting", kind: "dash", power: 1.5, cd: 3, range: 220, desc: "Cut through with a holy sword." }),
     m({ id: "skyuppercut", name: "Sky Uppercut", type: "Fighting", kind: "dash", power: 1.3, cd: 2.8, range: 210, desc: "An upward punch." }),
@@ -225,7 +227,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "drillpeck", name: "Drill Peck", type: "Flying", kind: "dash", power: 1.4, cd: 2.8, range: 220, desc: "A spinning peck." }),
     m({ id: "gust", name: "Gust", type: "Flying", kind: "proj", power: 0.9, cd: 1, speed: 560, desc: "A quick gust." }),
     m({ id: "wingattack", name: "Wing Attack", type: "Flying", kind: "dash", power: 1.2, cd: 2.4, range: 220, desc: "Strike with wings." }),
-    m({ id: "oblivionwing", name: "Oblivion Wing", type: "Flying", kind: "homing", power: 1.2, cd: 2.4, speed: 440, desc: "Wings of light seek the foe." }),
+    m({ id: "oblivionwing", name: "Oblivion Wing", type: "Flying", kind: "homing", power: 1.2, cd: 2.4, speed: 440, drain: 0.75, desc: "Wings of light seek the foe and drain it: you heal 75% of the damage it deals." }),
     m({ id: "futuresight", name: "Future Sight", type: "Psychic", kind: "lob", power: 2.4, cd: 6.4, range: 340, windup: 0.8, desc: "An attack from the future lands soon." }),
     m({ id: "psyshock", name: "Psyshock", type: "Psychic", kind: "proj", power: 1.4, cd: 1.9, speed: 520, desc: "A psychic shot." }),
     m({ id: "extrasensory", name: "Extrasensory", type: "Psychic", kind: "nova", power: 1.5, cd: 4, range: 150, windup: 0.25, fx: "levitate", desc: "A mind burst all around." }),
@@ -280,7 +282,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "behemothblade", name: "Behemoth Blade", type: "Steel", kind: "dash", power: 2.0, cd: 4.6, range: 250, desc: "A giant sword slash." }),
     m({ id: "dazzlinggleam", name: "Dazzling Gleam", type: "Fairy", kind: "nova", power: 1.6, cd: 4.4, range: 160, windup: 0.3, desc: "A flash of light." }),
     m({ id: "playrough", name: "Play Rough", type: "Fairy", kind: "dash", power: 1.5, cd: 3, range: 220, desc: "A rough, cute tackle." }),
-    m({ id: "drainingkiss", name: "Draining Kiss", type: "Fairy", kind: "homing", power: 1.0, cd: 2, speed: 420, desc: "A kiss that seeks the foe." }),
+    m({ id: "drainingkiss", name: "Draining Kiss", type: "Fairy", kind: "homing", power: 1.0, cd: 2, speed: 420, drain: 0.5, desc: "A kiss that seeks the foe and steals its vitality: you heal half of the damage it deals." }),
     m({ id: "fleurcannon", name: "Fleur Cannon", type: "Fairy", kind: "bolt", power: 2.8, cd: 7, range: 520, windup: 0.65, pierce: true, desc: "A beam of fairy light." }),
     m({ id: "lightofruin", name: "Light of Ruin", type: "Fairy", kind: "lob", power: 2.5, cd: 6.5, range: 340, windup: 0.7, desc: "A giant light." }),
     m({ id: "mistyexplosion", name: "Misty Explosion", type: "Fairy", kind: "nova", power: 2.3, cd: 6.5, range: 180, windup: 0.45, desc: "A big misty blast." }),

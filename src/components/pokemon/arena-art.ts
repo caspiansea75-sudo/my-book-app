@@ -8,6 +8,7 @@ import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import { specShot } from "./arena-spec";
 import { texPat, typeTex } from "./arena-tex";
 import { paintFloor } from "./arena-floor";
+import { foamEdge, lavaLake, pond, riftPit } from "./arena-shape";
 import { vfxShot } from "./arena-vfx";
 import { MOVES } from "@/lib/pokemon/arena-data";
 import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
@@ -181,62 +182,12 @@ export function stageBackground(kind: StageKind): HTMLCanvasElement {
 
 /** A pool of water: still blue with slow rings moving across it. */
 export function drawPool(g: CanvasRenderingContext2D, p: Patch, t: number) {
-  g.save();
-  g.beginPath();
-  g.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2);
-  g.clip();
-  const gr = g.createRadialGradient(p.x, p.y, 10, p.x, p.y, p.rx);
-  gr.addColorStop(0, "#3f8fd0");
-  gr.addColorStop(1, "#1f5f9e");
-  g.fillStyle = gr;
-  g.fillRect(p.x - p.rx, p.y - p.ry, p.rx * 2, p.ry * 2);
-  g.strokeStyle = "rgba(220,240,255,.35)";
-  g.lineWidth = 1.5;
-  for (let i = 0; i < 4; i++) {
-    const k = Math.max(0, (((t * 0.25 + i / 4) % 1) + 1) % 1) * 0.95;
-    g.beginPath();
-    g.ellipse(p.x + Math.sin(t + i) * 6, p.y, p.rx * k, p.ry * k, 0, 0, Math.PI * 2);
-    g.stroke();
-  }
-  g.fillStyle = "rgba(255,255,255,.22)";
-  for (let i = 0; i < 10; i++) g.fillRect(p.x - p.rx + ((i * 53 + t * 18) % (p.rx * 2)), p.y - p.ry + ((i * 37) % (p.ry * 2)), 8, 2);
-  g.restore();
-  g.strokeStyle = "rgba(210,235,255,.65)";
-  g.lineWidth = 3;
-  g.beginPath();
-  g.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, Math.PI * 2);
-  g.stroke();
+  pond(g, p, t);
 }
 
 /** A bottomless pit: a window onto the stars, edged with a glowing rim (flyers can cross it). */
 export function drawHole(g: CanvasRenderingContext2D, h: Patch, t: number) {
-  g.save();
-  g.beginPath();
-  g.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
-  g.clip();
-  g.fillStyle = "#02030a";
-  g.fillRect(h.x - h.rx, h.y - h.ry, h.rx * 2, h.ry * 2);
-  const r = rng(91);
-  for (let i = 0; i < 90; i++) {
-    const x = h.x - h.rx + r() * h.rx * 2;
-    const y = h.y - h.ry + r() * h.ry * 2;
-    g.fillStyle = `rgba(190,210,255,${0.25 + 0.6 * Math.abs(Math.sin(t * (0.6 + r()) + i))})`;
-    g.fillRect(x, y, 2, 2);
-  }
-  const gr = g.createRadialGradient(h.x, h.y, h.rx * 0.2, h.x, h.y, h.rx);
-  gr.addColorStop(0, "rgba(60,40,140,.0)");
-  gr.addColorStop(1, "rgba(60,40,140,.35)");
-  g.fillStyle = gr;
-  g.fillRect(h.x - h.rx, h.y - h.ry, h.rx * 2, h.ry * 2);
-  g.restore();
-  g.strokeStyle = "rgba(120,200,255,.85)";
-  g.lineWidth = 4;
-  g.shadowColor = "#4cc3ff";
-  g.shadowBlur = 14;
-  g.beginPath();
-  g.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
-  g.stroke();
-  g.shadowBlur = 0;
+  riftPit(g, h, t);
 }
 
 /* ------------------------------------------------------------------ obstacles */
@@ -945,45 +896,12 @@ export function drawLightning(g: CanvasRenderingContext2D, x1: number, y1: numbe
 
 /** A pit filled with molten rock (the crater arena). */
 export function drawLavaPit(g: CanvasRenderingContext2D, h: Patch, t: number) {
-  g.save();
-  g.beginPath();
-  g.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
-  g.clip();
-  const gr = g.createRadialGradient(h.x, h.y, 5, h.x, h.y, h.rx);
-  gr.addColorStop(0, "#fff0a0");
-  gr.addColorStop(0.35, "#ff9a1f");
-  gr.addColorStop(1, "#a81d08");
-  g.fillStyle = gr;
-  g.fillRect(h.x - h.rx, h.y - h.ry, h.rx * 2, h.ry * 2);
-  g.fillStyle = "rgba(90,20,0,.22)";
-  for (let i = 0; i < 9; i++) {
-    const a = i * 2.4 + t * 0.15;
-    g.beginPath();
-    g.ellipse(h.x + Math.cos(a) * h.rx * 0.55, h.y + Math.sin(a * 1.3) * h.ry * 0.5, 16 + (i % 3) * 8, 7 + (i % 2) * 4, a, 0, Math.PI * 2);
-    g.fill();
-  }
-  g.restore();
-  g.strokeStyle = "rgba(255,190,90,.9)";
-  g.lineWidth = 4;
-  g.shadowColor = "#ff6a1a";
-  g.shadowBlur = 18;
-  g.beginPath();
-  g.ellipse(h.x, h.y, h.rx, h.ry, 0, 0, Math.PI * 2);
-  g.stroke();
-  g.shadowBlur = 0;
+  lavaLake(g, h, t);
 }
 
 /** A tide pool: the water on the coast arena gets bigger and smaller with the tide, with a foam edge. */
 export function drawFoam(g: CanvasRenderingContext2D, p: Patch, t: number) {
-  g.save();
-  g.strokeStyle = "rgba(255,255,255,.75)";
-  g.lineWidth = 5;
-  g.setLineDash([14, 10]);
-  g.lineDashOffset = -t * 18;
-  g.beginPath();
-  g.ellipse(p.x, p.y, p.rx + 4, p.ry + 4, 0, 0, Math.PI * 2);
-  g.stroke();
-  g.restore();
+  foamEdge(g, p, t);
 }
 
 /** Live arena events: lava vents, wind streaks and the supply spotlight. */

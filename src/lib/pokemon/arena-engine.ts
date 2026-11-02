@@ -179,7 +179,7 @@ export type Ev =
   | { t: "perfect"; x: number; y: number }
   | { t: "ko"; x: number; y: number; id: number; id2: string; type: string; byPlayer: boolean; player: boolean; boss: boolean }
   | { t: "combo"; n: number; finish: boolean }
-  | { t: "heal"; x: number; y: number; amt: number }
+  | { t: "heal"; x: number; y: number; amt: number; /** a drain: where the life came from */ fx?: number; fy?: number; id?: number }
   | { t: "status"; x: number; y: number; kind: StatusKind }
   | { t: "ailment"; x: number; y: number; kind: "par" | "cnf" | "slp" }
   | { t: "shield"; x: number; y: number }
@@ -886,11 +886,22 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     dmg -= soak;
   }
   dmg = dmg > 0.5 ? Math.max(1, Math.round(dmg)) : 0;
+  const hpBefore = Math.max(0, dst.hp);
   dst.hp -= dmg;
   dst.flash = 0.12;
   src.dealt += dmg;
   gainUlt(src, (dmg / Math.max(1, dst.maxHp)) * 70);
   if (src.drain > 0) src.hp = Math.min(src.maxHp, src.hp + dmg * src.drain);
+  // a draining move gives back a share of the damage it really dealt (never more than the target had left)
+  const drainK = o.mv ? MOVES[o.mv]?.drain ?? 0 : 0;
+  if (drainK > 0 && src.alive && dmg > 0) {
+    const gain = Math.min(src.maxHp - src.hp, Math.min(dmg, hpBefore) * drainK);
+    if (gain >= 0.5) {
+      src.hp += gain;
+      src.ghost = Math.max(src.ghost, src.hp);
+      S.events.push({ t: "heal", x: src.x, y: src.y, amt: Math.round(gain), fx: dst.x, fy: dst.y, id: src.id });
+    }
+  }
   const heavy = dmg >= dst.maxHp * 0.12 || crit;
   const [nx, ny] = norm(o.kx, o.ky);
   if (!dst.boss && dst.dyna <= 0) {

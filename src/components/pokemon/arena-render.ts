@@ -10,6 +10,7 @@ import { OWN_SHOT_ART, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./a
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
+import { organic, sigil, smooth } from "@/components/pokemon/arena-shape";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
@@ -795,8 +796,20 @@ export class ArenaRenderer {
         case "gimmickEnd":
           this.ring(e.x, e.y, "#aab4c8", 90, 0.5);
           break;
-        case "heal":
+        case "heal": {
+          // life drained from a foe: a stream of green motes flows from them to the user, who glows and shows the gain
+          if (e.amt > 0) this.pop(e.x, e.y - 30, `+${e.amt}`, "#7dff9a", 15, 900);
+          if (e.fx !== undefined && e.fy !== undefined) {
+            const dx = e.x - e.fx, dy = e.y - e.fy, T = 0.5;
+            for (let i = 0; i < 16; i++) {
+              const j = rnd(-26, 26), k = rnd(0.8, 1.15);
+              this.parts.push({ kind: i % 4 ? "dot" : "star", x: e.fx + rnd(-8, 8), y: e.fy + rnd(-8, 8), vx: (dx / T) * k + j, vy: (dy / T) * k - j * 0.4, g: 0, life: T * 0.95, max: T, size: rnd(2.5, 5), grow: 0, rot: 0, vr: 6, color: i % 2 ? "#7dff9a" : "#d6ffe0" });
+            }
+            this.parts.push({ kind: "glow", x: e.fx, y: e.fy, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: 14, grow: -30, color: "#7dff9a" });
+            this.later.push({ t: T * 0.9, fn: () => { this.ring(e.x, e.y, "#7dff9a", 64, 0.45); this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.4, max: 0.4, size: 20, grow: 120, color: "#7dff9a" }); for (let i = 0; i < 8; i++) this.parts.push({ kind: "star", x: e.x + rnd(-14, 14), y: e.y + rnd(-6, 12), vx: rnd(-40, 40), vy: rnd(-130, -50), g: 0, life: 0.7, max: 0.7, size: rnd(3, 6), grow: 0, rot: 0, vr: 5, color: "#d6ffe0" }); } });
+          }
           break;
+        }
         case "status":
           this.pop(e.x, e.y - 20, { brn: "BURNED!", psn: "POISONED!", par: "PARALYZED!", frz: "FROZEN!", cnf: "CONFUSED!", slp: "ASLEEP!" }[e.kind], { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 13, 900);
           this.ring(e.x, e.y, { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 50, 0.4);
@@ -1981,19 +1994,11 @@ export class ArenaRenderer {
         g.save();
         if (z.shape === "circle") {
           const sky = z.team === -1;
-          g.fillStyle = z.player ? `${c}33` : sky ? `rgba(255,225,70,${0.1 + prog * 0.22})` : `rgba(255,70,60,${0.1 + prog * 0.22})`;
-          g.strokeStyle = z.player ? c : sky ? `rgba(255,${210 + pulse * 40},60,.95)` : `rgba(255,${90 + pulse * 80},70,.9)`;
-          g.lineWidth = 3;
-          g.beginPath();
-          g.arc(z.x, z.y, z.r, 0, Math.PI * 2);
-          g.fill();
-          g.stroke();
-          g.save();
-          g.beginPath(); g.arc(z.x, z.y, z.r, 0, Math.PI * 2); g.clip();
-          g.globalAlpha = 0.2 + prog * 0.3;
-          g.fillStyle = texPat(g, typeTex(z.type), this.t * 25, this.t * 10, 0.9);
-          g.fillRect(z.x - z.r, z.y - z.r, z.r * 2, z.r * 2);
-          g.restore();
+          sigil(g, z.x, z.y, z.r, prog,
+            z.player ? c : sky ? "#ffe146" : "#ff5a46",
+            z.player ? c : sky ? `rgba(255,${210 + pulse * 40},60,.95)` : `rgba(255,${90 + pulse * 80},70,.9)`,
+            z.player ? `${c}33` : sky ? `rgba(255,225,70,${0.1 + prog * 0.22})` : `rgba(255,70,60,${0.1 + prog * 0.22})`,
+            typeTex(z.type), this.t, z.id);
           if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.orbFall(g, z, prog);
           if (z.team !== -1 && SPEC_ART.has(z.mv.id)) specWindup(g, z.mv.id, z, prog, this.t);
           if ((z.mv.fx ?? z.mv.id) === "fireblast") {
@@ -2088,8 +2093,8 @@ export class ArenaRenderer {
             }
           }
           g.fillStyle = z.player ? `${c}55` : z.team === -1 ? "rgba(255,225,70,.4)" : "rgba(255,90,70,.35)";
-          g.beginPath();
-          g.arc(z.x, z.y, z.r * Math.min(1, prog), 0, Math.PI * 2);
+          const fk = Math.max(0.05, Math.min(1, prog));
+          smooth(g, organic(z.x, z.y, z.r * fk, z.r * fk, z.id + 9, 0.16, this.t * 1.1, 30));
           g.fill();
         } else {
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);

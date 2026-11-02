@@ -6,7 +6,9 @@
  */
 
 import { texPat } from "./arena-tex";
-import { drawVfxDecal, type VfxDecal } from "./arena-vfx";
+import { MOVES } from "@/lib/pokemon/arena-data";
+import { organic, smooth } from "./arena-shape";
+import { drawVfxDecal, sigOf, type VfxDecal } from "./arena-vfx";
 
 export const SPEC_ART = new Set([
   "overdriverush", "magmastorm", "whirlpoolprison", "sporegarden", "thundercage", "absolutezero", "finalflurry", "toxicflood",
@@ -46,7 +48,24 @@ function ball(g: CanvasRenderingContext2D, x: number, y: number, r: number, c0: 
 
 /* ------------------------------------------------------------------ the moment a specialty lands (or is cast on the spot) */
 
+/** The scar a specialty move leaves: three stacked textured marks (a stained pool, fanning cracks/spikes and a glyph)
+ *  in the move type's own colours and texture, so every one of the 18 reads as its own element. */
+function specGround(id: string, x: number, y: number, r: number, c: SpecCtx) {
+  const mv = MOVES[id];
+  if (!mv) return;
+  const sg = sigOf(mv);
+  const mk = (style: VfxDecal["style"], rr: number, life: number, ang = 0) => c.decal({ kind: "vfx", x, y, r: rr, life, seed: sg.seed + rr, ang, vfx: { style, motif: sg.motif, pal: sg.pal, tex: sg.tex } });
+  mk("splat", r * 1.1, 7);
+  mk("rays", r * 1.3, 5.5, rnd(0, TAU));
+  mk(id === "absolutezero" || id === "eternalnight" || id === "hauntingcurse" || id === "psychicgrip" ? "glyph" : "ring", r * 0.95, 5);
+}
+
 export function specBoom(id: string, x: number, y: number, r: number, c: SpecCtx) {
+  specBoomBase(id, x, y, r, c);
+  if (id !== "moonlitwish" && id !== "ironfortress" && id !== "overdriverush") specGround(id, x, y, r, c);
+}
+
+function specBoomBase(id: string, x: number, y: number, r: number, c: SpecCtx) {
   const A = c.add;
   const add = (p: SP) => A.call(c, p);
   switch (id) {
@@ -229,9 +248,9 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     // a pool of molten rock with a cracked crust, lava fountains and embers circling above it
     const pulse = 0.75 + Math.sin(t * 5) * 0.12;
     g.fillStyle = texPat(g, "lava", t * 9, t * 5, 1.15);
-    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.fill();
+    smooth(g, organic(z.x, z.y, R * grow, R * grow, z.id, 0.16, t * 0.6, 34)); g.fill();
     g.globalCompositeOperation = "lighter";
-    g.save(); g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip(); g.globalAlpha = fade * 0.45; g.fillStyle = texPat(g, "lava", -t * 6, t * 3, 1.6); g.fillRect(z.x - R, z.y - R, R * 2, R * 2); g.restore();
+    g.save(); smooth(g, organic(z.x, z.y, R * grow, R * grow, z.id, 0.16, t * 0.6, 34)); g.clip(); g.globalAlpha = fade * 0.45; g.fillStyle = texPat(g, "lava", -t * 6, t * 3, 1.6); g.fillRect(z.x - R, z.y - R, R * 2, R * 2); g.restore();
     ball(g, z.x, z.y, R * grow, `rgba(255,170,50,${0.35 * pulse})`, "rgba(255,90,20,.25)");
     g.lineCap = "round"; g.lineJoin = "round";
     // fountains
@@ -256,13 +275,13 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     }
     g.globalCompositeOperation = "source-over";
     g.strokeStyle = "rgba(255,120,30,.9)"; g.lineWidth = 3;
-    g.beginPath(); g.arc(z.x, z.y, R, 0, TAU); g.stroke();
+    smooth(g, organic(z.x, z.y, R, R, z.id, 0.16, t * 0.6, 34)); g.stroke();
     if (Math.random() < 0.25) add({ kind: "smoke", x: z.x + rnd(-R * 0.6, R * 0.6), y: z.y + rnd(-R * 0.4, R * 0.4), vx: rnd(-14, 14), vy: rnd(-90, -50), life: 1.1, size: rnd(10, 16), grow: 22, color: "#2b211e" });
   } else if (id === "whirlpoolprison") {
     // a spinning water disc inside a cage of water jets
     ball(g, z.x, z.y, R * 1.1, "rgba(10,40,90,.55)", "rgba(10,40,90,0)");
     g.save();
-    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip();
+    smooth(g, organic(z.x, z.y, R * grow, R * grow, z.id, 0.16, t * 0.6, 34)); g.clip();
     g.translate(z.x, z.y); g.rotate(t * 0.9);
     g.fillStyle = texPat(g, "water", t * 20, 0, 1.3);
     g.fillRect(-R, -R, R * 2, R * 2);
@@ -289,7 +308,7 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
       ball(g, bx, by - h, 3.2, "rgba(255,255,255,.9)", "rgba(255,255,255,0)");
     }
     g.strokeStyle = "rgba(190,235,255,.95)"; g.lineWidth = 3;
-    g.beginPath(); g.arc(z.x, z.y, R, 0, TAU); g.stroke();
+    smooth(g, organic(z.x, z.y, R, R, z.id, 0.16, t * 0.6, 34)); g.stroke();
     // trapped bubbles
     for (let k = 0; k < 6; k++) {
       const a = -t * 2.2 + k * 1.05, d = R * (0.25 + 0.55 * hash(k + z.id));
@@ -301,13 +320,13 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
   } else if (id === "sporegarden") {
     // a patch of grass blooming with mushrooms and flowers that puff drowsy spores
     g.save();
-    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip();
+    smooth(g, organic(z.x, z.y, R * grow, R * grow, z.id, 0.16, t * 0.6, 34)); g.clip();
     g.globalAlpha = fade * 0.92;
     g.fillStyle = texPat(g, "grass", 0, 0, 1.1);
     g.fillRect(z.x - R, z.y - R, R * 2, R * 2);
     g.restore();
     g.strokeStyle = "rgba(190,240,120,.85)"; g.lineWidth = 3;
-    g.beginPath(); g.arc(z.x, z.y, R, 0, TAU); g.stroke();
+    smooth(g, organic(z.x, z.y, R, R, z.id, 0.16, t * 0.6, 34)); g.stroke();
     const items: { x: number; y: number; k: number }[] = [];
     for (let k = 0; k < 9; k++) { const a = hash(k * 2 + z.id) * TAU, d = Math.sqrt(hash(k * 5 + 2 + z.id)) * R * 0.82; items.push({ x: z.x + Math.cos(a) * d, y: z.y + Math.sin(a) * d, k }); }
     items.sort((a, b) => a.y - b.y);
@@ -336,7 +355,7 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     // a glossy pool of venom with slime tendrils and big bubbles that pop
     ball(g, z.x, z.y, R * 1.1, "rgba(20,5,40,.5)", "rgba(20,5,40,0)");
     g.save();
-    g.beginPath(); g.arc(z.x, z.y, R * grow, 0, TAU); g.clip();
+    smooth(g, organic(z.x, z.y, R * grow, R * grow, z.id, 0.16, t * 0.6, 34)); g.clip();
     g.translate(z.x, z.y); g.rotate(Math.sin(t * 0.7) * 0.5);
     g.fillStyle = texPat(g, "venom", t * 14, t * 8, 1.2);
     g.fillRect(-R, -R, R * 2, R * 2);
@@ -345,7 +364,7 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     g.strokeStyle = "rgba(255,255,255,.35)"; g.lineWidth = 4; g.lineCap = "round";
     g.beginPath(); g.arc(z.x, z.y, R * 0.7, 3.5, 4.4); g.stroke();
     g.strokeStyle = "rgba(125,230,80,.95)"; g.lineWidth = 4;
-    g.beginPath(); g.arc(z.x, z.y, R, 0, TAU); g.stroke();
+    smooth(g, organic(z.x, z.y, R, R, z.id, 0.16, t * 0.6, 34)); g.stroke();
     for (let k = 0; k < 6; k++) {
       const ph = (t * 0.8 + hash(k + z.id)) % 1;
       const a = hash(k * 3 + z.id) * TAU, d = Math.sqrt(hash(k * 6 + 3)) * R * 0.78;
@@ -379,7 +398,7 @@ export function specWindup(g: CanvasRenderingContext2D, id: string, z: { x: numb
       const sy = z.y - (1 - prog) * 380 - 26;
       const s = 18 + prog * 14;
       g.fillStyle = `rgba(0,0,0,${0.15 + prog * 0.35})`;
-      g.beginPath(); g.ellipse(z.x, z.y + 4, R * (0.3 + prog * 0.7), R * (0.3 + prog * 0.7) * 0.5, 0, 0, TAU); g.fill();
+      smooth(g, organic(z.x, z.y + 4, R * (0.3 + prog * 0.7), R * (0.3 + prog * 0.7) * 0.5, z.id, 0.2, t, 26)); g.fill();
       g.strokeStyle = "rgba(200,190,170,.4)"; g.lineWidth = 5; g.lineCap = "round";
       for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(z.x + k * 12, sy - 20); g.lineTo(z.x + k * 12, sy - 70 - Math.abs(k) * 12); g.stroke(); }
       g.translate(z.x, sy); g.rotate((1 - prog) * 3);
