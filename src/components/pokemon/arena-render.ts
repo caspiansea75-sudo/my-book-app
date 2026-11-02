@@ -146,7 +146,7 @@ export class ArenaRenderer {
       flash: (t) => { this.flashT = Math.max(this.flashT, t); },
       night: (t) => { this.nightT = Math.max(this.nightT, t); },
       decal: (d) => { this.decals.push({ ...d, t: 0 }); if (this.decals.length > 22) this.decals.shift(); },
-      scorch: (x, y, r, type) => { this.scorch.push({ x, y, r, seed: Math.random() * 100, t: 9, max: 9, type }); if (this.scorch.length > 28) this.scorch.shift(); },
+      scorch: (x, y, r, type) => { this.scorch.push({ x, y, r, seed: Math.random() * 100, t: 2.5, max: 2.5, type }); if (this.scorch.length > 28) this.scorch.shift(); },
     });
   }
   private failAt = new Map<string, number>();
@@ -647,7 +647,7 @@ export class ArenaRenderer {
             // dust, rubble and a dark scorch mark, as in the video
             for (let i = 0; i < Math.round(3 + e.r / 28); i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-e.r * 0.4, e.r * 0.4), y: e.y + rnd(-e.r * 0.25, e.r * 0.25), vx: rnd(-40, 40), vy: rnd(-70, -20), g: 0, life: rnd(0.7, 1.2), max: 1.2, size: rnd(9, 16), grow: 30, color: i % 2 ? "#cfc2aa" : "#9a8f80" });
             for (let i = 0; i < Math.round(e.r / 22); i++) this.parts.push({ kind: "plank", x: e.x, y: e.y, vx: rnd(-220, 220), vy: rnd(-380, -120), g: 900, life: rnd(0.5, 0.9), max: 0.9, size: rnd(2.5, 5), grow: 0, color: i % 2 ? "#6b5b4a" : "#8c7b66", rot: rnd(0, 6), vr: rnd(-14, 14) });
-            this.scorch.push({ x: e.x, y: e.y, r: e.r * 0.62, seed: Math.random() * 100, t: 9, max: 9, type: e.type });
+            this.scorch.push({ x: e.x, y: e.y, r: Math.min(34, e.r * 0.4), seed: Math.random() * 100, t: 2.5, max: 2.5, type: e.type });
             if (this.scorch.length > 28) this.scorch.shift();
           }
           break;
@@ -663,7 +663,7 @@ export class ArenaRenderer {
             }
             for (let i = 0; i < 11; i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-16, 16), y: e.y + rnd(-10, 10), vx: rnd(-50, 50), vy: rnd(-80, -20), g: 0, life: rnd(0.9, 1.5), max: 1.5, size: rnd(12, 22), grow: 34, color: i % 2 ? "#cfc2aa" : "#9a8f80" });
             this.debris.push({ x: e.x, y: e.y, seed: Math.random() * 5, t: 20 });
-            this.scorch.push({ x: e.x, y: e.y, r: 34, seed: Math.random() * 100, t: 14, max: 14, type: "Rock" });
+            this.scorch.push({ x: e.x, y: e.y, r: 20, seed: Math.random() * 100, t: 3, max: 3, type: "Rock" });
             this.shake = Math.max(this.shake, 7);
             this.shakeT = 0.3;
             break;
@@ -692,7 +692,7 @@ export class ArenaRenderer {
           } else {
             for (let i = 0; i < 26; i++) this.parts.push({ kind: "dot", x: e.x + rnd(-18, 18), y: e.y + rnd(-6, 10), vx: rnd(-220, 220), vy: rnd(-340, -80), g: 620, life: rnd(0.6, 1.0), max: 1.0, size: rnd(3, 6.5), grow: 0, color: i % 2 ? "#7a5a3b" : "#c2a074" });
             this.ring(e.x, e.y, "#d9b98a", 120, 0.6);
-            this.scorch.push({ x: e.x, y: e.y, r: 38, seed: Math.random() * 100, t: 10, max: 10, type: "Rock" });
+            this.scorch.push({ x: e.x, y: e.y, r: 22, seed: Math.random() * 100, t: 3, max: 3, type: "Rock" });
             for (let i = 0; i < 9; i++) {
               const a = (i / 9) * Math.PI * 2 + rnd(-0.2, 0.2);
               this.parts.push({ kind: "crack", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 1.1, max: 1.1, size: 1, grow: 0, color: "#000", x2: e.x + Math.cos(a) * 85, y2: e.y + Math.sin(a) * 60, seed: 3 + i });
@@ -905,8 +905,8 @@ export class ArenaRenderer {
         break;
       case "earthquake":
         // the floor buckles in rolling ridges around the caster, throws up rock and lets out clouds of dust
-        this.sctx.decal({ kind: "quake", x, y, r: Math.max(220, r * 2.1), life: 1.2, seed: 0, ang: 0 });
-        this.sctx.decal({ kind: "crater", x, y, r: Math.max(90, r * 0.8), life: 1.8, seed: Math.random() * 99, ang: 0 });
+        this.sctx.decal({ kind: "quake", x, y, r: Math.min(120, Math.max(70, r * 0.9)), life: 0.7, seed: 0, ang: 0 });
+        this.sctx.decal({ kind: "crater", x, y, r: Math.min(60, Math.max(40, r * 0.5)), life: 1.0, seed: Math.random() * 99, ang: 0 });
         for (let i = 0; i < 14; i++) { const a2 = (i / 14) * Math.PI * 2; this.parts.push({ kind: "smoke", x: x + Math.cos(a2) * r * 0.5, y: y + Math.sin(a2) * r * 0.3, vx: Math.cos(a2) * r * 1.4, vy: Math.sin(a2) * r * 0.5 - 20, g: 0, life: rnd(0.8, 1.3), max: 1.3, size: rnd(14, 24), grow: 30, color: i % 2 ? "#cdb995" : "#a8946f" }); }
         for (let i = 0; i < 16; i++) this.parts.push({ kind: "plank", x: x + rnd(-r * 0.7, r * 0.7), y: y + rnd(-r * 0.4, r * 0.4), vx: rnd(-120, 120), vy: rnd(-520, -200), g: 1100, life: rnd(0.7, 1.1), max: 1.1, size: rnd(5, 10), grow: 0, color: i % 2 ? "#8a6a45" : "#6b5b4a", rot: rnd(0, 6), vr: rnd(-12, 12) });
         for (let i = 0; i < 12; i++) {
@@ -1005,9 +1005,9 @@ export class ArenaRenderer {
         break;
       }
       case "slam":
-        this.sctx.decal({ kind: "crater", x, y, r: 70, life: 1.5, seed: Math.random() * 99, ang: 0 });
-        this.sctx.decal({ kind: "quake", x, y, r: 150, life: 0.8, seed: 0, ang: 0 });
-        this.scorch.push({ x, y, r: 46, seed: Math.random() * 100, t: 12, max: 12, type: "Rock" });
+        this.sctx.decal({ kind: "crater", x, y, r: 40, life: 0.9, seed: Math.random() * 99, ang: 0 });
+        this.sctx.decal({ kind: "quake", x, y, r: 90, life: 0.6, seed: 0, ang: 0 });
+        this.scorch.push({ x, y, r: 26, seed: Math.random() * 100, t: 3, max: 3, type: "Rock" });
         for (let i = 0; i < 16; i++) this.parts.push({ kind: "dot", x: x + rnd(-14, 14), y: y + rnd(-6, 8), vx: rnd(-240, 240), vy: rnd(-380, -110), g: 760, life: rnd(0.5, 0.9), max: 0.9, size: rnd(3, 6.5), grow: 0, color: i % 2 ? "#8a7a68" : "#c9b79a" });
         this.ring(x, y, "#ff9be6", r * 1.3, 0.45);
         for (let i = 0; i < 8; i++) {
@@ -1122,7 +1122,7 @@ export class ArenaRenderer {
       G.save();
       G.translate(sc.x, sc.y);
       G.scale(1, 0.72);
-      G.globalAlpha = Math.min(1, k * 1.6) * 0.36;
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.16;
       G.fillStyle = "#14100e";
       G.beginPath();
       for (let i = 0; i <= 14; i++) {
@@ -1133,7 +1133,7 @@ export class ArenaRenderer {
       }
       G.closePath();
       G.fill();
-      G.globalAlpha = Math.min(1, k * 1.6) * 0.28;
+      G.globalAlpha = Math.min(1, k * 1.6) * 0.1;
       G.fillStyle = texPat(G, "rock", sc.x * 0.5, sc.y * 0.5, 0.8);
       G.fill();
       G.globalAlpha = Math.min(1, k * 1.6) * 0.5;
@@ -3086,8 +3086,8 @@ export class ArenaRenderer {
   private groundImpact(x: number, y: number, color: string, r: number) {
     const big = r >= 70;
     if (r >= 36) {
-      this.sctx.decal({ kind: "crater", x, y: y + 4, r: r * 1.05, life: 1.5, seed: Math.random() * 99, ang: 0 });
-      if (r >= 55) this.sctx.decal({ kind: "quake", x, y: y + 4, r: r * 2.3, life: 0.9, seed: 0, ang: 0 });
+      this.sctx.decal({ kind: "crater", x, y: y + 4, r: Math.min(50, r * 0.6), life: 0.9, seed: Math.random() * 99, ang: 0 });
+      if (r >= 55) this.sctx.decal({ kind: "quake", x, y: y + 4, r: Math.min(110, r * 1.2), life: 0.6, seed: 0, ang: 0 });
     }
     this.parts.push({ kind: "gring", x, y: y + 4, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 6, grow: r * 2.6, color });
     if (r >= 55) this.parts.push({ kind: "gring", x, y: y + 4, vx: 0, vy: 0, g: 0, life: 0.34, max: 0.34, size: 4, grow: r * 2.1, color: "#ffffff" });

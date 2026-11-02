@@ -54,10 +54,8 @@ function specGround(id: string, x: number, y: number, r: number, c: SpecCtx) {
   const mv = MOVES[id];
   if (!mv) return;
   const sg = sigOf(mv);
-  const mk = (style: VfxDecal["style"], rr: number, life: number, ang = 0) => c.decal({ kind: "vfx", x, y, r: rr, life, seed: sg.seed + rr, ang, vfx: { style, motif: sg.motif, pal: sg.pal, tex: sg.tex } });
-  mk("splat", r * 1.1, 7);
-  mk("rays", r * 1.3, 5.5, rnd(0, TAU));
-  mk(id === "absolutezero" || id === "eternalnight" || id === "hauntingcurse" || id === "psychicgrip" ? "glyph" : "ring", r * 0.95, 5);
+  // one small, short mark that fits the move's element (cracks, frost shards, splash, scorch...), never a disc
+  c.decal({ kind: "vfx", x, y, r: Math.min(r, 80), life: 1.2, seed: sg.seed + r, ang: rnd(0, TAU), vfx: { style: "rays", motif: sg.motif, pal: sg.pal, tex: sg.tex } });
 }
 
 export function specBoom(id: string, x: number, y: number, r: number, c: SpecCtx) {

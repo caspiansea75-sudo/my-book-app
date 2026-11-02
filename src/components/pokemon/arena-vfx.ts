@@ -108,7 +108,7 @@ const add = (c: Cx, p: SP) => c.add(p);
 
 /** A floor mark with a texture, laid under whatever just happened. */
 function mark(c: Cx, kind: Sig["motif"], sg: Sig, x: number, y: number, r: number, life: number, ang = 0, style: "glyph" | "scar" | "splat" | "rays" | "ring" = "ring") {
-  c.decal({ kind: "vfx", x, y, r, life, seed: sg.seed, ang, vfx: { style, motif: kind, pal: sg.pal, tex: sg.tex } });
+  c.decal({ kind: "vfx", x, y, r: Math.min(r, 70), life: Math.min(life, style === "scar" ? 1.3 : 1.1), seed: sg.seed, ang, vfx: { style, motif: kind, pal: sg.pal, tex: sg.tex } });
 }
 
 function ringOf(c: Cx, sg: Sig, x: number, y: number, r: number, life = 0.45) {
@@ -294,6 +294,52 @@ export function vfxHit(mvId: string, mv: Pick<MoveDef, "id" | "type" | "kind">, 
       A({ kind: "glow", x, y, life: 0.3, size: 10, grow: 70, color: lt });
       for (let i = 0; i < 8 * k; i++) A({ kind: "spark", x, y, vx: rnd(-260, 260), vy: rnd(-260, 260), life: 0.4, size: rnd(1.8, 3.2), color: i % 2 ? lt : core });
   }
+  impactFx(sg, x, y, k, c);
+}
+
+/** Extra flavour for every impact, chosen by the move's texture: a handful of particles that look like the element
+ *  (stone chips and dust, ice shards and snow, water droplets and mist, embers and sparks, leaves, venom bubbles,
+ *  lightning forks, shadow wisps). Kept small so the move's own animation stays readable. */
+function impactFx(sg: Sig, x: number, y: number, k: number, c: Cx) {
+  const [dk, md, lt, core] = sg.pal;
+  const A = (p: SP) => add(c, p);
+  const n = Math.round(6 * k);
+  switch (sg.tex) {
+    case "rock": case "sand": case "metal":
+      for (let i = 0; i < n; i++) A({ kind: "plank", x: x + rnd(-8, 8), y, vx: rnd(-150, 150), vy: rnd(-300, -100), g: 820, life: rnd(0.5, 0.9), size: rnd(3, 6), rot: rnd(0, 6), vr: rnd(-10, 10), color: i % 3 === 0 ? lt : i % 3 === 1 ? md : dk });
+      for (let i = 0; i < 3; i++) A({ kind: "puff", x: x + rnd(-10, 10), y: y + 4, vx: rnd(-50, 50), vy: rnd(-30, 0), life: 0.6, size: 7, grow: 18, color: sg.tex === "sand" ? "#e0c98f" : "#b8ab97" });
+      break;
+    case "ice":
+      for (let i = 0; i < n; i++) A({ kind: "shard", x, y, vx: rnd(-200, 200), vy: rnd(-260, -60), g: 520, life: rnd(0.5, 0.9), size: rnd(3, 6), rot: rnd(0, 6), vr: rnd(-9, 9), color: i % 2 ? lt : "#ffffff" });
+      for (let i = 0; i < 5; i++) A({ kind: "flake", x: x + rnd(-14, 14), y: y - rnd(0, 14), vx: rnd(-30, 30), vy: rnd(10, 40), life: 0.9, size: rnd(2, 4), color: "#ffffff" });
+      A({ kind: "cross", x, y, life: 0.2, size: 26 * k, color: core });
+      break;
+    case "water":
+      for (let i = 0; i < n + 3; i++) A({ kind: i % 3 ? "dot" : "bubble", x: x + rnd(-6, 6), y, vx: rnd(-160, 160), vy: rnd(-300, -100), g: 760, life: rnd(0.5, 0.9), size: rnd(2.2, 4.5), color: i % 2 ? lt : core });
+      for (let i = 0; i < 3; i++) A({ kind: "puff", x: x + rnd(-8, 8), y, vx: rnd(-40, 40), vy: rnd(-70, -20), life: 0.6, size: 6, grow: 16, color: "#e8f6ff" });
+      break;
+    case "lava": case "fire":
+      for (let i = 0; i < n; i++) A({ kind: "spark", x, y, vx: rnd(-180, 180), vy: rnd(-260, -60), g: 380, life: rnd(0.5, 0.9), size: rnd(1.8, 3.2), color: i % 2 ? core : lt });
+      for (let i = 0; i < 2; i++) A({ kind: "smoke", x: x + rnd(-8, 8), y, vx: rnd(-14, 14), vy: rnd(-70, -30), life: 0.9, size: 8, grow: 16, color: "#3a2a26" });
+      break;
+    case "grass":
+      for (let i = 0; i < n + 2; i++) A({ kind: "leaf", x, y, vx: rnd(-170, 170), vy: rnd(-230, -30), g: 160, life: rnd(0.8, 1.2), size: rnd(3, 5.5), rot: rnd(0, 6), vr: rnd(-10, 10), color: i % 3 === 0 ? lt : i % 3 === 1 ? md : dk });
+      break;
+    case "venom":
+      for (let i = 0; i < n; i++) A({ kind: "bubble", x: x + rnd(-10, 10), y: y + rnd(-4, 6), vx: rnd(-40, 40), vy: rnd(-110, -40), g: -30, life: rnd(0.7, 1.1), size: rnd(3, 6), color: i % 2 ? lt : md });
+      for (let i = 0; i < 3; i++) A({ kind: "splat", x: x + rnd(-14, 14), y: y + rnd(-6, 6), life: 0.8, size: rnd(5, 9), color: md });
+      break;
+    case "plasma":
+      for (let i = 0; i < 4; i++) { const a = rnd(0, TAU); A({ kind: "bolt", x, y, life: 0.2, color: i % 2 ? core : lt, x2: x + Math.cos(a) * rnd(24, 52) * k, y2: y + Math.sin(a) * rnd(18, 40) * k, seed: i * 7 + 3 }); }
+      for (let i = 0; i < n; i++) A({ kind: "spark", x, y, vx: rnd(-220, 220), vy: rnd(-220, 220), life: 0.35, size: rnd(1.6, 2.8), color: i % 2 ? "#ffffff" : lt });
+      break;
+    case "shade": case "aura":
+      for (let i = 0; i < n; i++) A({ kind: "dot", x: x + rnd(-10, 10), y: y + rnd(-4, 8), vx: rnd(-35, 35), vy: rnd(-120, -40), g: -50, life: rnd(0.7, 1.1), size: rnd(2.5, 5), color: i % 2 ? lt : md });
+      A({ kind: "glow", x, y, life: 0.35, size: 8, grow: 60, color: md });
+      break;
+    default:
+      for (let i = 0; i < n; i++) A({ kind: "star", x, y, vx: rnd(-190, 190), vy: rnd(-190, 190), life: 0.55, size: rnd(3, 6), vr: rnd(-6, 6), rot: 0, color: i % 2 ? lt : core });
+  }
 }
 
 /** The big moment of a zone move (lob / nova / line strike): a floor mark and a scaled-up motif burst at its centre. */
@@ -301,7 +347,7 @@ export function vfxStrike(mv: MoveDef, x: number, y: number, r: number, c: Cx) {
   const sg = sigOf(mv);
   const rr = Math.max(40, Math.min(220, r));
   vfxHit(mv.id, mv, x, y, true, 0, -1, c);
-  mark(c, sg.motif, sg, x, y + 4, rr, 3.2, 0, sg.motif === "rune" ? "glyph" : sg.motif === "spike" || sg.motif === "beam" ? "rays" : sg.motif === "rock" || sg.motif === "cloud" || sg.motif === "drop" || sg.motif === "bomb" || sg.motif === "flame" ? "splat" : "ring");
+  mark(c, sg.motif, sg, x, y + 4, rr, 1.1, 0, sg.motif === "rune" ? "glyph" : sg.motif === "spike" || sg.motif === "beam" ? "rays" : sg.motif === "rock" || sg.motif === "cloud" || sg.motif === "drop" || sg.motif === "bomb" || sg.motif === "flame" ? "splat" : "ring");
 }
 
 /** A dash leaves its own kind of wake. Called every frame while the move is running. */
@@ -637,71 +683,131 @@ export type VfxDecal = { style: "glyph" | "scar" | "splat" | "rays" | "ring"; mo
 export function drawVfxDecal(g: CanvasRenderingContext2D, d: { x: number; y: number; r: number; seed: number; ang: number; vfx: VfxDecal }, u: number) {
   const { style, pal, tex } = d.vfx;
   const [dk, md, lt, core] = pal;
-  const grow = Math.min(1, u * 8); // opens quickly
-  const r = d.r * (0.55 + 0.45 * grow);
+  // small, brief and type-specific: no discs, rings or stains, so the move's own animation stays readable
+  const R = Math.min(d.r, 90) * 0.7;
+  const e = 1 - (1 - Math.min(1, u * 6)) ** 3; // bursts out fast, then settles
+  let sd = d.seed * 9301 + 49297;
+  const rn = () => { sd = (sd * 9301 + 49297) % 233280; return sd / 233280; };
+  const hot = Math.max(0, 1 - u * 2.2);
   g.save();
   g.translate(d.x, d.y);
-  g.scale(1, 0.7);
   g.lineCap = "round";
   g.lineJoin = "round";
-  const hot = 1 - Math.min(1, u * 2.2); // a glow that cools
   if (style === "scar") {
+    // claw / blade scratches: three thin slashes
     g.rotate(d.ang);
     for (let k = -1; k <= 1; k++) {
-      g.beginPath();
-      g.moveTo(-r * 0.9, k * r * 0.42 - r * 0.28);
-      g.quadraticCurveTo(0, k * r * 0.42 - r * 0.06, r * 0.9, k * r * 0.42 + r * 0.3);
-      g.strokeStyle = "rgba(10,6,12,.55)"; g.lineWidth = r * 0.2; g.stroke();
-      g.strokeStyle = texPat(g, tex, 0, 0, 0.6, d.seed); g.lineWidth = r * 0.12; g.stroke();
-      g.globalCompositeOperation = "lighter";
-      g.strokeStyle = md; g.globalAlpha = 0.9 * hot; g.lineWidth = r * 0.06; g.stroke();
+      g.beginPath(); g.moveTo(-R * 0.8, k * R * 0.3 - R * 0.2); g.quadraticCurveTo(0, k * R * 0.3 - R * 0.04, R * 0.8, k * R * 0.3 + R * 0.22);
+      g.strokeStyle = "rgba(10,6,12,.5)"; g.lineWidth = 3; g.stroke();
+      g.globalCompositeOperation = "lighter"; g.strokeStyle = md; g.globalAlpha = 0.8 * hot; g.lineWidth = 1.2; g.stroke();
       g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
     }
-  } else if (style === "splat") {
-    // an irregular pool/stain/crater with a textured fill and a glossy rim
-    g.beginPath();
-    for (let i = 0; i < 18; i++) { const a = (i / 18) * TAU, rr = r * (0.7 + 0.3 * Math.sin(d.seed * (i + 1) * 1.7)); g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
-    g.closePath();
-    g.fillStyle = dk; g.globalAlpha = 0.55; g.fill();
-    g.globalAlpha = 0.85; g.fillStyle = texPat(g, tex, d.seed * 30, 0, 0.8, d.seed); g.fill();
-    g.globalAlpha = 1; g.strokeStyle = lt; g.lineWidth = 1.6; g.globalAlpha = 0.6; g.stroke();
-    g.globalAlpha = 1;
+  } else if (tex === "rock" || tex === "sand" || tex === "metal") {
+    // the ground splits: jagged cracks run out of the point of impact and chips of stone jump from them
+    g.scale(1, 0.72);
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rn() * 0.7, L = R * (0.6 + rn() * 0.5) * e;
+      let x = 0, y = 0;
+      const pts: [number, number][] = [[0, 0]];
+      for (let k = 1; k <= 3; k++) { x = Math.cos(a + (rn() - 0.5) * 0.7) * L * (k / 3); y = Math.sin(a + (rn() - 0.5) * 0.7) * L * (k / 3); pts.push([x, y]); }
+      g.beginPath(); pts.forEach((p, j) => (j ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+      g.strokeStyle = "rgba(14,9,6,.8)"; g.lineWidth = 3.2; g.stroke();
+      g.strokeStyle = lt; g.globalAlpha = 0.45; g.lineWidth = 1; g.stroke(); g.globalAlpha = 1;
+    }
+    for (let i = 0; i < 5; i++) {
+      const a = rn() * TAU, dd = R * (0.3 + rn() * 0.6) * e, h = Math.sin(Math.min(1, u * 3) * Math.PI) * 14;
+      const s = 2 + rn() * 3;
+      g.fillStyle = texPat(g, tex, i * 9, 0, 0.5, i); g.beginPath(); g.moveTo(Math.cos(a) * dd - s, Math.sin(a) * dd - h); g.lineTo(Math.cos(a) * dd + s, Math.sin(a) * dd - h - s); g.lineTo(Math.cos(a) * dd + s * 0.6, Math.sin(a) * dd - h + s); g.closePath(); g.fill();
+    }
+  } else if (tex === "ice") {
+    // frost shards stand up out of the floor and sparkle
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + rn(), dd = R * (0.15 + rn() * 0.5), h = (10 + rn() * 18) * e, w = 3 + rn() * 3;
+      const bx = Math.cos(a) * dd, by = Math.sin(a) * dd * 0.7;
+      g.fillStyle = lt; g.strokeStyle = core; g.lineWidth = 1; g.globalAlpha = 0.85;
+      g.beginPath(); g.moveTo(bx - w, by); g.lineTo(bx + rn() * 3 - 1, by - h); g.lineTo(bx + w, by); g.closePath(); g.fill(); g.stroke(); g.globalAlpha = 0.45; g.fillStyle = texPat(g, "ice", bx * 3, by * 3, 0.5); g.fill(); g.globalAlpha = 0.85;
+      g.fillStyle = md; g.globalAlpha = 0.5; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + rn() * 3 - 1, by - h); g.lineTo(bx + w, by); g.closePath(); g.fill();
+      g.globalAlpha = 1;
+    }
     g.globalCompositeOperation = "lighter";
-    const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
-    gr.addColorStop(0, md); gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = gr; g.globalAlpha = 0.45 * hot; g.fill();
-  } else if (style === "rays") {
-    // spikes / cracks fanning out from the centre
+    for (let i = 0; i < 4; i++) { const sx = (rn() - 0.5) * R * 1.3, sy = (rn() - 0.5) * R * 0.7 - 6, k = 2 + 3 * Math.abs(Math.sin(u * 9 + i)); g.strokeStyle = "#fff"; g.lineWidth = 1; g.beginPath(); g.moveTo(sx - k, sy); g.lineTo(sx + k, sy); g.moveTo(sx, sy - k); g.lineTo(sx, sy + k); g.stroke(); }
+  } else if (tex === "water") {
+    // a splash: a crown of droplets thrown up and falling back, with a few thin curling streaks
     const n = 9;
     for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU + d.seed, L = r * (0.6 + 0.4 * Math.sin(d.seed * (i + 3)));
-      g.beginPath(); g.moveTo(Math.cos(a) * r * 0.12, Math.sin(a) * r * 0.12);
-      g.lineTo(Math.cos(a - 0.12) * L * 0.5, Math.sin(a - 0.12) * L * 0.5); g.lineTo(Math.cos(a) * L, Math.sin(a) * L); g.lineTo(Math.cos(a + 0.12) * L * 0.5, Math.sin(a + 0.12) * L * 0.5); g.closePath();
-      g.fillStyle = texPat(g, tex, 0, 0, 0.6, a); g.globalAlpha = 0.9; g.fill();
-      g.strokeStyle = lt; g.globalAlpha = 0.7; g.lineWidth = 1; g.stroke();
+      const a = (i / n) * TAU + rn() * 0.4, dd = R * (0.35 + rn() * 0.55) * e, h = Math.sin(Math.min(1, u * 2.4) * Math.PI) * (16 + rn() * 22);
+      const px = Math.cos(a) * dd, py = Math.sin(a) * dd * 0.6 - h, s = 1.8 + rn() * 2.4;
+      g.fillStyle = i % 3 ? lt : core; g.globalAlpha = 0.9 * (1 - u);
+      g.beginPath(); g.arc(px, py, s, 0, TAU); g.fill();
+      g.beginPath(); g.moveTo(px - s * 0.7, py - s * 0.3); g.lineTo(px, py - s * 2.6); g.lineTo(px + s * 0.7, py - s * 0.3); g.fill();
+    }
+    g.globalAlpha = 0.8 * (1 - u); g.strokeStyle = lt; g.lineWidth = 2;
+    for (let i = 0; i < 3; i++) { const sx = (i - 1) * R * 0.35, hh = (14 + rn() * 12) * Math.min(1, u * 5); g.beginPath(); g.moveTo(sx, 0); g.quadraticCurveTo(sx + (i - 1) * 8, -hh, sx + (i - 1) * 16, -hh * 0.4); g.stroke(); }
+    g.globalAlpha = 1;
+  } else if (tex === "lava" || tex === "fire") {
+    // scorched, glowing fissures that cool to black, with a few embers lifting off
+    g.scale(1, 0.72);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU + rn(), L = R * (0.5 + rn() * 0.5) * e;
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a - 0.2) * L * 0.5, Math.sin(a - 0.2) * L * 0.5); g.lineTo(Math.cos(a + 0.15) * L, Math.sin(a + 0.15) * L);
+      g.strokeStyle = "rgba(25,12,8,.7)"; g.lineWidth = 3; g.stroke();
+      g.globalCompositeOperation = "lighter"; g.strokeStyle = md; g.globalAlpha = hot; g.lineWidth = 1.6; g.stroke(); g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+    }
+    g.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 5; i++) { g.fillStyle = i % 2 ? lt : md; g.globalAlpha = (1 - u) * 0.9; g.beginPath(); g.arc((rn() - 0.5) * R, (rn() - 0.5) * R * 0.5 - u * 40 * (0.5 + rn()), 1.6, 0, TAU); g.fill(); }
+    g.globalAlpha = 1;
+  } else if (tex === "grass") {
+    // torn leaves spin out and drift down
+    for (let i = 0; i < 7; i++) {
+      const a = rn() * TAU, dd = R * (0.3 + rn() * 0.6) * e, fall = u * 14;
+      g.save(); g.translate(Math.cos(a) * dd, Math.sin(a) * dd * 0.6 - Math.sin(Math.min(1, u * 2.5) * Math.PI) * 14 + fall); g.rotate(a + u * 5 * (i % 2 ? 1 : -1));
+      g.globalAlpha = 1 - u * 0.8; g.fillStyle = i % 3 === 0 ? lt : i % 3 === 1 ? md : dk;
+      g.beginPath(); g.moveTo(-5, 0); g.quadraticCurveTo(0, -3.5, 5, 0); g.quadraticCurveTo(0, 3.5, -5, 0); g.fill();
+      g.restore();
+    }
+  } else if (tex === "venom") {
+    // a few small toxic droplets that sit and bubble
+    g.scale(1, 0.72);
+    for (let i = 0; i < 5; i++) {
+      const a = rn() * TAU, dd = R * (0.2 + rn() * 0.7) * e, s = 3 + rn() * 4;
+      g.fillStyle = dk; g.globalAlpha = 0.55; g.beginPath(); g.ellipse(Math.cos(a) * dd, Math.sin(a) * dd, s * 1.3, s, 0, 0, TAU); g.fill();
+      g.fillStyle = md; g.globalAlpha = 0.9; g.beginPath(); g.ellipse(Math.cos(a) * dd, Math.sin(a) * dd - 1, s, s * 0.7, 0, 0, TAU); g.fill();
+      g.fillStyle = lt; g.globalAlpha = 0.8; g.beginPath(); g.arc(Math.cos(a) * dd - s * 0.3, Math.sin(a) * dd - s * 0.4, s * 0.25, 0, TAU); g.fill();
     }
     g.globalAlpha = 1;
+  } else if (tex === "plasma") {
+    // forked lightning running over the floor
     g.globalCompositeOperation = "lighter";
-    const gr = g.createRadialGradient(0, 0, 0, 0, 0, r * 0.7);
-    gr.addColorStop(0, core); gr.addColorStop(1, "rgba(0,0,0,0)");
-    g.fillStyle = gr; g.globalAlpha = 0.55 * hot; g.beginPath(); g.arc(0, 0, r * 0.7, 0, TAU); g.fill();
-  } else if (style === "glyph") {
-    // a rune circle: two textured rings, tick marks and an inner star, slowly turning
-    g.rotate(d.seed + u * 1.2);
-    g.globalCompositeOperation = "lighter";
-    for (const [rr, w, c] of [[r, 3, md], [r * 0.78, 2, lt]] as const) { g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.arc(0, 0, rr, 0, TAU); g.stroke(); }
-    g.strokeStyle = texPat(g, tex, 0, 0, 0.7, 0); g.lineWidth = r * 0.1; g.globalAlpha = 0.5; g.beginPath(); g.arc(0, 0, r * 0.89, 0, TAU); g.stroke(); g.globalAlpha = 1;
-    g.strokeStyle = lt; g.lineWidth = 1.6;
-    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; g.beginPath(); g.moveTo(Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8); g.lineTo(Math.cos(a) * r * 0.96, Math.sin(a) * r * 0.96); g.stroke(); }
-    g.beginPath();
-    for (let i = 0; i <= 5; i++) { const a = (i * 2 / 5) * TAU - Math.PI / 2; g.lineTo(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62); }
-    g.stroke();
+    for (let i = 0; i < 4; i++) {
+      if (rn() < 0.2 + u * 0.5) continue;
+      const a = (i / 4) * TAU + rn(), L = R * (0.7 + rn() * 0.4) * e;
+      g.beginPath(); g.moveTo(0, 0);
+      for (let k = 1; k <= 4; k++) g.lineTo(Math.cos(a) * L * (k / 4) + (rn() - 0.5) * 9, Math.sin(a) * L * (k / 4) * 0.7 + (rn() - 0.5) * 9);
+      g.strokeStyle = md; g.lineWidth = 3; g.globalAlpha = 0.5 * hot + 0.1; g.stroke();
+      g.strokeStyle = core; g.lineWidth = 1.2; g.globalAlpha = 0.9 * hot + 0.1; g.stroke();
+    }
+    g.globalAlpha = 1;
+  } else if (tex === "shade") {
+    // thin wisps of darkness curling away
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TAU + rn(), L = R * (0.6 + rn() * 0.5) * e;
+      g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(Math.cos(a + 0.9) * L * 0.6, Math.sin(a + 0.9) * L * 0.4 - 6, Math.cos(a) * L, Math.sin(a) * L * 0.6 - 14 * u);
+      g.strokeStyle = dk; g.globalAlpha = 0.55 * (1 - u); g.lineWidth = 4; g.stroke();
+      g.strokeStyle = md; g.globalAlpha = 0.5 * (1 - u); g.lineWidth = 1.4; g.stroke();
+    }
+    g.globalAlpha = 1;
   } else {
-    // ring: a textured band with a bright inner edge, like a settled shockwave
-    g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = r * 0.16; g.beginPath(); g.arc(0, 0, r * 0.82, 0, TAU); g.stroke();
-    g.strokeStyle = texPat(g, tex, 0, 0, 0.7, d.seed); g.lineWidth = r * 0.12; g.beginPath(); g.arc(0, 0, r * 0.82, 0, TAU); g.stroke();
+    // everything else (psychic, fairy, normal, dragon...): a quick burst of sparkles with short rays
     g.globalCompositeOperation = "lighter";
-    g.strokeStyle = md; g.lineWidth = 2.4; g.globalAlpha = 0.8 * hot; g.beginPath(); g.arc(0, 0, r * 0.76, 0, TAU); g.stroke();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + rn(), dd = R * (0.25 + rn() * 0.6) * e, k = (2 + rn() * 3) * (1 - u * 0.6);
+      const px = Math.cos(a) * dd, py = Math.sin(a) * dd * 0.65 - u * 10;
+      g.globalAlpha = 1 - u; g.fillStyle = i % 2 ? lt : core;
+      g.beginPath(); g.moveTo(px, py - k * 1.6); g.lineTo(px + k * 0.4, py - k * 0.4); g.lineTo(px + k * 1.6, py); g.lineTo(px + k * 0.4, py + k * 0.4); g.lineTo(px, py + k * 1.6); g.lineTo(px - k * 0.4, py + k * 0.4); g.lineTo(px - k * 1.6, py); g.lineTo(px - k * 0.4, py - k * 0.4); g.closePath(); g.fill();
+    }
+    g.globalAlpha = 1;
   }
   g.restore();
 }
