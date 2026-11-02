@@ -10,6 +10,7 @@ import { OWN_SHOT_ART, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./a
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
+import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
 import { organic, sigil, smooth } from "@/components/pokemon/arena-shape";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
@@ -120,6 +121,7 @@ export class ArenaRenderer {
   private tints = new WeakMap<object, Map<string, HTMLCanvasElement>>();
   /** Animated (limb-moving) sprites, front and back views, and how far each fighter's animation has played. */
   private anims = new Map<string, GifFrames | HTMLImageElement | "loading" | "fail">();
+  private rigs = new Map<number, RigState>();
   private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number } }>();
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
@@ -3938,7 +3940,7 @@ export class ArenaRenderer {
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
-  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }) {
+  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }, rig?: { st: RigState; p: Persona; o: Omit<RigOpts, "wk" | "face" | "q"> }) {
     g.save();
     g.globalAlpha *= alpha;
     g.translate(x, y);
@@ -3951,7 +3953,9 @@ export class ArenaRenderer {
     const src = tint ? this.tinted(id, im, tint) : im;
     const x0 = -w / 2;
     const y0 = -h / 2 - size * 0.05;
-    if (wk) {
+    if (rig) {
+      drawRigged(g, src, picW(im), picH(im), x0, y0, w, h, rig.st, rig.p, { ...rig.o, wk, face: faceLeft ? 1 : -1, q: this.q });
+    } else if (wk) {
       // a walking puppet: the body bobs, and the lower part is cut into a left and a right foot that step in turn
       const sw = picW(im);
       const sh = picH(im);
@@ -4391,11 +4395,16 @@ export class ArenaRenderer {
     if (under) {
       // nothing above ground
     } else if (im) {
+      let rs = this.rigs.get(f.id);
+      if (!rs) { rs = newRig(); this.rigs.set(f.id, rs); if (this.rigs.size > 80) this.rigs.delete(this.rigs.keys().next().value as number); }
+      const persona = personaOf(f.sp.id, f.types, f.sp.size, f.loco);
+      stepRig(rs, persona, f.mvx, f.mvy, this.dtr, speed);
+      const rigA = { st: rs, p: persona, o: { t, moving: moving && !f.dash && !rolling, speed, loco: f.loco, animated, id: f.id } };
       const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
-      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin + (f.status.slp > 0 ? 0.4 : 0) + (f.status.par > 0 ? Math.sin(t * 60) * 0.05 : 0) + (f.status.cnf > 0 ? Math.sin(t * 9) * 0.12 : 0), undefined, 1, wk);
-      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk);
-      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk);
-      else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk);
+      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin + (f.status.slp > 0 ? 0.4 : 0) + (f.status.par > 0 ? Math.sin(t * 60) * 0.05 : 0) + (f.status.cnf > 0 ? Math.sin(t * 9) * 0.12 : 0), undefined, 1, wk, rigA);
+      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
+      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
+      else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
       // held by a mind attack: a glowing outline all round
       if (ps.aura) {
         const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);
