@@ -5,6 +5,7 @@
 import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
 import { cloudSprite, texPat, typeTex } from "./arena-tex";
+import { Z_TINT, drawZScene, zFinale } from "./arena-zmove";
 import { OWN_SHOT_ART, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./arena-vfx";
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
@@ -110,6 +111,8 @@ export class ArenaRenderer {
   private shakeT = 0;
   private zoomPulse = 0;
   private flashT = 0;
+  private flashWall = 0;
+  private tint: { t: number; c: string; until: number } | null = null;
   private perfectT = 0;
   private imgs = new Map<string, HTMLImageElement | "fail" | "loading">();
   private tints = new WeakMap<object, Map<string, HTMLCanvasElement>>();
@@ -768,15 +771,13 @@ export class ArenaRenderer {
           break;
         }
         case "zhit": {
-          const c = col(e.type);
+          // the blow of each type, layered and textured; a tinted bloom (never a white-out) and a shake
           this.zImpact(e.x, e.y, e.type);
-          this.ring(e.x, e.y, "#ffffff", 220, 0.6);
-          this.ring(e.x, e.y, c, 160, 0.9);
-          this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.7, max: 0.7, size: 60, grow: 220, color: c });
-          this.burst(e.x, e.y, c, 34, 460);
-          this.shake = 18;
-          this.shakeT = 0.5;
-          this.flashT = 0.35;
+          zFinale(e.type, e.x, e.y, this.sctx);
+          this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.7, max: 0.7, size: 60, grow: 220, color: col(e.type) });
+          this.tint = { t: 0.45, c: Z_TINT[e.type] ?? col(e.type), until: performance.now() + 700 };
+          this.shake = Math.max(this.shake, 14);
+          this.shakeT = Math.max(this.shakeT, 0.45);
           break;
         }
         case "dynamax":
@@ -1015,6 +1016,14 @@ export class ArenaRenderer {
 
   render(S: State, dtRaw: number, you: Fighter | undefined) {
     const g = this.ctx;
+    // a frame always starts from a clean canvas state, so one failed effect can never leave the next frames tinted or additive
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = "source-over";
+    g.setLineDash([]);
+    g.shadowBlur = 0;
+    // a flash can never outlive its moment, even if time stops advancing (a paused or throttled phone)
+    if (this.flashT > 0) { if (!this.flashWall) this.flashWall = performance.now(); else if (performance.now() - this.flashWall > 700) { this.flashT = 0; this.flashWall = 0; } } else this.flashWall = 0;
+    if (this.tint && performance.now() > this.tint.until) this.tint = null;
     // Time only moves forward. (The first frame's timestamp can be a hair older than the moment the game
     // started, which gave a negative step and made the water pools draw with a negative radius.)
     const dtReal = Number.isFinite(dtRaw) && dtRaw > 0 ? dtRaw : 0;
@@ -1023,7 +1032,7 @@ export class ArenaRenderer {
     this.dtr = dtReal;
     if (dtReal > 0 && dtReal < 0.5) {
       this.frameEma += (dtReal - this.frameEma) * 0.05;
-      if (this.t - this.qAt > 2) {
+      if (this.t - this.qAt > 2 && !this.z && !this.tint) {
         if (this.frameEma > 0.027 && this.q > 0.55) { this.q = Math.max(0.55, this.q - 0.15); this.qAt = this.t; this.resize(); }
         else if (this.frameEma < 0.019 && this.q < 1) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
       }
@@ -1596,8 +1605,20 @@ export class ArenaRenderer {
       g.fillStyle = gr;
       g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     }
+    if (this.tint) {
+      this.tint.t -= this.dtr;
+      if (this.tint.t <= 0) this.tint = null;
+      else {
+        const ta = Math.min(0.34, this.tint.t * 0.9);
+        const tg = g.createRadialGradient(ARENA.CX, ARENA.CY, 80, ARENA.CX, ARENA.CY, 640);
+        tg.addColorStop(0, "rgba(0,0,0,0)");
+        tg.addColorStop(1, withA(this.tint.c, ta));
+        g.fillStyle = tg;
+        g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+      }
+    }
     if (this.flashT > 0) {
-      g.fillStyle = `rgba(255,255,255,${this.flashT * 1.6})`;
+      g.fillStyle = `rgba(255,255,255,${Math.min(0.4, this.flashT * 1.6)})`;
       g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
     }
     // the player is in danger: the edges glow red
@@ -1840,7 +1861,7 @@ export class ArenaRenderer {
     g.restore();
     // each type has its own show; Normal keeps the turning rays
     g.save();
-    if (!this.zScene(g, z.type, z.t, p, a, at, c)) {
+    if (!drawZScene(g, z.type, z.t, p, a, at)) {
     g.translate(at.x, at.y);
     g.rotate(z.t * 1.4);
     g.globalCompositeOperation = "lighter";
@@ -1896,477 +1917,6 @@ export class ArenaRenderer {
     g.fillStyle = "#fff";
     g.fillText(z.name, ARENA.CX + slide, bar * 0.66);
     g.restore();
-  }
-
-  /** The Z-Move show for each type. Returns false when the type has none (the turning rays are used). */
-  private zScene(g: CanvasRenderingContext2D, type: string, t: number, p: number, a: number, at: { x: number; y: number }, c: string): boolean {
-    const W = ARENA.W;
-    const H = ARENA.H;
-    const hs = (n: number) => {
-      const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
-      return v - Math.floor(v);
-    };
-    g.globalCompositeOperation = "lighter";
-    switch (type) {
-      case "Fire": {
-        // a huge fireball falls from the sky, embers rising all around
-        const k = smooth(0.1, 0.85, p);
-        const fx = at.x + (W * 0.5 - at.x) * 0.3;
-        const fy = -120 + (H * 0.55 + 120) * k;
-        const r = 70 + k * 90;
-        const gr = g.createRadialGradient(fx, fy, 0, fx, fy, r);
-        gr.addColorStop(0, "#fff7c2");
-        gr.addColorStop(0.35, "#ffb02e");
-        gr.addColorStop(0.75, "#ff4a1a");
-        gr.addColorStop(1, "rgba(255,60,0,0)");
-        g.globalAlpha = a;
-        g.fillStyle = gr;
-        g.beginPath();
-        g.arc(fx, fy, r, 0, Math.PI * 2);
-        g.fill();
-        for (let i = 0; i < 46; i++) {
-          const x = hs(i) * W;
-          const y = H - ((t * (120 + hs(i + 9) * 200) + hs(i + 3) * H) % (H + 40)) + 20;
-          g.fillStyle = i % 3 ? "#ff9a2e" : "#ffe066";
-          g.globalAlpha = a * 0.8;
-          g.beginPath();
-          g.arc(x + Math.sin(t * 3 + i) * 10, y, 2 + hs(i + 5) * 3, 0, Math.PI * 2);
-          g.fill();
-        }
-        return true;
-      }
-      case "Water": {
-        // a whirlpool turning around the middle
-        g.translate(W / 2, H * 0.55);
-        g.globalAlpha = a * 0.8;
-        for (let i = 0; i < 7; i++) {
-          g.save();
-          g.rotate(t * (1.6 + i * 0.25) * (i % 2 ? -1 : 1));
-          g.strokeStyle = i % 2 ? "#bfe9ff" : "#3da0ff";
-          g.lineWidth = 8 - i * 0.7;
-          g.setLineDash([60 + i * 14, 40]);
-          g.beginPath();
-          g.ellipse(0, 0, 90 + i * 55 * (0.4 + p), (90 + i * 55 * (0.4 + p)) * 0.55, 0, 0, Math.PI * 2);
-          g.stroke();
-          g.restore();
-        }
-        g.setLineDash([]);
-        for (let i = 0; i < 30; i++) {
-          const ang = hs(i) * 6.28 + t * 2;
-          const rr = 60 + hs(i + 2) * 380;
-          g.fillStyle = "#e8f7ff";
-          g.beginPath();
-          g.arc(Math.cos(ang) * rr, Math.sin(ang) * rr * 0.55 - ((t * 120 + i * 30) % 90), 2.5, 0, Math.PI * 2);
-          g.fill();
-        }
-        return true;
-      }
-      case "Electric": {
-        // lightning strikes everywhere, flickering
-        const f = Math.floor(t * 14);
-        g.globalAlpha = a;
-        for (let b = 0; b < 6; b++) {
-          let x = hs(f * 7 + b) * W;
-          let y = 0;
-          g.strokeStyle = b % 2 ? "#fff6a8" : "#ffe14d";
-          g.lineWidth = 4 - (b % 3);
-          g.shadowColor = "#ffe14d";
-          g.shadowBlur = 16;
-          g.beginPath();
-          g.moveTo(x, y);
-          while (y < H) {
-            y += 40 + hs(f + b + y) * 30;
-            x += (hs(f * 3 + b + y * 0.1) - 0.5) * 90;
-            g.lineTo(x, y);
-          }
-          g.stroke();
-        }
-        g.shadowBlur = 0;
-        if (f % 3 === 0) {
-          g.fillStyle = "rgba(255,255,200,.18)";
-          g.fillRect(0, 0, W, H);
-        }
-        return true;
-      }
-      case "Grass": {
-        // vines grow up from below, petals drift down
-        g.globalAlpha = a;
-        for (let i = 0; i < 9; i++) {
-          const bx = (i + 0.5) * (W / 9);
-          const len = smooth(0, 0.8, p) * (H * (0.5 + hs(i) * 0.4));
-          g.strokeStyle = "#3fa84a";
-          g.lineWidth = 7;
-          g.beginPath();
-          g.moveTo(bx, H);
-          for (let y = 0; y <= len; y += 12) g.lineTo(bx + Math.sin(y * 0.03 + i + t * 2) * 26, H - y);
-          g.stroke();
-          g.fillStyle = "#8be07a";
-          for (let y = 30; y < len; y += 46) {
-            g.beginPath();
-            g.ellipse(bx + Math.sin(y * 0.03 + i + t * 2) * 26 + (y % 92 ? 12 : -12), H - y, 12, 5, y % 92 ? 0.6 : -0.6, 0, Math.PI * 2);
-            g.fill();
-          }
-        }
-        for (let i = 0; i < 40; i++) {
-          g.fillStyle = i % 2 ? "#ffb7d5" : "#ffe3ef";
-          g.beginPath();
-          g.ellipse(hs(i) * W + Math.sin(t * 2 + i) * 20, ((t * 90 + hs(i + 4) * H) % (H + 20)) - 10, 5, 3, t + i, 0, Math.PI * 2);
-          g.fill();
-        }
-        return true;
-      }
-      case "Ice": {
-        // spikes of ice burst up from the bottom, snow swirls
-        g.globalAlpha = a;
-        const k = smooth(0.05, 0.6, p);
-        for (let i = 0; i < 14; i++) {
-          const bx = (i + 0.5) * (W / 14) + (hs(i) - 0.5) * 30;
-          const h = (90 + hs(i + 1) * 230) * k;
-          const gr = g.createLinearGradient(bx, H, bx, H - h);
-          gr.addColorStop(0, "#9fd8ff");
-          gr.addColorStop(1, "#ffffff");
-          g.fillStyle = gr;
-          g.beginPath();
-          g.moveTo(bx - 24, H);
-          g.lineTo(bx, H - h);
-          g.lineTo(bx + 24, H);
-          g.closePath();
-          g.fill();
-        }
-        g.fillStyle = "#ffffff";
-        for (let i = 0; i < 70; i++) {
-          g.beginPath();
-          g.arc((hs(i) * W + t * 60 * (1 + hs(i + 3))) % W, ((t * 140 * (0.5 + hs(i + 2)) + hs(i + 7) * H) % H), 1.5 + hs(i + 5) * 2, 0, Math.PI * 2);
-          g.fill();
-        }
-        return true;
-      }
-      case "Fighting": {
-        // a flurry of punches: impact stars popping up one after another
-        g.globalAlpha = a;
-        const n = Math.floor(t * 18);
-        for (let j = Math.max(0, n - 6); j <= n; j++) {
-          const x = W * (0.2 + hs(j) * 0.6);
-          const y = H * (0.25 + hs(j + 9) * 0.5);
-          const age = t * 18 - j;
-          const r = 30 + age * 24;
-          g.fillStyle = j % 2 ? "#ffd54a" : "#ff5a3c";
-          g.globalAlpha = a * Math.max(0, 1 - age / 7);
-          g.beginPath();
-          for (let k = 0; k < 16; k++) {
-            const rr = k % 2 ? r * 0.55 : r;
-            const aa = (k / 16) * Math.PI * 2 + j;
-            g.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
-          }
-          g.closePath();
-          g.fill();
-        }
-        g.globalAlpha = a * 0.4;
-        g.strokeStyle = "#fff";
-        g.lineWidth = 2;
-        for (let i = 0; i < 26; i++) {
-          const ang = hs(i) * 6.28;
-          g.beginPath();
-          g.moveTo(W / 2 + Math.cos(ang) * 420, H / 2 + Math.sin(ang) * 300);
-          g.lineTo(W / 2 + Math.cos(ang) * 160, H / 2 + Math.sin(ang) * 110);
-          g.stroke();
-        }
-        return true;
-      }
-      case "Poison": {
-        // toxic rain and bubbling sludge
-        g.globalAlpha = a;
-        g.strokeStyle = "#c46bff";
-        g.lineWidth = 3;
-        g.beginPath();
-        for (let i = 0; i < 80; i++) {
-          const x = (hs(i) * (W + 200) + t * 80) % (W + 200) - 100;
-          const y = ((t * 700 * (0.7 + hs(i + 4) * 0.6) + hs(i + 8) * H) % (H + 40)) - 20;
-          g.moveTo(x, y);
-          g.lineTo(x - 8, y + 24);
-        }
-        g.stroke();
-        for (let i = 0; i < 16; i++) {
-          const k = (t * 0.7 + hs(i)) % 1;
-          g.fillStyle = i % 2 ? "rgba(150,70,220,.55)" : "rgba(90,200,80,.5)";
-          g.beginPath();
-          g.arc(hs(i + 3) * W, H - k * 90, 10 + hs(i + 6) * 22 * (1 - k * 0.3), 0, Math.PI * 2);
-          g.fill();
-        }
-        return true;
-      }
-      case "Ground": {
-        // the floor splits open and rock rises
-        g.globalAlpha = a;
-        g.strokeStyle = "#ffcf7a";
-        g.lineWidth = 5;
-        const k = smooth(0, 0.5, p);
-        for (let i = 0; i < 10; i++) {
-          let x = at.x;
-          let y = at.y + 40;
-          const ang = (i / 10) * 6.28 + hs(i);
-          g.beginPath();
-          g.moveTo(x, y);
-          for (let s = 0; s < 9 * k; s++) {
-            x += Math.cos(ang + (hs(i * 3 + s) - 0.5) * 0.9) * 58;
-            y += Math.sin(ang + (hs(i * 3 + s) - 0.5) * 0.9) * 36;
-            g.lineTo(x, y);
-          }
-          g.stroke();
-        }
-        g.fillStyle = "#8a6a45";
-        for (let i = 0; i < 22; i++) {
-          const x = hs(i) * W;
-          const base = H * (0.45 + hs(i + 2) * 0.5);
-          const y = base - Math.abs(Math.sin(t * 3 + i)) * 120 * k;
-          g.globalAlpha = a;
-          g.fillRect(x, y, 20 + hs(i + 4) * 20, 18 + hs(i + 5) * 14);
-        }
-        return true;
-      }
-      case "Flying": {
-        // fast wind streaks and a dive
-        g.globalAlpha = a * 0.85;
-        g.strokeStyle = "#ffffff";
-        for (let i = 0; i < 40; i++) {
-          const y0 = hs(i) * H;
-          const x0 = ((t * 1900 * (0.6 + hs(i + 3)) + hs(i + 5) * W) % (W + 500)) - 250;
-          g.lineWidth = 1.5 + hs(i + 1) * 3;
-          g.beginPath();
-          g.moveTo(x0, y0);
-          g.lineTo(x0 - 160 - hs(i) * 140, y0 + 36);
-          g.stroke();
-        }
-        g.strokeStyle = "#bfe0ff";
-        g.lineWidth = 6;
-        g.beginPath();
-        g.arc(at.x, at.y, 60 + p * 300, 0.3, 2.2);
-        g.stroke();
-        return true;
-      }
-      case "Psychic": {
-        // pulsing rings and a turning pattern
-        g.translate(at.x, at.y);
-        g.globalAlpha = a * 0.8;
-        for (let i = 0; i < 6; i++) {
-          const k = (t * 0.8 + i / 6) % 1;
-          g.strokeStyle = i % 2 ? "#ff7ad9" : "#c9a0ff";
-          g.lineWidth = 5 * (1 - k) + 1;
-          g.beginPath();
-          g.arc(0, 0, 40 + k * 520, 0, Math.PI * 2);
-          g.stroke();
-        }
-        g.rotate(t * 1.1);
-        g.strokeStyle = "#ffffff";
-        g.lineWidth = 2;
-        for (let i = 0; i < 12; i++) {
-          g.rotate(Math.PI / 6);
-          g.beginPath();
-          g.ellipse(120, 0, 120 + p * 120, 40, 0, 0, Math.PI * 2);
-          g.stroke();
-        }
-        return true;
-      }
-      case "Bug": {
-        // slashes cut across the screen and a web spreads
-        g.globalAlpha = a;
-        g.strokeStyle = "#b8e04a";
-        g.lineWidth = 3;
-        for (let i = 0; i < 14; i++) {
-          const k = smooth(i * 0.045, i * 0.045 + 0.15, p);
-          const x = W * hs(i);
-          const y = H * hs(i + 5);
-          g.lineWidth = 6 * (1 - k * 0.5);
-          g.beginPath();
-          g.moveTo(x - 150 * k, y - 90 * k);
-          g.lineTo(x + 150 * k, y + 90 * k);
-          g.stroke();
-        }
-        g.strokeStyle = "rgba(255,255,255,.7)";
-        g.lineWidth = 1.5;
-        for (let i = 0; i < 12; i++) {
-          const ang = (i / 12) * 6.28;
-          g.beginPath();
-          g.moveTo(at.x, at.y);
-          g.lineTo(at.x + Math.cos(ang) * 600 * p, at.y + Math.sin(ang) * 420 * p);
-          g.stroke();
-        }
-        for (let r = 1; r <= 5; r++) {
-          g.beginPath();
-          for (let i = 0; i <= 12; i++) {
-            const ang = (i / 12) * 6.28;
-            g.lineTo(at.x + Math.cos(ang) * r * 110 * p, at.y + Math.sin(ang) * r * 76 * p);
-          }
-          g.stroke();
-        }
-        return true;
-      }
-      case "Rock": {
-        // boulders crash down from above
-        g.globalAlpha = a;
-        for (let i = 0; i < 16; i++) {
-          const start = i * 0.045;
-          const k = clamp((p - start) / 0.35, 0, 1);
-          const x = W * (0.08 + hs(i) * 0.84);
-          const y = -80 + k * (H * (0.4 + hs(i + 3) * 0.5) + 80);
-          const r = 22 + hs(i + 6) * 26;
-          g.fillStyle = i % 2 ? "#9b8a6a" : "#7d7060";
-          g.beginPath();
-          for (let s = 0; s < 7; s++) {
-            const aa = (s / 7) * 6.28 + t + i;
-            const rr = r * (0.75 + hs(i * 9 + s) * 0.4);
-            g.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
-          }
-          g.closePath();
-          g.fill();
-          if (k >= 1) {
-            g.fillStyle = "rgba(220,200,160,.35)";
-            g.beginPath();
-            g.arc(x, y + r * 0.4, r * (1 + (p - start - 0.35) * 5), 0, 6.28);
-            g.fill();
-          }
-        }
-        return true;
-      }
-      case "Ghost": {
-        // spirits drift around with glowing eyes
-        g.globalAlpha = a * 0.7;
-        g.fillStyle = "rgba(60,20,110,.35)";
-        g.fillRect(0, 0, W, H);
-        for (let i = 0; i < 9; i++) {
-          const ang = t * (0.6 + hs(i) * 0.5) + i;
-          const x = W / 2 + Math.cos(ang) * (180 + hs(i + 2) * 260);
-          const y = H / 2 + Math.sin(ang * 1.3) * (90 + hs(i + 4) * 150);
-          const s = 34 + hs(i + 6) * 30;
-          const gr = g.createRadialGradient(x, y, 0, x, y, s * 1.6);
-          gr.addColorStop(0, "rgba(220,190,255,.9)");
-          gr.addColorStop(1, "rgba(120,60,200,0)");
-          g.globalAlpha = a * 0.85;
-          g.fillStyle = gr;
-          g.beginPath();
-          g.arc(x, y, s * 1.6, 0, 6.28);
-          g.fill();
-          g.fillStyle = "#1a0a2e";
-          g.beginPath();
-          g.arc(x - s * 0.3, y - s * 0.1, 4, 0, 6.28);
-          g.arc(x + s * 0.3, y - s * 0.1, 4, 0, 6.28);
-          g.fill();
-        }
-        return true;
-      }
-      case "Dragon": {
-        // a serpent of energy sweeps across, with a roaring burst
-        g.globalAlpha = a;
-        const head = smooth(0, 0.8, p) * (W + 300) - 150;
-        for (let i = 0; i < 40; i++) {
-          const x = head - i * 22;
-          const y = H * 0.5 + Math.sin(x * 0.012 + t * 5) * 130;
-          const r = 34 - i * 0.6;
-          if (r <= 2) continue;
-          const gr = g.createRadialGradient(x, y, 0, x, y, r);
-          gr.addColorStop(0, "#ffffff");
-          gr.addColorStop(0.4, i % 2 ? "#7b5cff" : "#4aa8ff");
-          gr.addColorStop(1, "rgba(80,40,200,0)");
-          g.fillStyle = gr;
-          g.beginPath();
-          g.arc(x, y, r, 0, 6.28);
-          g.fill();
-        }
-        g.strokeStyle = "#b9a4ff";
-        g.lineWidth = 5;
-        g.beginPath();
-        g.arc(at.x, at.y, 40 + p * 360, 0, 6.28);
-        g.stroke();
-        return true;
-      }
-      case "Dark": {
-        // a black hole opens and pulls everything in
-        g.globalCompositeOperation = "source-over";
-        const cx = W / 2;
-        const cy = H * 0.5;
-        const r = 20 + smooth(0, 0.6, p) * 150;
-        g.globalAlpha = a;
-        for (let i = 0; i < 50; i++) {
-          const k = (t * 0.9 + hs(i)) % 1;
-          const ang = hs(i + 3) * 6.28 + k * 4;
-          const rr = 520 * (1 - k) + r;
-          g.fillStyle = i % 3 ? "#9b6bff" : "#ffffff";
-          g.beginPath();
-          g.arc(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr * 0.6, 2.5, 0, 6.28);
-          g.fill();
-        }
-        const gr = g.createRadialGradient(cx, cy, r * 0.8, cx, cy, r * 1.9);
-        gr.addColorStop(0, "#000000");
-        gr.addColorStop(0.5, "rgba(130,60,220,.9)");
-        gr.addColorStop(1, "rgba(130,60,220,0)");
-        g.fillStyle = gr;
-        g.beginPath();
-        g.arc(cx, cy, r * 1.9, 0, 6.28);
-        g.fill();
-        g.fillStyle = "#000";
-        g.beginPath();
-        g.arc(cx, cy, r, 0, 6.28);
-        g.fill();
-        return true;
-      }
-      case "Steel": {
-        // a spinning drill of metal with sparks
-        g.translate(at.x, at.y);
-        g.globalAlpha = a;
-        g.rotate(t * 9);
-        for (let i = 0; i < 10; i++) {
-          g.rotate(Math.PI / 5);
-          const gr = g.createLinearGradient(0, 0, 420 * (0.4 + p), 0);
-          gr.addColorStop(0, "#ffffff");
-          gr.addColorStop(1, "#7f95aa");
-          g.fillStyle = gr;
-          g.beginPath();
-          g.moveTo(0, -12);
-          g.lineTo(420 * (0.4 + p), -2);
-          g.lineTo(420 * (0.4 + p), 2);
-          g.lineTo(0, 12);
-          g.closePath();
-          g.fill();
-        }
-        g.rotate(-t * 9);
-        for (let i = 0; i < 28; i++) {
-          const ang = hs(i + Math.floor(t * 20)) * 6.28;
-          const rr = 60 + hs(i + 9) * 340;
-          g.fillStyle = "#ffe9a0";
-          g.fillRect(Math.cos(ang) * rr, Math.sin(ang) * rr, 3, 3);
-        }
-        return true;
-      }
-      case "Fairy": {
-        // twinkling stars and a rainbow ring
-        g.globalAlpha = a;
-        for (let i = 0; i < 40; i++) {
-          const tw = 0.5 + 0.5 * Math.sin(t * 8 + i * 2);
-          const x = hs(i) * W;
-          const y = hs(i + 7) * H;
-          const r = (6 + hs(i + 3) * 14) * tw;
-          g.fillStyle = ["#ffc2e6", "#ffffff", "#ffe27a", "#c8b6ff"][i % 4]!;
-          g.beginPath();
-          for (let k = 0; k < 8; k++) {
-            const rr = k % 2 ? r * 0.25 : r;
-            const aa = (k / 8) * 6.28;
-            g.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
-          }
-          g.closePath();
-          g.fill();
-        }
-        g.lineWidth = 7;
-        ["#ff9ad5", "#ffd27a", "#9fe6ff", "#c8a0ff"].forEach((cc, i) => {
-          g.strokeStyle = cc;
-          g.beginPath();
-          g.arc(at.x, at.y, 70 + i * 12 + p * 260, 0, 6.28);
-          g.stroke();
-        });
-        return true;
-      }
-      default:
-        return false;
-    }
   }
 
   /** Weather over the whole screen: a tint and a few things falling or drifting. */
