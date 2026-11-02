@@ -101,73 +101,88 @@ export type RigOpts = {
   wk?: { p: number; a: number };
 };
 
-/** Draw a picture through the rig. (x0, y0, w, h) is where a plain picture would go, in the body's own space. */
+/** Draw a picture through the rig. (x0, y0, w, h) is where a plain picture would go, in the body's own space.
+ *  Smooth things (leaning, sway, breathing, squash) are done with a single transform, so there are no cuts at all.
+ *  Strips are used only where a bend really is needed (a flapping wing, a swaying tail, a rippling hem, stepping feet),
+ *  they are thin, overlap, and are blended, so no seams show. */
 export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh: number, x0: number, y0: number, w: number, h: number, st: RigState, p: Persona, o: RigOpts) {
   const size = Math.max(w, h);
   const amp = o.animated ? 0.55 : 1;
-  const N = Math.max(6, Math.round((o.q > 0.7 ? 16 : o.q > 0.45 ? 11 : 7)));
+  const N = o.q > 0.7 ? 28 : o.q > 0.45 ? 20 : 12;
   const mv = o.moving ? 1 : 0;
   const lagX = clamp(st.sx, -size * p.lag, size * p.lag) * o.face * amp;
   const lagY = clamp(st.sy, -size * p.lag * 0.6, size * p.lag * 0.6) * amp;
 
-  if (o.loco === "fly" || o.loco === "slither" || o.loco === "surf") {
-    // columns: wings beat (the tips lag behind the shoulders) or the body ripples from head to tail
-    const fp = o.t * (o.loco === "fly" ? 12 : o.loco === "slither" ? 4.2 : 2.6) * p.rate + p.phase + o.id;
-    const strength = (o.loco === "fly" ? 0.17 : o.loco === "slither" ? 0.1 : 0.035) * p.wave * (o.moving ? 1 : o.loco === "fly" ? 0.55 : 0.4) * amp;
-    for (let j = 0; j < N; j++) {
-      const c = ((j + 0.5) / N) * 2 - 1; // -1 left tip .. 1 right tip
-      const ac = Math.abs(c);
-      let dy: number;
-      let dys = 1;
-      if (o.loco === "fly") {
-        // wing tips rise and fall most; the beat travels outwards
-        dy = -Math.sin(fp - ac * 1.1) * strength * h * Math.pow(ac, 1.2) - Math.sin(fp) * strength * h * 0.25;
-        dys = 1 + Math.sin(fp - ac * 1.1) * 0.05 * ac;
-      } else {
-        dy = Math.sin(c * 4.2 * Math.PI * 0.5 - fp) * strength * h * (0.55 + 0.45 * (c * o.face * -1 + 1) * 0.5);
-        dys = 1 + Math.cos(c * 4.2 * Math.PI * 0.5 - fp) * 0.04;
-      }
-      dy += lagY * 0.5;
-      const sxp = Math.floor((j * sw) / N);
-      const sxw = Math.ceil(sw / N) + (j === N - 1 ? 0 : 1);
-      g.drawImage(src, sxp, 0, Math.min(sxw, sw - sxp), sh, x0 + (sxp * w) / sw, y0 + dy - (h * (dys - 1)) / 2, (Math.min(sxw, sw - sxp) * w) / sw, h * dys);
-    }
-    return;
-  }
-
-  // rows: the picture is cut into strips from head to feet; the higher the strip, the more it lags and sways
-  const wk = o.wk;
-  const cut = 0.6;
-  const bobTop = wk ? -Math.abs(Math.sin(wk.p)) * wk.a * size * 0.5 : 0;
+  // one smooth transform around the feet: lean, sway, breathing and the squash of a footfall
+  const foot = Math.sin(st.fp * 1.3 + p.phase);
   const idleSway = Math.sin(o.t * 1.6 * p.rate + p.phase + o.id) * p.sway * 0.016 * size;
   const moveSway = Math.sin(st.fp * 1.3 + p.phase) * p.sway * 0.02 * size * mv;
-  const foot = Math.sin(st.fp * 1.3 + p.phase);
-  const thumpK = mv ? Math.pow(Math.max(0, -foot), 4) * p.thump * 0.07 : 0; // squash as a heavy foot lands
+  const jit = p.jitter && o.moving ? Math.sin(o.t * 31 + o.id * 3.7) * p.jitter * 0.01 * size : 0;
+  const topDx = -lagX + idleSway + moveSway + jit;
   const breath = Math.sin(o.t * 2.1 * p.rate + p.phase + o.id) * p.breathe;
-  const jit = p.jitter && o.moving ? p.jitter * 0.012 * size : 0;
-  const ph = o.t * 31 + o.id * 3.7;
-  for (let i = 0; i < N; i++) {
-    const u = 1 - (i + 0.5) / N; // 0 at the feet .. 1 at the head
-    const u15 = Math.pow(u, 1.5);
-    let dx = lagX * -u15 + (idleSway + moveSway) * u * u;
-    let dy = lagY * -0.5 * u15 - breath * size * u * u + thumpK * size * u;
-    if (jit) dx += Math.sin(ph + i * 2.3) * jit * (0.3 + u);
-    if (o.loco === "float") dx += Math.sin(o.t * 2.6 * p.rate + p.phase + (1 - u) * 5.2) * 0.034 * size * (1 - u * 0.55) * p.wave * amp; // a hem that ripples
-    const srcY = Math.floor((i * sh) / N);
-    const srcH = Math.min(sh - srcY, Math.ceil(sh / N) + 1);
-    const dyTop = y0 + (srcY * h) / sh; // dest lines up exactly with the source rows, so strips meet without seams
-    const hh = (srcH * h) / sh;
-    if (wk && (i + 0.5) / N > cut) {
-      // the lower part: a left foot and a right foot that step in turn
+  const thump = mv ? Math.pow(Math.max(0, -foot), 4) * p.thump * 0.07 : 0;
+  const scaleY = clamp(1 + breath - thump - (lagY * 0.5) / h, 0.8, 1.2);
+  g.save();
+  g.translate(x0 + w / 2, y0 + h);
+  g.transform(1, 0, -topDx / h, 1, 0, 0);
+  g.scale(1, scaleY);
+  const X0 = -w / 2;
+  const Y0 = -h;
+  const smoothOld = g.imageSmoothingEnabled;
+
+  if (o.loco === "fly") {
+    // wings: thin columns, the tips lag behind the shoulders and the beat travels outwards
+    g.imageSmoothingEnabled = true;
+    const fp = o.t * 12 * p.rate + p.phase + o.id;
+    const strength = 0.15 * p.wave * (o.moving ? 1 : 0.55) * amp;
+    for (let j = 0; j < N; j++) {
+      const c = ((j + 0.5) / N) * 2 - 1;
+      const ac = Math.abs(c);
+      const dy = -Math.sin(fp - ac * 1.1) * strength * h * Math.pow(ac, 1.3) - Math.sin(fp) * strength * h * 0.2;
+      const sxp = Math.floor((j * sw) / N);
+      const sxw = Math.min(sw - sxp, Math.ceil(sw / N) + 1);
+      g.drawImage(src, sxp, 0, sxw, sh, X0 + (sxp * w) / sw, Y0 + dy, (sxw * w) / sw, h);
+    }
+  } else {
+    // a bend along the body: how far each row is pushed sideways, by height (u: 0 feet .. 1 head)
+    let wave: ((u: number) => number) | null = null;
+    if (o.loco === "slither") {
+      // the head and neck stay put; the rest of the body swings side to side, more and more towards the tail
+      const fp = o.t * 4 * p.rate + p.phase + o.id;
+      const k = (o.moving ? 0.1 : 0.04) * p.wave * amp * size;
+      wave = (u) => { const r = clamp((0.62 - u) / 0.62, 0, 1); return Math.sin(fp - (1 - u) * 4.6) * k * r * r * (3 - 2 * r); };
+    } else if (o.loco === "float") {
+      // a hem that ripples
+      const fp = o.t * 2.6 * p.rate + p.phase + o.id;
+      wave = (u) => Math.sin(fp + (1 - u) * 5.2) * 0.034 * size * (1 - u * 0.55) * p.wave * amp;
+    }
+    const cutU = 0.4; // below this height the feet may split (stand-in pictures that walk)
+    const wk = o.wk;
+    const bobTop = wk ? -Math.abs(Math.sin(wk.p)) * wk.a * size * 0.5 : 0;
+    const topPart = wk ? Math.floor(sh * (1 - cutU)) : sh; // source rows above the feet
+    if (wave) {
+      g.imageSmoothingEnabled = true;
+      for (let i = 0; i < N; i++) {
+        const a = Math.floor((i * topPart) / N);
+        const b = Math.min(topPart, Math.ceil(((i + 1) * topPart) / N) + 1);
+        const u = 1 - (a + (b - a) / 2) / sh;
+        g.drawImage(src, 0, a, sw, b - a, X0 + wave(u), Y0 + (a * h) / sh + bobTop, w, ((b - a) * h) / sh);
+      }
+    } else g.drawImage(src, 0, 0, sw, topPart, X0, Y0 + bobTop, w, (topPart * h) / sh);
+    if (wk && topPart < sh) {
+      // the lower part: a left foot and a right foot that step in turn (with a little overlap so there is no gap)
+      g.imageSmoothingEnabled = true;
+      const half = sw / 2;
       for (const side of [0, 1]) {
         const sn = Math.sin(wk.p + side * Math.PI);
-        const lift = Math.max(0, sn) * wk.a * size * 1.4;
-        const swing = sn * wk.a * size * 0.5;
-        const half = sw / 2;
-        g.drawImage(src, side * half - (side ? 1 : 0), srcY, half + 1, srcH, x0 + side * (w / 2) + dx + swing, dyTop + dy - lift + bobTop * 0.4, w / 2 + (w / sw), hh);
+        const lift = Math.max(0, sn) * wk.a * size * 1.2;
+        const swing = sn * wk.a * size * 0.4;
+        const sxp = side ? Math.floor(half) - 1 : 0;
+        const sxw = side ? sw - sxp : Math.ceil(half) + 1;
+        g.drawImage(src, sxp, topPart - 1, sxw, sh - topPart + 1, X0 + (sxp * w) / sw + swing, Y0 + ((topPart - 1) * h) / sh - lift + bobTop * 0.4, (sxw * w) / sw, ((sh - topPart + 1) * h) / sh);
       }
-    } else {
-      g.drawImage(src, 0, srcY, sw, srcH, x0 + dx, dyTop + dy + (wk ? bobTop : 0), w, hh);
     }
   }
+  g.imageSmoothingEnabled = smoothOld;
+  g.restore();
 }
