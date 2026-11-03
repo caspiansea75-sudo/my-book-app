@@ -145,7 +145,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "bodyslam", name: "Body Slam", type: "Normal", kind: "dash", power: 1.5, cd: 3.2, range: 200, status: { kind: "par", chance: 0.3 }, desc: "Crush them under your weight." }),
     m({ id: "rest", name: "Rest", type: "Psychic", kind: "heal", power: 0.55, cd: 14, desc: "Recover a lot of HP." }),
     m({ id: "leafblade", name: "Leaf Blade", type: "Grass", kind: "dash", power: 1.4, cd: 2.6, range: 220, desc: "Slice with a blade of leaf." }),
-    m({ id: "leafstorm", name: "Leaf Storm", type: "Grass", kind: "spread", power: 0.62, cd: 4.2, n: 7, speed: 560, desc: "A whirl of leaves in every direction ahead." }),
+    m({ id: "leafstorm", name: "Leaf Storm", type: "Grass", kind: "lob", power: 1.5, cd: 5, range: 320, windup: 0.4, linger: 2.4, desc: "A tornado of razor leaves that sits on the spot and shreds foes." }),
     m({ id: "shadowclaw", name: "Shadow Claw", type: "Ghost", kind: "dash", power: 1.3, cd: 2.4, range: 220, desc: "Rake through with a claw of shadow." }),
     m({ id: "phantomforce", name: "Phantom Force", type: "Ghost", kind: "dash", power: 1.9, cd: 5.0, range: 270, desc: "Vanish and strike." }),
     m({ id: "kingsshield", name: "King's Shield", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Block almost everything for a moment." }),

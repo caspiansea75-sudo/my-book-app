@@ -10,6 +10,7 @@ import { texPat, typeTex } from "./arena-tex";
 import { paintFloor } from "./arena-floor";
 import { foamEdge, lavaLake, pond, riftPit } from "./arena-shape";
 import { vfxShot } from "./arena-vfx";
+import { PULSE_MOVES, drawPulse } from "./arena-sigfx";
 import { MOVES } from "@/lib/pokemon/arena-data";
 import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
 
@@ -335,6 +336,10 @@ function leaf(g: CanvasRenderingContext2D, size: number) {
 
 /** Draws one projectile the way that move looks. `t` is the time on the clock, `age` how long the shot has flown. */
 export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: number) {
+  if (!p.beam && PULSE_MOVES.has(p.mv)) {
+    drawPulse(g, p.mv, p, t);
+    return;
+  }
   const ang = Math.atan2(p.vy, p.vx);
   const c = col(p.type);
   g.save();

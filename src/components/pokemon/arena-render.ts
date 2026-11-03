@@ -13,6 +13,7 @@ import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } f
 import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
 import { drawHazard } from "@/components/pokemon/arena-hazard";
 import { organic, sigil, smooth as smoothPath } from "@/components/pokemon/arena-shape";
+import { SIG_MOVES, isTall, newSig, sigFlat, sigItems, type Sig } from "@/components/pokemon/arena-sigfx";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
@@ -133,6 +134,8 @@ export class ArenaRenderer {
   private dances = new Map<number, { until: number; kind: string }>();
   /** Rocks lifted off the floor by a psychic pulse. */
   private waves: { x: number; y: number; r: number; t: number; life: number; kind: string }[] = [];
+  /** Moves with a signature look (tornado, wave, storm) that are playing now. */
+  private sigs: Sig[] = [];
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
@@ -851,6 +854,17 @@ export class ArenaRenderer {
         }
         case "explode": {
           const c = col(e.type);
+          const sigStyle = e.mv ? SIG_MOVES[e.mv] : undefined;
+          if (sigStyle) {
+            // a hurricane, a wave, a blizzard...: its own look replaces the generic burst
+            const lingers = e.mv ? MOVES[e.mv]?.linger : undefined;
+            const tall = isTall(sigStyle);
+            this.sigs.push(newSig(sigStyle, e.x, e.y, tall ? Math.max(e.r, 66) : e.r, lingers ? lingers + 0.4 : undefined));
+            if (this.sigs.length > 14) this.sigs.shift();
+            this.shake = Math.max(this.shake, tall ? 5 : 7);
+            this.shakeT = 0.25;
+            break;
+          }
           this.ring(e.x, e.y, c, e.r * 1.1, 0.45);
           this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.4, max: 0.4, size: e.r, grow: e.r * 0.8, color: c });
           this.parts.push({ kind: "splat", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.42, max: 0.42, size: Math.max(34, e.r * 0.95), grow: 0, color: c, edge: e.type, seed: Math.random() * 99, rot: rnd(0, 6.28) });
@@ -869,6 +883,14 @@ export class ArenaRenderer {
             this.scorch.push({ x: e.x, y: e.y, r: Math.min(34, e.r * 0.4), seed: Math.random() * 100, t: 2.5, max: 2.5, type: e.type });
             if (this.scorch.length > 28) this.scorch.shift();
           }
+          break;
+        }
+        case "lift": {
+          // a Psychic blow takes hold: rings spread from the target and its aura flares
+          this.ring(e.x, e.y, "#ff9be6", 80, 0.5);
+          this.ring(e.x, e.y, "#d7b8ff", 120, 0.7);
+          for (let i = 0; i < 10; i++) this.parts.push({ kind: "star", x: e.x + rnd(-20, 20), y: e.y + rnd(-10, 10), vx: rnd(-50, 50), vy: rnd(-170, -70), g: 0, life: 0.8, max: 0.8, size: rnd(3, 6), grow: 0, color: i % 2 ? "#ffd1f4" : "#c9a0ff" });
+          this.flashT = Math.max(this.flashT, 0.05);
           break;
         }
         case "crate": {
@@ -1438,6 +1460,13 @@ export class ArenaRenderer {
     this.drawZones(G, S);
     this.drawTelegraphs(G, S);
     this.drawWaves(G, dt);
+    // what lies on the floor under a signature move; the parts that stand up are put among the Pokémon below
+    for (let i = this.sigs.length - 1; i >= 0; i--) {
+      const sg = this.sigs[i]!;
+      sg.t += dt;
+      if (sg.t >= sg.life) this.sigs.splice(i, 1);
+      else sigFlat(G, sg);
+    }
     this.decals = drawDecals(G, this.decals, dt);
     this.drawRocks(G, dt);
     this.drawTethers(G, S);
@@ -1449,6 +1478,7 @@ export class ArenaRenderer {
     const dk = (x: number, y: number) => (this.v3 ? -((x - this.c3.px) * this.c3.fx + (y - this.c3.py) * this.c3.fy) : y);
     for (const o of S.obs) if (o.hp > 0) things.push({ y: dk(o.x, o.y), draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), "o") });
     for (const f of S.fighters) if ((f.alive || f.koT < 0.01) && !(this.view === "first" && f === you)) things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
+    for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
     this.drawProjs(g, S);
@@ -2923,7 +2953,8 @@ export class ArenaRenderer {
       this.drawFireSpin(g, z, grow, fade);
       return;
     }
-    if (fx === "whirlpool" || fx === "sandtomb") {
+    if (fx === "whirlpool") return; // drawn as an upright tornado by the signature-effects layer
+    if (fx === "sandtomb") {
       this.drawWaterSand(g, z, fx, grow, fade);
       return;
     }
@@ -4132,7 +4163,43 @@ export class ArenaRenderer {
     }
     for (const [owner, list] of streams) {
       const f = S.fighters.find((x) => x.id === owner);
-      if (f) this.at(g, f.x, f.y, "fl", () => this.drawStream(g, f, list));
+      if (!f) continue;
+      if (!this.v3 || !this.tilted) {
+        this.at(g, f.x, f.y, "fl", () => this.drawStream(g, f, list));
+        continue;
+      }
+      // seen from behind or through the eyes, a jet running away from the camera must shrink with distance: draw it in short
+      // slices, each placed on the floor where it is, so it tapers and follows the camera instead of standing up as a column
+      let far = list[0]!;
+      for (const p of list) if (Math.hypot(p.x - f.x, p.y - f.y) > Math.hypot(far.x - f.x, far.y - f.y)) far = p;
+      const dd = Math.hypot(far.x - f.x, far.y - f.y) || 1;
+      const ux = (far.x - f.x) / dd;
+      const uy = (far.y - f.y) / dd;
+      const mx = f.x + ux * f.r * 0.9;
+      const my = f.y - f.r * 0.45 + uy * f.r * 0.5;
+      const L = Math.hypot(far.x - mx, far.y - my);
+      const n = Math.max(1, Math.min(7, Math.ceil(L / 45)));
+      const nx = -uy;
+      const ny = ux;
+      for (let i = 0; i < n; i++) {
+        const d0 = i === 0 ? -140 : (L * i) / n - 2;
+        const d1 = i === n - 1 ? L + 140 : (L * (i + 1)) / n + 2;
+        const dm = (L * (i + 0.5)) / n;
+        const q3 = this.proj3(mx + ux * dm, my + uy * dm);
+        if (!q3 || q3.depth < (this.view === "first" ? 120 : 45)) continue; // right at the camera: it would only be a smear
+        this.at(g, mx + ux * dm, my + uy * dm, "fl", () => {
+          g.save();
+          g.beginPath();
+          g.moveTo(mx + ux * d0 + nx * 160, my + uy * d0 + ny * 160);
+          g.lineTo(mx + ux * d1 + nx * 160, my + uy * d1 + ny * 160);
+          g.lineTo(mx + ux * d1 - nx * 160, my + uy * d1 - ny * 160);
+          g.lineTo(mx + ux * d0 - nx * 160, my + uy * d0 - ny * 160);
+          g.closePath();
+          g.clip();
+          this.drawStream(g, f, list);
+          g.restore();
+        });
+      }
     }
   }
 
@@ -4432,6 +4499,65 @@ export class ArenaRenderer {
     this.parts.push({ kind: "smoke", x: x + rnd(-4, 4), y: y + rnd(-2, 3), vx: rnd(-30, 30), vy: rnd(-26, -4), g: 0, life: 0.5, max: 0.5, size: rnd(4, 7), grow: 16, color });
   }
 
+  /** A Pokémon held up by Psychic power: a rose glow round it, a ring turning on the floor beneath, lights circling it and bolts of mind power striking it. */
+  private floatFx(g: CanvasRenderingContext2D, f: Fighter, lift: number) {
+    const t = this.t;
+    const k = Math.min(1, f.lev / 40);
+    const cy = f.y - lift - f.r * 0.1;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    // the glow
+    const gr = g.createRadialGradient(f.x, cy, 0, f.x, cy, f.r * 2.1);
+    gr.addColorStop(0, "rgba(255,170,240,.38)");
+    gr.addColorStop(0.55, "rgba(190,110,255,.22)");
+    gr.addColorStop(1, "rgba(150,80,255,0)");
+    g.globalAlpha = k;
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(f.x, cy, f.r * 2.1, 0, Math.PI * 2);
+    g.fill();
+    // the ring on the floor under it, and a thin beam of light between the ring and the body
+    g.lineCap = "round";
+    g.lineWidth = 2.2;
+    for (let i = 0; i < 2; i++) {
+      g.strokeStyle = i ? "#ffd1f4" : "#c9a0ff";
+      g.globalAlpha = k * 0.8;
+      g.setLineDash([f.r * 0.7, f.r * 0.45]);
+      g.lineDashOffset = -t * f.r * (i ? -3 : 3);
+      g.beginPath();
+      g.ellipse(f.x, f.y + f.r * 0.55, f.r * (1.25 + i * 0.35), f.r * (0.45 + i * 0.12), 0, 0, Math.PI * 2);
+      g.stroke();
+    }
+    g.setLineDash([]);
+    const bg = g.createLinearGradient(f.x, f.y + f.r * 0.55, f.x, cy);
+    bg.addColorStop(0, "rgba(255,150,235,.0)");
+    bg.addColorStop(1, "rgba(255,150,235,.3)");
+    g.globalAlpha = k;
+    g.fillStyle = bg;
+    g.fillRect(f.x - f.r * 0.9, cy, f.r * 1.8, f.y + f.r * 0.55 - cy);
+    // lights circling the body: behind it, then in front of it
+    for (let i = 0; i < 6; i++) {
+      const a = t * 3.4 + (i / 6) * Math.PI * 2;
+      const d = f.r * 1.25;
+      g.globalAlpha = k * (Math.sin(a) > 0 ? 1 : 0.5);
+      g.fillStyle = i % 2 ? "#ffd1f4" : "#c9a0ff";
+      g.beginPath();
+      g.moveTo(f.x + Math.cos(a) * d, cy + Math.sin(a) * d * 0.35 - 5);
+      g.lineTo(f.x + Math.cos(a) * d + 3, cy + Math.sin(a) * d * 0.35);
+      g.lineTo(f.x + Math.cos(a) * d, cy + Math.sin(a) * d * 0.35 + 5);
+      g.lineTo(f.x + Math.cos(a) * d - 3, cy + Math.sin(a) * d * 0.35);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    // bolts of mind power that keep striking it, and motes that rise off it
+    if (Math.random() < 0.22) {
+      const a = rnd(0, Math.PI * 2);
+      this.parts.push({ kind: "bolt", x: f.x + Math.cos(a) * f.r * 2.2, y: cy + Math.sin(a) * f.r * 1.4 - f.r * 0.6, vx: 0, vy: 0, g: 0, life: 0.2, max: 0.2, size: 1, grow: 0, color: Math.random() < 0.5 ? "#ff9be6" : "#d7b8ff", x2: f.x + rnd(-f.r * 0.3, f.r * 0.3), y2: cy + rnd(-f.r * 0.3, f.r * 0.3), seed: Math.floor(Math.random() * 99) });
+    }
+    if (Math.random() < 0.35) this.parts.push({ kind: "star", x: f.x + rnd(-f.r, f.r), y: cy + rnd(-f.r * 0.6, f.r * 0.6), vx: rnd(-14, 14), vy: rnd(-70, -30), g: 0, life: 0.7, max: 0.7, size: rnd(2.5, 4.5), grow: 0, color: Math.random() < 0.5 ? "#ffd1f4" : "#c9a0ff" });
+  }
+
   private drawFighter(g: CanvasRenderingContext2D, f: Fighter, S: State, isYou: boolean) {
     const t = this.t;
     const under = !!f.dash?.under;
@@ -4605,6 +4731,10 @@ export class ArenaRenderer {
       if (moving && Math.random() < 0.3) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r), y: f.y + f.r * 0.4, vx: rnd(-40, 40), vy: rnd(-120, -40), g: 360, life: 0.5, max: 0.5, size: rnd(2, 4), grow: 0, color: "#cfeaff" });
     }
     if (f.grabT > 0) lift += 26 + Math.sin(t * 8 + f.id) * 3;
+    if (f.lev > 0) {
+      lift += f.lev;
+      rot += Math.sin(t * 2.6 + f.id) * 0.1 * Math.min(1, f.lev / 40); // hanging in the air, turning a little
+    }
     if (f.air > 0) lift += f.air;
     if (f.slamT > 0 && f.air > 4) rot += (faceLeft ? 1 : -1) * Math.PI * 0.92 * Math.min(1, f.air / 90); // carried upside down
     if (f.flyT > 0) {
@@ -4697,6 +4827,7 @@ export class ArenaRenderer {
     if (au && au.until > this.t && f.alive) drawAura(g, au.kind, f, this.t - au.start, au.until - this.t, this.t, this.sctx);
     else if (au) this.auras.delete(f.id);
     if (f.grabT > 0 && f.alive) drawAura(g, "mindhand", f, 0.3, 1, this.t, this.sctx);
+    if (f.lev > 2 && f.alive) this.floatFx(g, f, lift);
     if (f.dash && !under && SPEC_ART.has(f.dash.mv.id)) specDash(f.dash.mv.id, f, this.sctx);
     else if (f.dash && !under) vfxDash(f.dash.mv, f, this.sctx);
     // each type of rush leaves its own trail

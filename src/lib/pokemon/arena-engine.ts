@@ -70,6 +70,10 @@ export type Fighter = {
   boostT: number;
   /** Height off the ground in pixels (drawn only): used while a Seismic Toss carries someone up. */
   air: number;
+  /** Lifted by a Psychic blow: how high it hangs now (drawn), seconds left floating, and the pause before it can be lifted again. */
+  lev: number;
+  levT: number;
+  levCd: number;
   /** Seconds left of being slammed (the foe) or of slamming (the holder). */
   slamT: number;
   slamBy: number;
@@ -187,7 +191,8 @@ export type Zone = {
 export type Ev =
   | { t: "cast"; id: number; dir: number; mv: string; tx: number; ty: number; x: number; y: number; type: string; kind: string; byPlayer: boolean }
   | { t: "hit"; id: number; x: number; y: number; dmg: number; crit: boolean; eff: number; type: string; toPlayer: boolean; byPlayer: boolean; dx: number; dy: number; heavy: boolean; mv?: string }
-  | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string }
+  | { t: "explode"; x: number; y: number; r: number; type: string; fx?: string; mv?: string }
+  | { t: "lift"; id: number; x: number; y: number }
   | { t: "crate"; x: number; y: number; kind?: string }
   | { t: "fall"; x: number; y: number; id: number; player: boolean }
   | { t: "dig"; x: number; y: number; id: number; phase: "down" | "up"; type: string }
@@ -340,8 +345,8 @@ const OBS_R: Record<ObsKind, number> = { crate: 24, pillar: 26, crystal: 22, roc
 
 /** An explosion, which also splinters any crates it reaches. */
 /** `silent`: the blast still breaks crates and wears things down, but no explosion is drawn (used by gimmick transformations). */
-function boom(S: State, x: number, y: number, r: number, type: string, fx?: string, silent = false) {
-  if (!silent) S.events.push({ t: "explode", x, y, r, type, fx });
+function boom(S: State, x: number, y: number, r: number, type: string, fx?: string, silent = false, mv?: string) {
+  if (!silent) S.events.push({ t: "explode", x, y, r, type, fx, mv });
   for (const o of S.obs) {
     if (o.hp <= 0 || len(o.x - x, o.y - y) > r + o.r * 0.6) continue;
     if (o.kind === "crate") breakCrate(S, o);
@@ -519,6 +524,9 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     boost: { atk: 1, spa: 1, def: 1, spd: 1, spe: 1 },
     boostT: 0,
     air: 0,
+    lev: 0,
+    levT: 0,
+    levCd: 0,
     slamT: 0,
     slamBy: 0,
     slamDmg: 0,
@@ -1063,6 +1071,16 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   if (o.status && Math.random() < o.status.chance) applyStatus(S, dst, o.status.kind);
   S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy, mv: o.mv });
   if (src.isPlayer) S.score += Math.round(dmg * 0.5);
+  // a strong Psychic blow lifts the target off the ground and holds it there for a moment (it cannot move or act), then lets go
+  if (type === "Psychic" && dmg > 0 && dst.hp > 0 && dst.levT <= 0 && dst.levCd <= 0 && dst.slamT <= 0 && dst.grabT <= 0 && dst.flyT <= 0 && (!o.mv || (MOVES[o.mv]?.power ?? 1) >= 0.9)) {
+    const dur = Math.min(2, 0.8 + (o.mv ? MOVES[o.mv]?.power ?? 1 : 1) * 0.3) * (dst.boss ? 0.5 : 1);
+    S.events.push({ t: "lift", id: dst.id, x: dst.x, y: dst.y });
+    dst.levT = dur;
+    dst.stun = Math.max(dst.stun, dur * 0.9);
+    dst.kx *= 0.3;
+    dst.ky *= 0.3;
+    dst.cast = dst.channel = null;
+  }
   if (dst.hp <= 0) kill(S, src, dst);
   return dmg;
 }
@@ -1072,6 +1090,8 @@ function kill(S: State, src: Fighter | null, dst: Fighter) {
   dst.hp = 0;
   dst.koT = 0;
   dst.cast = dst.channel = dst.dash = null;
+  dst.levT = 0;
+  dst.lev = 0;
   if (src) src.kos++;
   if (src) gainUlt(src, 15);
   if (src?.isPlayer) S.score += 100 * Math.max(1, S.wave) * (dst.boss ? 5 : 1);
@@ -1186,7 +1206,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     }
     case "nova": {
       const r = mv.range ?? 130;
-      boom(S, f.x, f.y, r, mv.type, mv.fx ?? mv.id);
+      boom(S, f.x, f.y, r, mv.type, mv.fx ?? mv.id, false, mv.id);
       for (const o of foesOf(S, f)) {
         const d = len(o.x - f.x, o.y - f.y);
         if (d <= r + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 240, status: mv.status, mv: mv.id });
@@ -2081,6 +2101,18 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     f.invuln = Math.max(0, f.invuln - dt);
     f.flash = Math.max(0, f.flash - dt);
     f.stun = Math.max(0, f.stun - dt);
+    if (f.levT > 0) {
+      f.levT -= dt;
+      if (f.levT <= 0) {
+        f.levT = 0;
+        f.levCd = 1.4;
+      }
+    } else f.levCd = Math.max(0, f.levCd - dt);
+    {
+      const goal = f.levT > 0 ? 46 + Math.sin(S.time * 5 + f.id) * 4 : 0;
+      f.lev += (goal - f.lev) * Math.min(1, dt * (goal > 0 ? 9 : 7));
+      if (goal === 0 && f.lev < 0.3) f.lev = 0;
+    }
     f.shield = Math.max(0, f.shield - dt);
     f.focus = Math.max(0, f.focus - dt);
     f.buffT = Math.max(0, f.buffT - dt);
@@ -2166,7 +2198,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
         if (f.dash.t >= f.dash.total) {
           const mv = f.dash.mv;
           S.events.push({ t: "dig", x: f.x, y: f.y, id: f.id, phase: "up", type: mv.type });
-          boom(S, f.x, f.y, 95, mv.type, mv.fx ?? mv.id);
+          boom(S, f.x, f.y, 95, mv.type, mv.fx ?? mv.id, false, mv.id);
           for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 95 + o.r) strike(S, f, o, baseDamage(f, mv), mv.type, { kx: o.x - f.x, ky: o.y - f.y, kb: 460, status: mv.status, mv: mv.id });
           f.dash = null;
         }
@@ -2297,7 +2329,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       if (z.delay <= 0) {
         z.struck = true;
         const src = S.fighters.find((f) => f.id === z.owner);
-        if (z.shape === "circle") boom(S, z.x, z.y, z.r, z.type, z.mv.fx ?? z.mv.id);
+        if (z.shape === "circle") boom(S, z.x, z.y, z.r, z.type, z.mv.fx ?? z.mv.id, false, z.mv.id);
         else {
           const [ux, uy] = norm(z.x2 - z.x, z.y2 - z.y);
           const L = len(z.x2 - z.x, z.y2 - z.y);
