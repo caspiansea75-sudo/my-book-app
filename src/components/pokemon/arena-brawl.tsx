@@ -8,7 +8,7 @@ import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-pick
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { FIELDS, GIMMICKS, GMAX, gimInfo, isOriginSpecies, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
-import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, step, swapTo, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
+import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, spawnDummy, step, swapTo, trainReset, trainSet, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
@@ -51,7 +51,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: { dummy: "idle" | "walk" | "fight"; immortal: boolean; nocd: boolean; species: string; last: number; total: number; hits: number; dps: number; best: number } };
 const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"] };
 const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water" };
 const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
@@ -98,6 +98,7 @@ export function ArenaBrawl() {
   const [save, setSave] = useState<Save>({ bestWave: 0, bestScore: 0, royaleWins: 0, royalePlays: 0 });
   const [hud, setHud] = useState<Hud | null>(null);
   const [paused, setPaused] = useState(false);
+  const [trainOpen, setTrainOpen] = useState(true);
   const [muted, setMuted] = useState(false);
   const [zoom, setZoomState] = useState(1);
   const [tilt, setTiltState] = useState(60);
@@ -268,7 +269,7 @@ export function ArenaBrawl() {
         arena,
         level,
       );
-    } else S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves });
+    } else S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves, arena: arena === "random" ? ARENAS[Math.floor(Math.random() * ARENAS.length)] : arena });
     begin(S);
     const r = rt.current;
     r.S = S;
@@ -476,6 +477,7 @@ export function ArenaBrawl() {
           foes: S.fighters.filter((f) => f.alive && f.team !== 0).length,
           field: S.field,
           name: p.sp.name,
+          ...(S.train ? { train: { dummy: S.train.dummy, immortal: S.train.immortal, nocd: S.train.nocd, species: S.train.species, last: S.train.last, total: S.train.total, hits: S.train.hits, dps: S.train.dps, best: S.train.best } } : {}),
           ...(S.squads
             ? {
                 squad: S.squads[0]!.map((f) => ({ name: f.sp.name, hp: f.hp, max: f.maxHp, alive: f.alive, active: f === p })),
@@ -688,12 +690,30 @@ export function ArenaBrawl() {
             <b>{t("কুইক ব্যাটল ৩ভি৩", "Quick Battle 3v3")}</b>
             <span>{t("তিনটি পোকেমন বেছে নিন, লড়াইয়ের মাঝে বদলান। প্রত্যেকের নিজের HP; পড়ে গেলে আর ওঠে না। তিনটিই হারালে হার।", "Pick three Pokémon and switch between them mid-fight. Each keeps its own health; a downed one stays down. Knock out all three of theirs to win.")}</span>
           </button>
+          <button type="button" className={`ab-mode ${mode === "training" ? "on" : ""}`} onClick={() => setMode("training")}>
+            <b>{t("ট্রেনিং গ্রাউন্ড", "Training Ground")}</b>
+            <span>{t("একটি ডামি, কোনো চাপ নেই। চাল পরীক্ষা করুন: ক্ষতি, DPS, কুলডাউন ছাড়া। ডামি আপনার পছন্দের পোকেমন হতে পারে।", "A practice dummy and no pressure. Try your moves: damage numbers, DPS, no cooldowns. Pick any Pokémon as the dummy.")}</span>
+          </button>
           <button type="button" className={`ab-mode ${mode === "royale" ? "on" : ""}`} onClick={() => setMode("royale")}>
             <b>{t("ব্যাটল রয়্যাল", "Battle Royale")}</b>
             <span>{t("৫টি পোকেমন, একটি মাঠ, সবাই সবার শত্রু। ঝড় ধীরে ধীরে মাঠ ছোট করে।", "Five Pokémon, one arena, everyone against everyone. A storm slowly shrinks the floor.")}</span>
           </button>
         </div>
 
+        {mode === "training" ? (
+          <div className="ab-quick">
+            <div className="ab-opt">
+              <b>{t("মাঠ", "Arena")}</b>
+              <div className="ab-chips">
+                <button type="button" className={`ab-chip ${arena === "random" ? "on" : ""}`} onClick={() => setArena("random")}>{t("যেকোনো", "Random")}</button>
+                {ARENAS.map((a) => (
+                  <button key={a} type="button" className={`ab-chip ${arena === a ? "on" : ""}`} onClick={() => setArena(a)} title={ARENA_INFO[a]}>{t(ARENA_NAME[a][0], ARENA_NAME[a][1])}</button>
+                ))}
+              </div>
+              <small>{t("সব পোকেমন খোলা। খেলার মধ্যে ডামি বদলানো যায়।", "Every Pokémon is open here. You can change the dummy while you play.")}</small>
+            </div>
+          </div>
+        ) : null}
         {mode === "quick" ? (
           <div className="ab-quick">
             <div className="ab-team">
@@ -726,7 +746,7 @@ export function ArenaBrawl() {
             </div>
           </div>
         ) : null}
-        <RosterPicker pick={pick} onPick={(id) => { setPick(id); if (mode === "quick") setTeam((tm) => tm.map((x, i) => (i === slot ? id : x))); }} isLocked={(s) => !unlocked(s.unlock) || (mode === "quick" && team.some((x, i) => i !== slot && x === s.id))} />
+        <RosterPicker pick={pick} onPick={(id) => { setPick(id); if (mode === "quick") setTeam((tm) => tm.map((x, i) => (i === slot ? id : x))); }} isLocked={(s) => (mode !== "training" && !unlocked(s.unlock)) || (mode === "quick" && team.some((x, i) => i !== slot && x === s.id))} />
 
         <div className="ab-detail">
           <h3>{sp.name}</h3>
@@ -864,11 +884,45 @@ export function ArenaBrawl() {
             </div>
             {hud.pill ? <div className={`ab-pill ${hud.pill}`}>{hud.pill === "prep" ? t("আক্রমণ তৈরি হচ্ছে", "Preparing attack") : hud.pill === "ult" ? t("ক্রোধ পূর্ণ! আলটিমেট ছাড়ুন (Q)", "Fury is full! Unleash your ultimate") : hud.pill === "finish" ? t("শেষ আঘাত!", "Finishing blow!") : t("রিচার্জ হচ্ছে", "Recharging")}</div> : null}
             <div className="ab-top">
-              {rt.current.mode === "survival" ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : rt.current.mode === "quick" ? <>{t("৩ভি৩", "3v3")} · {hud.arena ? t(ARENA_NAME[hud.arena][0], ARENA_NAME[hud.arena][1]) : ""} · {hud.level ? t(LEVEL_NAME[hud.level][0], LEVEL_NAME[hud.level][1]) : ""}</> : <>{t("ব্যাটল রয়্যাল", "Battle Royale")}</>}
-              <span>{t("শত্রু", "Foes")} {hud.foes}</span>
-              <span className="sc">★ {hud.score}</span>
+              {rt.current.mode === "training" ? <>{t("ট্রেনিং গ্রাউন্ড", "Training Ground")}</> : rt.current.mode === "survival" ? <>{t("ওয়েভ", "Wave")} {hud.wave}</> : rt.current.mode === "quick" ? <>{t("৩ভি৩", "3v3")} · {hud.arena ? t(ARENA_NAME[hud.arena][0], ARENA_NAME[hud.arena][1]) : ""} · {hud.level ? t(LEVEL_NAME[hud.level][0], LEVEL_NAME[hud.level][1]) : ""}</> : <>{t("ব্যাটল রয়্যাল", "Battle Royale")}</>}
+              {hud.train ? null : <span>{t("শত্রু", "Foes")} {hud.foes}</span>}
+              {hud.train ? null : <span className="sc">★ {hud.score}</span>}
               {fld ? <span title={t(fld.bn, fld.name)}>{fld.icon}<i className="wx"> {t(fld.bn, fld.name)}</i></span> : null}
             </div>
+            {hud.train ? (
+              <div className="ab-train" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
+                <button type="button" className="ab-train-h" onClick={() => setTrainOpen((o) => !o)}>{trainOpen ? "▾" : "▸"} {t("ট্রেনিং", "Training")}</button>
+                {trainOpen ? (
+                  <>
+                    <label className="ab-train-row">
+                      <span>{t("ডামি", "Dummy")}</span>
+                      <select value={hud.train.species} onChange={(e) => { const S = rt.current.S; if (S) spawnDummy(S, e.target.value); e.currentTarget.blur(); }}>
+                        {ROSTER.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                      </select>
+                    </label>
+                    <div className="ab-train-row">
+                      {(["idle", "walk", "fight"] as const).map((m) => (
+                        <button key={m} type="button" className={`ab-chip ${hud.train!.dummy === m ? "on" : ""}`} onClick={() => { const S = rt.current.S; if (S) trainSet(S, { dummy: m }); }}>
+                          {m === "idle" ? t("দাঁড়িয়ে", "Still") : m === "walk" ? t("হাঁটে", "Walks") : t("লড়ে", "Fights")}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="ab-train-row">
+                      <button type="button" className={`ab-chip ${hud.train.immortal ? "on" : ""}`} onClick={() => { const S = rt.current.S; if (S) trainSet(S, { immortal: !hud.train!.immortal }); }}>{t("ডামি মরে না", "Dummy can't faint")}</button>
+                      <button type="button" className={`ab-chip ${hud.train.nocd ? "on" : ""}`} onClick={() => { const S = rt.current.S; if (S) trainSet(S, { nocd: !hud.train!.nocd }); }}>{t("কুলডাউন নেই", "No cooldowns")}</button>
+                    </div>
+                    <div className="ab-train-stats">
+                      <span>{t("শেষ আঘাত", "Last hit")}<b>{Math.round(hud.train.last)}</b></span>
+                      <span>{t("মোট", "Total")}<b>{Math.round(hud.train.total)}</b></span>
+                      <span>{t("আঘাত", "Hits")}<b>{hud.train.hits}</b></span>
+                      <span>DPS<b>{hud.train.dps.toFixed(1)}</b></span>
+                      <span>{t("সেরা DPS", "Best DPS")}<b>{hud.train.best.toFixed(1)}</b></span>
+                    </div>
+                    <button type="button" className="ab-chip" onClick={() => { const S = rt.current.S; if (S) trainReset(S); }}>{t("রিসেট", "Reset")}</button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             {hud.squad ? (
               <div className="ab-squad">
                 <div className="ab-foes">

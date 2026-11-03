@@ -18,6 +18,7 @@ const KIND: Record<MoveKind, [string, string]> = {
   heal: ["আরোগ্য", "Heal"],
   buff: ["শক্তি বাড়ায়", "Buff"],
   grab: ["ধরে ছুঁড়ে মারে", "Grab & throw"],
+  hazard: ["মাটিতে ফাঁদ", "Floor trap"],
 };
 
 const KEY = "arena-moves-v1";

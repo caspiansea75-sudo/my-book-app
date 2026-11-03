@@ -12,7 +12,7 @@ const MARGIN = 46;
 const CX = W / 2;
 const CY = H / 2;
 
-export type Mode = "survival" | "royale" | "quick";
+export type Mode = "survival" | "royale" | "quick" | "training";
 export type Level = "easy" | "normal" | "hard";
 
 export type StageKind = "grass" | "stone" | "dirt" | "crystal" | "ice" | "lava" | "coast";
@@ -49,6 +49,14 @@ export type Fighter = {
   dodgeMul: number;
   speedMul: number;
   cd: [number, number, number, number];
+  /** The four moves it brought (a multiplayer or customised loadout). */
+  loadout?: string[];
+  /** Multiplayer: the member number and name behind this fighter, and the place it finished in. */
+  member?: number;
+  name?: string;
+  place?: number;
+  /** Training Ground practice dummy: stands still, wanders, or fights back. */
+  dummy?: "idle" | "walk" | "fight";
   cast: { slot: number; t: number; total: number; dx: number; dy: number; tx: number; ty: number } | null;
   channel: { slot: number; t: number; tick: number; dx: number; dy: number } | null;
   dash: { t: number; total: number; dx: number; dy: number; dist: number; mv: MoveDef; hit: Set<number>; under?: boolean } | null;
@@ -194,7 +202,7 @@ export type Ev =
   | { t: "shield"; x: number; y: number }
   | { t: "buff"; x: number; y: number; id: number; fx?: string }
   | { t: "stat"; x: number; y: number; id: number; up: string[]; down: string[] }
-  | { t: "hazard"; x: number; y: number; kind: string; r: number; id: number }
+  | { t: "patch"; x: number; y: number; kind: string; r: number; id: number }
   | { t: "slam"; id: number; by: number; x: number; y: number; phase: "lift" | "hit" }
   | { t: "grab"; id: number; by: number; x: number; y: number }
   | { t: "throw"; id: number; dx: number; dy: number; x: number; y: number }
@@ -234,6 +242,24 @@ export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, fa
 
 export type Hazard = { id: number; owner: number; team: number; kind: "spikes" | "toxic" | "rocks"; x: number; y: number; r: number; life: number; max: number; hit: Record<number, number> };
 
+export type Train = {
+  dummy: "idle" | "walk" | "fight";
+  /** the dummy is put back to full HP whenever it gets low (so it never goes down) */
+  immortal: boolean;
+  /** the player's move cooldowns and gauge are always ready */
+  nocd: boolean;
+  species: string;
+  last: number;
+  total: number;
+  hits: number;
+  /** damage per second over the current string of hits, and the best of any */
+  dps: number;
+  best: number;
+  start: number;
+  lastT: number;
+  respawn: number;
+};
+
 export type State = {
   mode: Mode;
   time: number;
@@ -243,6 +269,8 @@ export type State = {
   zones: Zone[];
   /** Patches on the floor left by Spikes, Toxic Spikes and Stealth Rock. */
   hazards: Hazard[];
+  /** Training Ground settings and the damage read-out. */
+  train?: Train;
   events: Ev[];
   phase: "intro" | "fight" | "perks" | "over";
   introT: number;
@@ -551,7 +579,7 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
   };
 }
 
-export type NewGameOptions = { auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[] };
+export type NewGameOptions = { dummy?: string; arena?: StageKind; auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[] };
 
 export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}): State {
   const S: State = {
@@ -595,7 +623,12 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   if (player.gimmick === "mega" && !player.megaForm) player.gimmick = "awaken";
   if (opts.tera && TERA_TYPES.includes(opts.tera)) player.teraType = opts.tera;
   S.fighters.push(player);
-  buildStage(S, mode === "royale" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : "grass");
+  buildStage(S, mode === "royale" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : mode === "training" ? opts.arena ?? "grass" : "grass");
+  if (mode === "training") {
+    S.train = { dummy: "idle", immortal: true, nocd: true, species: "", last: 0, total: 0, hits: 0, dps: 0, best: 0, start: 0, lastT: -99, respawn: 0 };
+    spawnDummy(S, opts.dummy);
+    S.wave = 1;
+  }
   if (mode === "royale") {
     const pool = ROSTER.filter((s) => s.id !== speciesId && !s.unlock);
     for (let i = 0; i < 4; i++) {
@@ -618,6 +651,94 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     S.field = kinds[Math.floor(Math.random() * kinds.length)]!;
   }
   return S;
+}
+
+/** (Re)place the practice dummy on the right-hand side, at full health. */
+export function spawnDummy(S: State, speciesId?: string) {
+  const T = S.train;
+  if (!T) return;
+  const me = S.fighters.find((f) => f.isPlayer);
+  const sp = ROSTER.find((x) => x.id === (speciesId ?? T.species)) ?? ROSTER.find((x) => x.id === "snorlax" && x.id !== me?.sp.id) ?? ROSTER.find((x) => x.id !== me?.sp.id) ?? ROSTER[0]!;
+  S.fighters = S.fighters.filter((f) => f.isPlayer);
+  const d = makeFighter(S, sp, 1, false, CX + 190, CY);
+  d.loadout = cleanMoves(sp.id, null);
+  d.dummy = T.dummy;
+  S.fighters.push(d);
+  T.species = sp.id;
+  T.respawn = 0;
+}
+
+/** Change the dummy's behaviour or the other switches; the screen calls this from its buttons. */
+export function trainSet(S: State, patch: Partial<Pick<Train, "dummy" | "immortal" | "nocd">>) {
+  const T = S.train;
+  if (!T) return;
+  Object.assign(T, patch);
+  for (const f of S.fighters) if (!f.isPlayer) f.dummy = T.dummy;
+}
+
+/** Back to a clean slate: full health, no status, cooldowns ready, the dummy back in the middle and the numbers cleared. */
+export function trainReset(S: State) {
+  const T = S.train;
+  if (!T) return;
+  const p = playerOf(S);
+  if (p) {
+    p.hp = p.ghost = p.maxHp;
+    p.cd = [0, 0, 0, 0];
+    p.ult = 0;
+    p.x = 230;
+    p.y = CY;
+  }
+  S.projs = [];
+  S.zones = [];
+  S.hazards = [];
+  T.last = T.total = T.hits = T.dps = T.best = 0;
+  T.lastT = -99;
+  spawnDummy(S);
+}
+
+function trainStep(S: State, dt: number) {
+  const T = S.train!;
+  const p = playerOf(S);
+  if (p && p.alive) {
+    p.hp = p.maxHp;
+    if (T.nocd) {
+      p.cd = [0, 0, 0, 0];
+      if (p.ult < 100 && p.awaken <= 0 && !p.form && !p.tera && p.dyna <= 0) p.ult = 100;
+    }
+  } else if (p && !p.alive) {
+    p.alive = true;
+    p.hp = p.ghost = p.maxHp;
+  }
+  // the damage read-out: a string of hits ends after three quiet seconds
+  for (const e of S.events) {
+    if (e.t !== "hit" || !e.byPlayer || e.toPlayer) continue;
+    if (S.time - T.lastT > 3) {
+      T.total = 0;
+      T.hits = 0;
+      T.start = S.time;
+    }
+    T.last = e.dmg;
+    T.total += e.dmg;
+    T.hits++;
+    T.lastT = S.time;
+  }
+  if (T.hits > 0) {
+    T.dps = T.total / Math.max(1, S.time - T.start);
+    T.best = Math.max(T.best, T.dps);
+  }
+  const d = S.fighters.find((f) => !f.isPlayer);
+  if (!d) return;
+  if (d.alive) {
+    if (T.immortal && d.hp < d.maxHp * 0.2) {
+      d.hp = d.maxHp;
+      d.ghost = d.maxHp;
+    }
+    // quiet for a while: top it up
+    if (S.time - T.lastT > 2.5 && d.hp < d.maxHp) d.hp = Math.min(d.maxHp, d.hp + d.maxHp * 0.5 * dt);
+  } else {
+    T.respawn += dt;
+    if (T.respawn > 1.3) spawnDummy(S);
+  }
 }
 
 export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[]; /** Team Battle: 0 = Team A (left), 1 = Team B (right). */ team?: number };
@@ -1150,7 +1271,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       if (mine.length >= 4) S.hazards.splice(S.hazards.indexOf(mine[0]!), 1);
       const r = kind === "rocks" ? 86 : kind === "toxic" ? 78 : 72;
       S.hazards.push({ id: S.nextId++, owner: f.id, team: f.team, kind, x, y, r, life: 22, max: 22, hit: {} });
-      S.events.push({ t: "hazard", x, y, kind, r, id: f.id });
+      S.events.push({ t: "patch", x, y, kind, r, id: f.id });
       break;
     }
   }
@@ -1199,7 +1320,7 @@ function updateHazards(S: State, dt: number) {
       } else if (h.kind === "toxic" && grounded) {
         if (f.types.includes("Poison")) {
           used = true; // a Poison type soaks them up
-          S.events.push({ t: "hazard", x: h.x, y: h.y, kind: "clear", r: h.r, id: f.id });
+          S.events.push({ t: "patch", x: h.x, y: h.y, kind: "clear", r: h.r, id: f.id });
           break;
         }
         if (f.types.includes("Steel")) continue;
@@ -1578,6 +1699,31 @@ const useRange = (mv: MoveDef): [number, number] => {
   }
 };
 
+/** The practice dummy that does not fight back: it stands still or wanders slowly, and never casts. */
+function dummyStep(S: State, f: Fighter, dt: number) {
+  f.gcd = 1;
+  if (f.cast || f.channel) return;
+  if (f.dummy === "walk") {
+    f.think -= dt;
+    if (f.think <= 0) {
+      f.think = rnd(1.2, 2.6);
+      const a = rnd(0, Math.PI * 2);
+      f.strafe = Math.cos(a);
+      f.face = a;
+    }
+    let mx = Math.cos(f.face);
+    let my = Math.sin(f.face);
+    if (f.x < 520 || f.x > W - MARGIN - 60) mx = f.x < 520 ? 1 : -1;
+    if (f.y < MARGIN + 60) my = 1;
+    if (f.y > H - MARGIN - 60) my = -1;
+    f.vx = mx * f.speed * 0.45;
+    f.vy = my * f.speed * 0.45;
+  } else {
+    f.vx = 0;
+    f.vy = 0;
+  }
+}
+
 function aiStep(S: State, f: Fighter, dt: number) {
   const foe = nearestFoe(S, f);
   if (!foe) return;
@@ -1910,7 +2056,10 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       f.koT += dt;
       continue;
     }
-    if (!f.isPlayer) aiStep(S, f, dt);
+    if (!f.isPlayer) {
+      if (f.dummy && f.dummy !== "fight") dummyStep(S, f, dt);
+      else aiStep(S, f, dt);
+    }
 
     // timers
     const cdRate = (f.awaken > 0 ? 2 : 1) * (f.dyna > 0 ? 1.25 : 1);
@@ -2277,6 +2426,12 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     }
   }
 
+  // ---- Training Ground: nothing ever ends
+  if (S.mode === "training") {
+    trainStep(S, dt);
+    return;
+  }
+
   // ---- Quick Battle: arena events, swaps, and the end of the match
   if (S.mode === "quick") {
     quickStep(S, dt);
@@ -2579,7 +2734,9 @@ function quickStep(S: State, dt: number) {
 
 /** Begin the first wave of a survival run. */
 export function begin(S: State) {
-  if (S.mode === "quick") {
+  if (S.mode === "training") {
+    S.phase = "fight";
+  } else if (S.mode === "quick") {
     S.phase = "intro";
     S.introT = 1.8;
   } else if (S.mode === "survival" && S.wave === 0) spawnWave(S);

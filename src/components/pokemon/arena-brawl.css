@@ -317,3 +317,18 @@
 /* combo finisher: appears once four different moves were chained, and waits for the tap */
 .ab-pb.fin { --s: calc(var(--u) * 1.05); right: calc(var(--u) * 4.6); bottom: calc(var(--u) * 0.95); display: none; }
 .ab-pb.fin.show { display: grid; animation: ab-pulse 0.7s ease-in-out infinite; box-shadow: 0 0 18px rgba(255, 213, 74, 0.8), 0 4px 14px rgba(0, 0, 0, 0.45); border-color: #ffd54a; }
+
+/* ----- Training Ground panel */
+.ab-train { position: absolute; right: 10px; top: 52px; width: 190px; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; background: rgba(8, 12, 22, 0.82); border: 1px solid rgba(255, 255, 255, 0.14); font-size: 11px; pointer-events: auto; z-index: 5; }
+.ab-train-h { background: none; border: 0; color: #fff; font-weight: 800; font-size: 12px; text-align: left; cursor: pointer; padding: 0; }
+.ab-train-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.ab-train-row > span { opacity: 0.7; margin-right: 4px; }
+.ab-train select { flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; padding: 3px 4px; font-size: 11px; }
+.ab-train select option { color: #111; }
+.ab-train .ab-chip { font-size: 10px; padding: 3px 7px; }
+.ab-train-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; }
+.ab-train-stats span { display: flex; justify-content: space-between; opacity: 0.85; }
+.ab-train-stats b { color: #ffd54a; }
+@media (max-width: 700px) { .ab-train { width: 150px; top: 48px; font-size: 10px; } }
+.ab-train .ab-chip { border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #fff; border-radius: 99px; cursor: pointer; }
+.ab-train .ab-chip.on { background: #ffd54a; color: #1a1400; border-color: #ffd54a; font-weight: 800; }

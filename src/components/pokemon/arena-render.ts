@@ -12,7 +12,7 @@ import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
 import { drawHazard } from "@/components/pokemon/arena-hazard";
-import { organic, sigil, smooth } from "@/components/pokemon/arena-shape";
+import { organic, sigil, smooth as smoothPath } from "@/components/pokemon/arena-shape";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
@@ -1067,7 +1067,7 @@ export class ArenaRenderer {
           this.ring(e.x, e.y + 6, e.up.length ? "#ffffff" : "#8a90a8", 58, 0.45);
           break;
         }
-        case "hazard": {
+        case "patch": {
           if (e.kind === "clear") { for (let i = 0; i < 8; i++) this.parts.push({ kind: "puff", x: e.x + rnd(-e.r * 0.5, e.r * 0.5), y: e.y + rnd(-8, 8), vx: rnd(-20, 20), vy: rnd(-40, -10), g: 0, life: 0.6, max: 0.6, size: 7, grow: 14, color: "#b57bd8" }); break; }
           const cc = e.kind === "toxic" ? ["#b45bff", "#e8a8ff"] : e.kind === "rocks" ? ["#8a7a68", "#ffcf80"] : ["#aeb8c6", "#ffffff"];
           for (let i = 0; i < 16; i++) { const a = rnd(0, Math.PI * 2), d = rnd(0, e.r * 0.8); this.parts.push({ kind: e.kind === "rocks" ? "plank" : "shard", x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d * 0.7 - 30, vx: rnd(-20, 20), vy: rnd(40, 120), g: 600, life: 0.5, max: 0.5, size: rnd(3, 6), grow: 0, color: i % 2 ? cc[0]! : cc[1]!, rot: rnd(0, 6), vr: rnd(-8, 8) }); }
@@ -2551,7 +2551,7 @@ export class ArenaRenderer {
           }
           g.fillStyle = z.player ? `${c}55` : z.team === -1 ? "rgba(255,225,70,.4)" : "rgba(255,90,70,.35)";
           const fk = Math.max(0.05, Math.min(1, prog));
-          smooth(g, organic(z.x, z.y, z.r * fk, z.r * fk, z.id + 9, 0.16, this.t * 1.1, 30));
+          smoothPath(g, organic(z.x, z.y, z.r * fk, z.r * fk, z.id + 9, 0.16, this.t * 1.1, 30));
           g.fill();
         } else {
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
