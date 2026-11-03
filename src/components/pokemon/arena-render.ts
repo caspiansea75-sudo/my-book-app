@@ -17,7 +17,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 /** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
@@ -1459,6 +1459,14 @@ export class ArenaRenderer {
       p.vy += p.g * dt;
       p.size += p.grow * dt;
       if (p.vr) p.rot = (p.rot ?? 0) + p.vr * dt;
+      if (p.kind === "orbit") {
+        // circles a centre (x2, y2) at radius `weight`, which grows at `seed` per second; the centre drifts with vx, vy
+        p.x2 = (p.x2 ?? p.x) + p.vx * dt;
+        p.y2 = (p.y2 ?? p.y) + p.vy * dt;
+        p.weight = Math.max(0, (p.weight ?? 0) + (p.seed ?? 0) * dt);
+        p.x = p.x2 + Math.cos(p.rot ?? 0) * p.weight;
+        p.y = p.y2 + Math.sin(p.rot ?? 0) * p.weight;
+      }
       const a = Math.max(0, p.life / p.max);
       if (T) {
         const q = this.proj(p.x, p.y);
@@ -1489,6 +1497,64 @@ export class ArenaRenderer {
         g.fill();
         g.fillStyle = sg;
         g.fill();
+      } else if (p.kind === "orbit") {
+        // a light on a circle: a short bright tail behind it and a soft glow round it
+        const rr = Math.max(0.8, p.size * (0.5 + a * 0.5));
+        const dir = (p.vr ?? 1) < 0 ? -1 : 1;
+        const back = (p.rot ?? 0) - dir * 0.4;
+        const bx = (p.x2 ?? p.x) + Math.cos(back) * (p.weight ?? 0);
+        const by = (p.y2 ?? p.y) + Math.sin(back) * (p.weight ?? 0);
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.lineCap = "round";
+        g.strokeStyle = withA(p.color, 0.5);
+        g.lineWidth = rr * 1.3;
+        g.beginPath();
+        g.moveTo(bx, by);
+        g.lineTo(p.x, p.y);
+        g.stroke();
+        const og = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr * 2.6);
+        og.addColorStop(0, "rgba(255,255,255,.95)");
+        og.addColorStop(0.3, withA(p.color, 0.8));
+        og.addColorStop(1, withA(p.color, 0));
+        g.fillStyle = og;
+        g.beginPath();
+        g.arc(p.x, p.y, rr * 2.6, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+      } else if (p.kind === "dome") {
+        // a hemisphere of energy: clear in the middle, brighter towards its rim, a bright line along the edge
+        const R = Math.max(1, p.size);
+        const H = R * 0.85;
+        g.save();
+        g.translate(p.x, p.y);
+        g.globalCompositeOperation = "lighter";
+        const dg = g.createRadialGradient(0, -H * 0.2, R * 0.2, 0, -H * 0.2, R * 1.05);
+        dg.addColorStop(0, withA(p.color, 0));
+        dg.addColorStop(0.65, withA(p.color, 0.2));
+        dg.addColorStop(1, withA(p.color, 0.6));
+        g.fillStyle = dg;
+        g.beginPath();
+        g.ellipse(0, 0, R, H, 0, Math.PI, Math.PI * 2);
+        g.closePath();
+        g.fill();
+        g.strokeStyle = withA(p.edge ?? p.color, 0.95);
+        g.lineWidth = 1 + 2 * a;
+        g.beginPath();
+        g.ellipse(0, 0, R, H, 0, Math.PI, Math.PI * 2);
+        g.stroke();
+        g.lineWidth = 1;
+        g.strokeStyle = withA(p.edge ?? p.color, 0.5);
+        g.beginPath();
+        g.ellipse(0, 0, R, R * 0.2, 0, 0, Math.PI * 2);
+        g.stroke();
+        // a pale highlight sliding over the glass
+        g.strokeStyle = "rgba(255,255,255,.55)";
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.ellipse(-R * 0.1, 0, R * 0.78, H * 0.78, 0, Math.PI * 1.12, Math.PI * 1.38);
+        g.stroke();
+        g.restore();
       } else if (p.kind === "splat") {
         // a textured impact burst: a spiky splash filled with the surface of the move's element, with a white-hot core
         const k = 1 - a;

@@ -11,6 +11,7 @@
 import type { MoveDef } from "@/lib/pokemon/arena-data";
 import type { SpecCtx, SP } from "./arena-spec";
 import { texPat, typeTex, type TexKind } from "./arena-tex";
+import { layeredBurst } from "./arena-layers";
 
 export type Motif =
   | "orb" | "blade" | "claw" | "fist" | "kick" | "wave" | "vortex" | "beam" | "spike" | "cloud" | "bolt" | "flame"
@@ -295,6 +296,8 @@ export function vfxHit(mvId: string, mv: Pick<MoveDef, "id" | "type" | "kind">, 
       for (let i = 0; i < 8 * k; i++) A({ kind: "spark", x, y, vx: rnd(-260, 260), vy: rnd(-260, 260), life: 0.4, size: rnd(1.8, 3.2), color: i % 2 ? lt : core });
   }
   impactFx(sg, x, y, k, c);
+  // a heavy hit also gets the quick layers of its type: a flash, a shockwave and a few flying pieces
+  if (heavy) layeredBurst(mv.type, x, y, 46 * k, "core", sg.pal, c);
 }
 
 /** Extra flavour for every impact, chosen by the move's texture: a handful of particles that look like the element
@@ -347,6 +350,8 @@ export function vfxStrike(mv: MoveDef, x: number, y: number, r: number, c: Cx) {
   const sg = sigOf(mv);
   const rr = Math.max(40, Math.min(220, r));
   vfxHit(mv.id, mv, x, y, true, 0, -1, c);
+  // then the slow layers of its type: a floor decal, a dome, pieces orbiting, rising or swirling
+  layeredBurst(mv.type, x, y, rr, "rest", sg.pal, c);
   mark(c, sg.motif, sg, x, y + 4, rr, 1.1, 0, sg.motif === "rune" ? "glyph" : sg.motif === "spike" || sg.motif === "beam" ? "rays" : sg.motif === "rock" || sg.motif === "cloud" || sg.motif === "drop" || sg.motif === "bomb" || sg.motif === "flame" ? "splat" : "ring");
 }
 
@@ -677,7 +682,7 @@ export function vfxShot(g: CanvasRenderingContext2D, mv: MoveDef, ang: number, r
 
 /* ------------------------------------------------------------------ floor marks */
 
-export type VfxDecal = { style: "glyph" | "scar" | "splat" | "rays" | "ring"; motif: Motif; pal: Pal; tex: TexKind };
+export type VfxDecal = { style: "glyph" | "scar" | "splat" | "rays" | "ring" | "rune"; motif: Motif; pal: Pal; tex: TexKind };
 
 /** Draw one floor mark. `u` runs 0 → 1 over its life; `d` is the decal from the renderer. */
 export function drawVfxDecal(g: CanvasRenderingContext2D, d: { x: number; y: number; r: number; seed: number; ang: number; vfx: VfxDecal }, u: number) {
@@ -693,6 +698,38 @@ export function drawVfxDecal(g: CanvasRenderingContext2D, d: { x: number; y: num
   g.translate(d.x, d.y);
   g.lineCap = "round";
   g.lineJoin = "round";
+  if (style === "rune") {
+    // the runic ground ring of the sheets: thin, flares in, turns a little and fades
+    const Rr = Math.min(d.r, 110) * (0.55 + 0.45 * e);
+    const fade = u < 0.12 ? u / 0.12 : Math.max(0, 1 - (u - 0.12) / 0.88);
+    g.rotate(d.ang + u * 0.9);
+    g.globalCompositeOperation = "lighter";
+    const fl = g.createRadialGradient(0, 0, Rr * 0.2, 0, 0, Rr);
+    fl.addColorStop(0, "rgba(0,0,0,0)");
+    fl.addColorStop(1, md + "30");
+    g.globalAlpha = fade;
+    g.fillStyle = fl;
+    g.beginPath(); g.arc(0, 0, Rr, 0, TAU); g.fill();
+    g.strokeStyle = md; g.lineWidth = 2.2; g.globalAlpha = 0.85 * fade;
+    g.beginPath(); g.arc(0, 0, Rr, 0, TAU); g.stroke();
+    g.strokeStyle = lt; g.lineWidth = 1.1; g.globalAlpha = 0.7 * fade;
+    g.beginPath(); g.arc(0, 0, Rr * 0.74, 0, TAU); g.stroke();
+    // twelve glyphs between the two rings, each a short strange stroke
+    g.strokeStyle = core; g.lineWidth = 1.3; g.globalAlpha = 0.9 * fade;
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * TAU;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const r0 = Rr * 0.8, w = Rr * 0.07;
+      const kind = Math.floor(rn() * 3);
+      g.beginPath();
+      if (kind === 0) { g.moveTo(ca * r0, sa * r0); g.lineTo(ca * (r0 + Rr * 0.13), sa * (r0 + Rr * 0.13)); }
+      else if (kind === 1) { g.moveTo(ca * r0 - sa * w, sa * r0 + ca * w); g.lineTo(ca * (r0 + Rr * 0.1), sa * (r0 + Rr * 0.1)); g.lineTo(ca * r0 + sa * w, sa * r0 - ca * w); }
+      else { g.moveTo(ca * r0 - sa * w, sa * r0 + ca * w); g.lineTo(ca * r0 + sa * w, sa * r0 - ca * w); g.moveTo(ca * r0, sa * r0); g.lineTo(ca * (r0 + Rr * 0.12), sa * (r0 + Rr * 0.12)); }
+      g.stroke();
+    }
+    g.restore();
+    return;
+  }
   if (style === "scar") {
     // claw / blade scratches: three thin slashes
     g.rotate(d.ang);

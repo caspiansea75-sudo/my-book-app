@@ -9,6 +9,7 @@ import { texPat } from "./arena-tex";
 import { MOVES } from "@/lib/pokemon/arena-data";
 import { organic, smooth } from "./arena-shape";
 import { drawVfxDecal, sigOf, type VfxDecal } from "./arena-vfx";
+import { layeredBurst } from "./arena-layers";
 
 export const SPEC_ART = new Set([
   "overdriverush", "magmastorm", "whirlpoolprison", "sporegarden", "thundercage", "absolutezero", "finalflurry", "toxicflood",
@@ -60,6 +61,9 @@ function specGround(id: string, x: number, y: number, r: number, c: SpecCtx) {
 
 export function specBoom(id: string, x: number, y: number, r: number, c: SpecCtx) {
   specBoomBase(id, x, y, r, c);
+  // every type-specialty move also gets the slow layers of its type (dome, runes, orbiting / rising pieces)
+  const mv = MOVES[id];
+  if (mv) layeredBurst(mv.type, x, y, Math.min(r, 150) * 0.9, "rest", sigOf(mv).pal, c);
   if (id !== "moonlitwish" && id !== "ironfortress" && id !== "overdriverush") specGround(id, x, y, r, c);
 }
 
