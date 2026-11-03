@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
-import { ArenaRenderer } from "@/components/pokemon/arena-render";
+import { ArenaRenderer, type View } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { aimHandlers, currentAim, type AimCtl } from "@/components/pokemon/aim-pad";
 import { RosterPicker } from "@/components/pokemon/roster-picker";
@@ -21,6 +21,15 @@ function readTilt() {
     return TILTS.includes(v) ? v : 60;
   } catch {
     return 60;
+  }
+}
+const VIEWS: View[] = ["top", "third", "first"];
+function readView(): View {
+  try {
+    const v = localStorage.getItem("arena-brawl-view");
+    return v === "third" || v === "first" ? v : "top";
+  } catch {
+    return "top";
   }
 }
 const SAVE_KEY = "arena-brawl-v1";
@@ -69,6 +78,8 @@ type Runtime = {
   mode: Mode;
   zoom: number;
   pointers: Map<number, { x: number; y: number }>;
+  /** Where the mouse is across the screen (0 left .. 1 right), or -1 when there is no mouse over it. */
+  mfx: number;
   pinch: number;
   drawFailed: boolean;
 } & AimCtl;
@@ -91,6 +102,8 @@ export function ArenaBrawl() {
   const [zoom, setZoomState] = useState(1);
   const [tilt, setTiltState] = useState(60);
   useEffect(() => setTiltState(readTilt()), []);
+  const [view, setViewState] = useState<View>("top");
+  useEffect(() => setViewState(readView()), []);
   const [fs, setFs] = useState(false);
   const [portraitHint, setPortraitHint] = useState(false);
   const [result, setResult] = useState<{ win: boolean; wave: number; score: number; place: number; kos: number; combo: number; perfects: number; best: boolean; left?: number } | null>(null);
@@ -106,7 +119,7 @@ export function ArenaBrawl() {
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: 1, pointers: new Map(), pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: 1, pointers: new Map(), mfx: -1, yaw: null, pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
 
   useEffect(() => {
     setSave(loadSave());
@@ -140,6 +153,15 @@ export function ArenaBrawl() {
     rt.current.R?.setTilt(next);
     setTiltState(next);
     try { localStorage.setItem("arena-brawl-tilt", String(next)); } catch { /* storage unavailable */ }
+  }, []);
+
+  // from above -> behind the player -> through the player's eyes
+  const cycleView = useCallback((to?: View) => {
+    const cur = rt.current.R?.getView() ?? readView();
+    const next = to ?? VIEWS[(VIEWS.indexOf(cur) + 1) % VIEWS.length]!;
+    rt.current.R?.setView(next);
+    setViewState(next);
+    try { localStorage.setItem("arena-brawl-view", next); } catch { /* storage unavailable */ }
   }, []);
 
   const setZoom = useCallback((z: number) => {
@@ -349,16 +371,27 @@ export function ArenaBrawl() {
     // The canvas is a new element every time a game starts (the menu removes it), so the renderer must follow it.
     if (!r.R || r.R.canvas !== cv) r.R = new ArenaRenderer(cv);
     r.R.setZoom(r.zoom);
+    r.R.setView(readView());
     r.R.resize();
     r.last = performance.now();
 
     const build = (): Input => {
       const k = r.keys;
-      let mx = (k.has("d") || k.has("arrowright") ? 1 : 0) - (k.has("a") || k.has("arrowleft") ? 1 : 0);
+      // in the views from behind / through the eyes, the arrow keys turn the camera instead of stepping sideways
+      const eyes = !!r.R && r.R.getView() !== "top";
+      let mx = (k.has("d") || (!eyes && k.has("arrowright")) ? 1 : 0) - (k.has("a") || (!eyes && k.has("arrowleft")) ? 1 : 0);
       let my = (k.has("s") || k.has("arrowdown") ? 1 : 0) - (k.has("w") || k.has("arrowup") ? 1 : 0);
       if (mx === 0 && my === 0) {
         mx = r.joy.x;
         my = r.joy.y;
+      }
+      if (eyes) {
+        // up on the stick / W is the way the camera looks, right is the camera's right
+        const yaw = r.R!.getYaw();
+        const fwd = -my;
+        const str = mx;
+        mx = Math.cos(yaw) * fwd - Math.sin(yaw) * str;
+        my = Math.sin(yaw) * fwd + Math.cos(yaw) * str;
       }
       const cast: [boolean, boolean, boolean, boolean] = [r.queue[0] || r.held[0] || r.mouse, r.queue[1] || r.held[1], r.queue[2] || r.held[2], r.queue[3] || r.held[3]];
       const inp: Input = { mx, my, aim: currentAim(r, r.aim), cast, dodge: r.dodge, ult: r.ult, fin: r.fin };
@@ -374,6 +407,19 @@ export function ArenaBrawl() {
       // `now` (the frame's timestamp) can be slightly older than `last` on the very first frame: never step backwards.
       const dt = Math.max(0, Math.min(0.05, (now - r.last) / 1000));
       r.last = now;
+      const rend = r.R!;
+      if (rend.getView() !== "top") {
+        r.yaw = rend.getYaw();
+        // turning by hand: arrow keys, or the mouse at the edge of the screen
+        const turn = (r.keys.has("arrowright") ? 1 : 0) - (r.keys.has("arrowleft") ? 1 : 0);
+        if (turn) rend.turn(turn * dt * 2.4);
+        if (r.mfx >= 0 && !r.paused) {
+          if (r.mfx < 0.14) rend.turn(-dt * 3 * ((0.14 - r.mfx) / 0.14));
+          else if (r.mfx > 0.86) rend.turn(dt * 3 * ((r.mfx - 0.86) / 0.14));
+        }
+        // with a mouse the player aims by hand; without one the camera keeps the nearest foe in front
+        rend.setAutoTurn(r.mfx < 0);
+      } else r.yaw = null;
       if (!r.paused) {
         if (r.swapQ >= 0) {
           if (S.mode === "quick") swapTo(S, 0, r.swapQ);
@@ -484,6 +530,7 @@ export function ArenaBrawl() {
       else if (k === "+" || k === "=") setZoom(r.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(r.zoom - 0.15);
       else if (k === "t") cycleTilt();
+      else if (k === "v") cycleView();
       else if (k === "0") setZoom(1);
       else if (k === "1" || k === "j") r.queue[0] = true;
       else if (k === "2" || k === "k") r.queue[1] = true;
@@ -508,7 +555,7 @@ export function ArenaBrawl() {
       document.removeEventListener("visibilitychange", blur);
       r.keys.clear();
     };
-  }, [inGame, screen, fs, enterFs, exitFs, setZoom, cycleTilt, setPausedBoth]);
+  }, [inGame, screen, fs, enterFs, exitFs, setZoom, cycleTilt, cycleView, setPausedBoth]);
 
   // the mouse wheel zooms
   useEffect(() => {
@@ -528,6 +575,7 @@ export function ArenaBrawl() {
     const R = rt.current.R;
     if (!cv || !R || e.pointerType !== "mouse") return;
     const b = cv.getBoundingClientRect();
+    rt.current.mfx = (e.clientX - b.left) / b.width;
     rt.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * R.viewW, ((e.clientY - b.top) / b.height) * ARENA.H);
   }
 
@@ -551,8 +599,11 @@ export function ArenaBrawl() {
   function stageMove(e: React.PointerEvent) {
     const r = rt.current;
     if (e.pointerType === "mouse") return aimFrom(e);
-    if (!r.pointers.has(e.pointerId)) return;
+    const was = r.pointers.get(e.pointerId);
+    if (!was) return;
     r.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // one finger dragged across the picture turns the camera in the views from behind / through the eyes
+    if (r.pointers.size === 1 && r.R && r.R.getView() !== "top") r.R.turn((e.clientX - was.x) * 0.007);
     if (r.pointers.size === 2 && r.pinch > 0) {
       const [a, b] = [...r.pointers.values()];
       const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
@@ -754,6 +805,8 @@ export function ArenaBrawl() {
             <br />
             {t("ফোনে: ফোন আড়াআড়ি ঘোরালে নিজে থেকে ফুল স্ক্রিন হয়। বাঁ দিকে জয়স্টিক, ডান দিকে চালের বোতাম, দুই আঙুলে জুম।", "On a phone: turn it sideways and it goes full screen by itself. Joystick on the left, move buttons on the right, pinch with two fingers to zoom.")}
             <br />
+            <kbd>V</kbd> {t("দৃশ্য বদলান: উপর থেকে, তৃতীয় ব্যক্তি, প্রথম ব্যক্তি। শেষ দুটিতে ক্যামেরা নিজে কাছের শত্রুর দিকে ঘোরে; নিজে ঘোরাতে ← → চাপুন, মাউস পর্দার ধারে নিন, বা ফোনে পর্দায় আঙুল টেনে ঘোরান। W A S D ক্যামেরা যেদিকে তাকায় সেই হিসাবে চলে।", "switch the view: top-down, third person, first person. In the last two the camera turns to the nearest foe by itself; to look around press ← →, move the mouse to the screen edge, or drag a finger across the screen on a phone. W A S D move relative to where you look.")}
+            <br />
             {t("লাল ও হলুদ বৃত্ত বা রেখা দেখলে সরে যান। ঠিক সময়ে গড়ালে ‘পারফেক্ট ডজ’: সময় ধীর হয়, পরের আঘাত জোরালো। আলাদা আলাদা চাল পরপর চালালে কম্বো।", "Move out of anything shown in red or yellow. Roll through an attack for a PERFECT DODGE: time slows and your next hits hit harder. Chain different moves for a combo.")}
           </div>
           <div style={{ fontSize: 12, opacity: 0.8 }}>
@@ -794,7 +847,7 @@ export function ArenaBrawl() {
   return (
     <div className="ab">
       <div ref={shell} className={`ab-shell ${fs ? "fs" : ""}`} onContextMenu={(e) => e.preventDefault()}>
-        <div ref={stage} className="ab-stage" onPointerDown={stageDown} onPointerMove={stageMove} onPointerUp={stageUp} onPointerCancel={stageUp} onPointerLeave={(e) => { if (e.pointerType === "mouse") { rt.current.mouse = false; rt.current.aim = null; } }}>
+        <div ref={stage} className="ab-stage" onPointerDown={stageDown} onPointerMove={stageMove} onPointerUp={stageUp} onPointerCancel={stageUp} onPointerLeave={(e) => { if (e.pointerType === "mouse") { rt.current.mouse = false; rt.current.aim = null; rt.current.mfx = -1; } }}>
           <canvas ref={canvas} />
         </div>
 
@@ -838,7 +891,8 @@ export function ArenaBrawl() {
             {hud.combo > 1 ? <div className="ab-combo pulse">{t("কম্বো", "COMBO")} ×{hud.combo}</div> : null}
 
             <div className="ab-tools">
-              <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button>
+              <button type="button" className="ab-ic tilt" onClick={() => cycleView()} aria-label={t("দৃশ্য: উপর থেকে / তৃতীয় ব্যক্তি / প্রথম ব্যক্তি", "View: top-down / third person / first person")} title="V">{view === "top" ? t("উপর", "Top") : view === "third" ? t("৩য়", "3rd") : t("১ম", "1st")}</button>
+              {view === "top" ? <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button> : null}
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label={t("ছোট করুন", "Zoom out")}><ZoomOut size={16} /></button>
               <button type="button" className="ab-ic wide" onClick={() => setZoom(1)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label={t("বড় করুন", "Zoom in")}><ZoomIn size={16} /></button>

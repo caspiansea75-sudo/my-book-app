@@ -12,6 +12,8 @@ export type AimCtl = {
   preview: { slot: number; x: number; y: number } | null;
   /** The player's own Pokémon, updated every frame. */
   me: Fighter | undefined;
+  /** Which way the camera looks when the view is from behind or through the player's eyes (null in the view from above). */
+  yaw: number | null;
   drag: { id: number; sx: number; sy: number; moved: boolean } | null;
 };
 
@@ -48,9 +50,15 @@ export function aimHandlers(ctl: AimCtl, slot: number) {
       const mv = moveOf(me, slot);
       const reach = moveReach(mv);
       const frac = Math.max(0.2, Math.min(1, (l - DRAG_MIN) / (DRAG_MAX - DRAG_MIN)));
-      const dist = mv.kind === "lob" ? frac * reach : reach;
-      const ux = l > 0 ? vx / l : 1;
-      const uy = l > 0 ? vy / l : 0;
+      const dist = mv.kind === "lob" || mv.kind === "hazard" ? frac * reach : reach;
+      let ux = l > 0 ? vx / l : 1;
+      let uy = l > 0 ? vy / l : 0;
+      if (ctl.yaw !== null) {
+        // the drag is on the screen: up means the way the camera looks, right means the camera's right
+        const cs = Math.cos(ctl.yaw);
+        const sn = Math.sin(ctl.yaw);
+        [ux, uy] = [cs * -uy - sn * ux, sn * -uy + cs * ux];
+      }
       const p = { x: me.x + ux * Math.max(40, dist), y: me.y + uy * Math.max(40, dist) };
       ctl.preview = { slot, ...p };
       ctl.touchAim = p;

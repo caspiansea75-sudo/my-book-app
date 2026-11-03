@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/members/avatar";
-import { ArenaRenderer } from "@/components/pokemon/arena-render";
+import { ArenaRenderer, type View } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { aimHandlers, currentAim } from "@/components/pokemon/aim-pad";
 import { RosterPicker } from "@/components/pokemon/roster-picker";
@@ -25,6 +25,15 @@ function readTilt() {
     return TILTS.includes(v) ? v : 60;
   } catch {
     return 60;
+  }
+}
+const VIEWS: View[] = ["top", "third", "first"];
+function readView(): View {
+  try {
+    const v = localStorage.getItem("arena-brawl-view");
+    return v === "third" || v === "first" ? v : "top";
+  } catch {
+    return "top";
   }
 }
 const PICK_KEY = "arena-multi-pick";
@@ -515,10 +524,12 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const [zoom, setZoomState] = useState(1);
   const [tilt, setTiltState] = useState(60);
   useEffect(() => setTiltState(readTilt()), []);
+  const [view, setViewState] = useState<View>("top");
+  useEffect(() => setViewState(readView()), []);
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, fin: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, fin: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null, yaw: null as number | null, mfx: -1, tx: new Map<number, number>() });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -528,6 +539,15 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     ctl.current.R?.setTilt(next);
     setTiltState(next);
     try { localStorage.setItem("arena-brawl-tilt", String(next)); } catch { /* storage unavailable */ }
+  }, []);
+
+  // from above -> behind the player -> through the player's eyes
+  const cycleView = useCallback((to?: View) => {
+    const cur = ctl.current.R?.getView() ?? readView();
+    const next = to ?? VIEWS[(VIEWS.indexOf(cur) + 1) % VIEWS.length]!;
+    ctl.current.R?.setView(next);
+    setViewState(next);
+    try { localStorage.setItem("arena-brawl-view", next); } catch { /* storage unavailable */ }
   }, []);
 
   const setZoom = useCallback((z: number) => {
@@ -551,6 +571,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       else if (k === "+" || k === "=") setZoom(c.zoom + 0.15);
       else if (k === "-" || k === "_") setZoom(c.zoom - 0.15);
       else if (k === "t") cycleTilt();
+      else if (k === "v") cycleView();
+      else if ((k === "arrowright" || k === "arrowleft") && c.R && c.R.getView() !== "top") c.keys.add(k); // turns the camera
       else if (k === "arrowright" || k === "]" || k === "tab") c.specStep = 1;
       else if (k === "arrowleft" || k === "[") c.specStep = -1;
       else if (k === "0") setZoom(1);
@@ -573,7 +595,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [setZoom, cycleTilt]);
+  }, [setZoom, cycleTilt, cycleView]);
 
   useEffect(() => {
     document.documentElement.style.overflow = fs ? "hidden" : "";
@@ -605,6 +627,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const R = new ArenaRenderer(cv);
     R.setTeamMode(teamBattle || quick);
     c.R = R;
+    R.setView(readView());
     R.setZoom(c.zoom);
     R.resize();
     const meId = init.you;
@@ -709,11 +732,21 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
 
     const build = (): Input => {
       const k = c.keys;
-      let mx = (k.has("d") || k.has("arrowright") ? 1 : 0) - (k.has("a") || k.has("arrowleft") ? 1 : 0);
+      // in the views from behind / through the eyes, the arrow keys turn the camera instead of stepping sideways
+      const eyes = R.getView() !== "top";
+      let mx = (k.has("d") || (!eyes && k.has("arrowright")) ? 1 : 0) - (k.has("a") || (!eyes && k.has("arrowleft")) ? 1 : 0);
       let my = (k.has("s") || k.has("arrowdown") ? 1 : 0) - (k.has("w") || k.has("arrowup") ? 1 : 0);
       if (mx === 0 && my === 0) {
         mx = c.joy.x;
         my = c.joy.y;
+      }
+      if (eyes) {
+        // up on the stick / W is the way the camera looks, right is the camera's right
+        const yaw = R.getYaw();
+        const fwd = -my;
+        const str = mx;
+        mx = Math.cos(yaw) * fwd - Math.sin(yaw) * str;
+        my = Math.sin(yaw) * fwd + Math.cos(yaw) * str;
       }
       const cast: [boolean, boolean, boolean, boolean] = [c.queue[0] || c.held[0] || c.mouse, c.queue[1] || c.held[1], c.queue[2] || c.held[2], c.queue[3] || c.held[3]];
       const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult, fin: c.fin, swap: c.swapQ >= 0 ? c.swapQ : undefined };
@@ -878,6 +911,18 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         const mine = V.fighters.find((f) => f.member === meId);
         for (const z of V.zones) z.player = !!mine && z.owner === mine.id;
         c.me = mine;
+        if (R.getView() !== "top") {
+          c.yaw = R.getYaw();
+          // turning by hand: arrow keys, or the mouse at the edge of the screen
+          const turn = (c.keys.has("arrowright") ? 1 : 0) - (c.keys.has("arrowleft") ? 1 : 0);
+          if (turn) R.turn(turn * dt * 2.4);
+          if (c.mfx >= 0) {
+            if (c.mfx < 0.14) R.turn(-dt * 3 * ((0.14 - c.mfx) / 0.14));
+            else if (c.mfx > 0.86) R.turn(dt * 3 * ((c.mfx - 0.86) / 0.14));
+          }
+          // with a mouse the player aims by hand; without one the camera keeps the nearest foe in front
+          R.setAutoTurn(c.mfx < 0);
+        } else c.yaw = null;
         R.setAim(mine && c.preview ? { from: mine, mv: moveOf(mine, c.preview.slot), x: c.preview.x, y: c.preview.y } : null, c.aim);
         // knocked out while the fight goes on: follow somebody who is still standing (team-mates first), and let the player flip between them
         let watch: Fighter | undefined;
@@ -986,6 +1031,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const R = ctl.current.R;
     if (!cv || !R || e.pointerType !== "mouse") return;
     const b = cv.getBoundingClientRect();
+    ctl.current.mfx = (e.clientX - b.left) / b.width;
     ctl.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * R.viewW, ((e.clientY - b.top) / b.height) * ARENA.H);
   }
   /** The stick is floating: it appears under the thumb anywhere in the wide area, and steers by how far the thumb moves from there. */
@@ -1068,11 +1114,20 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               aimFrom(e);
               ctl.current.mouse = e.button === 0;
               if (e.button === 2) ctl.current.queue[1] = true;
+            } else ctl.current.tx.set(e.pointerId, e.clientX);
+          }}
+          onPointerMove={(e) => {
+            aimFrom(e);
+            // one finger dragged across the picture turns the camera in the views from behind / through the eyes
+            const was = ctl.current.tx.get(e.pointerId);
+            if (e.pointerType !== "mouse" && was !== undefined) {
+              ctl.current.tx.set(e.pointerId, e.clientX);
+              if (ctl.current.R && ctl.current.R.getView() !== "top") ctl.current.R.turn((e.clientX - was) * 0.007);
             }
           }}
-          onPointerMove={(e) => aimFrom(e)}
-          onPointerUp={(e) => { if (e.pointerType === "mouse") ctl.current.mouse = false; }}
-          onPointerLeave={(e) => { if (e.pointerType === "mouse") { ctl.current.mouse = false; ctl.current.aim = null; } }}
+          onPointerUp={(e) => { ctl.current.tx.delete(e.pointerId); if (e.pointerType === "mouse") ctl.current.mouse = false; }}
+          onPointerCancel={(e) => ctl.current.tx.delete(e.pointerId)}
+          onPointerLeave={(e) => { if (e.pointerType === "mouse") { ctl.current.mouse = false; ctl.current.aim = null; ctl.current.mfx = -1; } }}
         >
           <canvas ref={canvas} />
         </div>
@@ -1118,7 +1173,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               </div>
             ) : null}
             <div className="ab-tools">
-              <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label="Camera angle" title="T">{tilt}°</button>
+              <button type="button" className="ab-ic tilt" onClick={() => cycleView()} aria-label="View: top-down / third person / first person" title="V">{view === "top" ? "Top" : view === "third" ? "3rd" : "1st"}</button>
+              {view === "top" ? <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label="Camera angle" title="T">{tilt}°</button> : null}
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label="Zoom in">+</button>
               <button type="button" className="ab-ic" onClick={() => { if (fs) leaveFs(); else { setFs(true); void goNative(); } }} aria-label="Full screen">⛶</button>

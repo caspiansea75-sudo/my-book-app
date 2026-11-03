@@ -17,7 +17,8 @@ export type MoveKind =
   | "bolt" //   a long line that strikes after a short wind-up
   | "guard" //  a shield
   | "heal" //   recovery over a moment
-  | "buff" //  more damage for a while
+  | "buff" //  raise your stats for a while
+  | "hazard" // leave a patch on the floor that hurts foes who step in it
   | "grab"; //  lift a foe in front of you, then throw it
 
 export type StatusKind = "brn" | "psn" | "par" | "frz" | "cnf" | "slp";
@@ -48,10 +49,22 @@ export type MoveDef = {
   drain?: number;
   /** A type specialty: every Pokémon of this type can learn it, and no other type can. */
   spec?: boolean;
+  /** Stat changes for a while (multipliers): attack, special attack, defence, special defence, speed. */
+  boost?: Partial<Record<"atk" | "spa" | "def" | "spd" | "spe", number>>;
+  /** How long a boost lasts, in seconds. */
+  dur?: number;
+  /** A grab move that lifts the foe up with you and slams it into the ground. */
+  slam?: boolean;
+  /** The floor hazard a "hazard" move leaves. */
+  hazard?: "spikes" | "toxic" | "rocks";
   desc: string;
 };
 
 const m = (d: MoveDef): MoveDef => d;
+
+/** Physical moves are boosted by Attack and softened by Defense; the rest use the special stats. */
+const PHYSICAL_TYPES = new Set(["Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug", "Ghost", "Steel"]);
+export const isPhysical = (mv: Pick<MoveDef, "kind" | "type">) => mv.kind === "dash" || mv.kind === "burrow" || mv.kind === "grab" || PHYSICAL_TYPES.has(mv.type);
 
 export const MOVES: Record<string, MoveDef> = Object.fromEntries(
   [
@@ -97,7 +110,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "aurasphere", name: "Aura Sphere", type: "Fighting", kind: "homing", power: 1.25, cd: 2.2, speed: 440, desc: "A sphere that never misses for long." }),
     m({ id: "bulletpunch", name: "Bullet Punch", type: "Steel", kind: "dash", power: 0.95, cd: 1.9, range: 200, desc: "A very fast punch." }),
     m({ id: "closecombat", name: "Close Combat", type: "Fighting", kind: "nova", power: 2.0, cd: 4.6, range: 120, windup: 0.2, desc: "A flurry of blows all around." }),
-    m({ id: "swordsdance", name: "Swords Dance", type: "Normal", kind: "buff", power: 1.45, cd: 10, desc: "Hit much harder for a while." }),
+    m({ id: "swordsdance", name: "Swords Dance", type: "Normal", kind: "buff", power: 1.45, cd: 10, boost: { atk: 1.7 }, dur: 12, desc: "Sharply raises your Attack for a while: physical moves hit much harder." }),
     m({ id: "dragonrush", name: "Dragon Rush", type: "Dragon", kind: "dash", power: 1.5, cd: 3.4, range: 240, desc: "A crashing charge." }),
     m({ id: "dragonpulse", name: "Dragon Pulse", type: "Dragon", kind: "proj", power: 1.5, cd: 1.9, speed: 460, pierce: true, desc: "A shockwave that passes through." }),
     m({ id: "earthquake", name: "Earthquake", type: "Ground", kind: "nova", power: 1.9, cd: 5.2, range: 170, windup: 0.35, desc: "The whole ground shakes." }),
@@ -107,7 +120,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "psychic", name: "Psychic", type: "Psychic", kind: "nova", power: 1.6, cd: 4.4, range: 140, windup: 0.3, fx: "levitate", desc: "A burst of mind power." }),
     m({ id: "psystrike", name: "Psystrike", type: "Psychic", kind: "proj", power: 2.2, cd: 3.2, speed: 460, pierce: true, desc: "A piercing psychic blast." }),
     m({ id: "moonblast", name: "Moonblast", type: "Fairy", kind: "lob", power: 1.9, cd: 4.8, range: 330, windup: 0.5, desc: "Moonlight falls on the spot." }),
-    m({ id: "calmmind", name: "Calm Mind", type: "Psychic", kind: "buff", power: 1.4, cd: 10, desc: "Focus: hit much harder for a while." }),
+    m({ id: "calmmind", name: "Calm Mind", type: "Psychic", kind: "buff", power: 1.4, cd: 10, boost: { spa: 1.4, spd: 1.4 }, dur: 14, desc: "Raises your Sp. Atk and Sp. Def for a while." }),
     m({ id: "recover", name: "Recover", type: "Normal", kind: "heal", power: 0.4, cd: 9, desc: "Recover some HP." }),
     m({ id: "protect", name: "Protect", type: "Normal", kind: "guard", power: 0, cd: 6, desc: "Block almost everything for a moment." }),
     m({ id: "flashcannon", name: "Flash Cannon", type: "Steel", kind: "proj", power: 1.3, cd: 1.8, speed: 500, desc: "A beam of metal light." }),
@@ -160,7 +173,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "whirlpool", name: "Whirlpool", type: "Water", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "whirlpool", desc: "A whirlpool that holds foes in its swirl." }),
     m({ id: "sandtomb", name: "Sand Tomb", type: "Ground", kind: "lob", power: 1.3, cd: 6.5, range: 320, windup: 0.45, linger: 2.8, fx: "sandtomb", desc: "A column of sand that traps and scrapes." }),
     m({ id: "doubleteam", name: "Double Team", type: "Normal", kind: "buff", power: 1.3, cd: 10, fx: "clones", desc: "Afterimages circle you: hit harder for a while." }),
-    m({ id: "agility", name: "Agility", type: "Psychic", kind: "buff", power: 1.3, cd: 10, fx: "clones", desc: "Blur into afterimages: hit harder for a while." }),
+    m({ id: "agility", name: "Agility", type: "Psychic", kind: "buff", power: 1.3, cd: 10, fx: "clones", boost: { spe: 1.6 }, dur: 12, desc: "Sharply raises your Speed for a while." }),
     m({ id: "heatwave", name: "Heat Wave", type: "Fire", kind: "nova", power: 1.9, cd: 5, range: 180, windup: 0.3, status: { kind: "brn", chance: 0.3 }, fx: "fireblast", desc: "A scorching wave all around." }),
     m({ id: "overheat", name: "Overheat", type: "Fire", kind: "bolt", power: 2.6, cd: 6.5, range: 480, windup: 0.5, status: { kind: "brn", chance: 0.3 }, pierce: true, desc: "A huge line of flame." }),
     m({ id: "firepunch", name: "Fire Punch", type: "Fire", kind: "dash", power: 1.4, cd: 2.6, range: 210, status: { kind: "brn", chance: 0.25 }, desc: "A burning fist." }),
@@ -204,7 +217,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "sacredsword", name: "Sacred Sword", type: "Fighting", kind: "dash", power: 1.5, cd: 3, range: 220, desc: "Cut through with a holy sword." }),
     m({ id: "skyuppercut", name: "Sky Uppercut", type: "Fighting", kind: "dash", power: 1.3, cd: 2.8, range: 210, desc: "An upward punch." }),
     m({ id: "forcepalm", name: "Force Palm", type: "Fighting", kind: "nova", power: 1.3, cd: 3.4, range: 110, status: { kind: "par", chance: 0.3 }, fx: "dynamicpunch", desc: "A palm strike that shakes." }),
-    m({ id: "bulkup", name: "Bulk Up", type: "Fighting", kind: "buff", fx: "bulkup", power: 1.35, cd: 10, desc: "Tense up: hit harder for a while." }),
+    m({ id: "bulkup", name: "Bulk Up", type: "Fighting", kind: "buff", fx: "bulkup", power: 1.35, cd: 10, boost: { atk: 1.35, def: 1.4 }, dur: 14, desc: "Raises your Attack and Defense for a while." }),
     m({ id: "machpunch", name: "Mach Punch", type: "Fighting", kind: "dash", power: 0.8, cd: 1.5, range: 190, desc: "A lightning-fast punch." }),
     m({ id: "brickbreak", name: "Brick Break", type: "Fighting", kind: "dash", power: 1.3, cd: 2.6, range: 210, desc: "A shattering chop." }),
     m({ id: "poisonjab", name: "Poison Jab", type: "Poison", kind: "dash", power: 1.3, cd: 2.6, range: 210, status: { kind: "psn", chance: 0.3 }, desc: "A toxic stab." }),
@@ -243,7 +256,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "lunge", name: "Lunge", type: "Bug", kind: "dash", power: 1.1, cd: 2, range: 220, desc: "Leap at the foe." }),
     m({ id: "silverwind", name: "Silver Wind", type: "Bug", kind: "spread", power: 0.7, cd: 2, n: 4, speed: 520, desc: "Shining scales in a fan." }),
     m({ id: "pinmissile", name: "Pin Missile", type: "Bug", kind: "spread", power: 0.55, cd: 1.6, n: 5, speed: 580, desc: "A volley of needles." }),
-    m({ id: "quiverdance", name: "Quiver Dance", type: "Bug", kind: "buff", power: 1.4, cd: 10, desc: "A dance: hit harder for a while." }),
+    m({ id: "quiverdance", name: "Quiver Dance", type: "Bug", kind: "buff", power: 1.4, cd: 10, boost: { spa: 1.35, spd: 1.3, spe: 1.25 }, dur: 14, desc: "Raises your Sp. Atk, Sp. Def and Speed for a while." }),
     m({ id: "powergem", name: "Power Gem", type: "Rock", kind: "proj", power: 1.4, cd: 1.9, speed: 480, desc: "A beam of glowing gems." }),
     m({ id: "rockblast", name: "Rock Blast", type: "Rock", kind: "spread", power: 0.7, cd: 2, n: 5, speed: 540, desc: "A volley of rocks." }),
     m({ id: "headsmash", name: "Head Smash", type: "Rock", kind: "dash", power: 2.0, cd: 4.6, range: 230, desc: "A reckless smash." }),
@@ -263,30 +276,45 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "roaroftime", name: "Roar of Time", type: "Dragon", kind: "bolt", power: 3.0, cd: 7.5, range: 560, windup: 0.7, pierce: true, desc: "A time-warping beam." }),
     m({ id: "coreenforcer", name: "Core Enforcer", type: "Dragon", kind: "bolt", power: 2.5, cd: 6, range: 500, windup: 0.55, pierce: true, desc: "A beam that cuts through." }),
     m({ id: "clangingscales", name: "Clanging Scales", type: "Dragon", kind: "nova", power: 2.0, cd: 5, range: 150, windup: 0.3, fx: "clangingscales", desc: "A ringing burst." }),
-    m({ id: "dragondance", name: "Dragon Dance", type: "Dragon", kind: "buff", power: 1.4, cd: 10, fx: "dragondance", desc: "A dance: hit harder for a while." }),
+    m({ id: "dragondance", name: "Dragon Dance", type: "Dragon", kind: "buff", power: 1.4, cd: 10, fx: "dragondance", boost: { atk: 1.35, spe: 1.3 }, dur: 14, desc: "Raises your Attack and Speed for a while." }),
     m({ id: "dragonbreath", name: "Dragon Breath", type: "Dragon", kind: "proj", power: 0.9, cd: 1, speed: 540, status: { kind: "par", chance: 0.15 }, desc: "A quick breath." }),
     m({ id: "eternabeam", name: "Eternabeam", type: "Dragon", kind: "bolt", power: 3.2, cd: 8, range: 580, windup: 0.8, pierce: true, desc: "A gigantic beam." }),
     m({ id: "foulplay", name: "Foul Play", type: "Dark", kind: "dash", power: 1.5, cd: 3.2, range: 220, desc: "Turn their strength against them." }),
     m({ id: "suckerpunch", name: "Sucker Punch", type: "Dark", kind: "dash", power: 1.0, cd: 1.8, range: 200, desc: "A sneaky quick punch." }),
     m({ id: "knockoff", name: "Knock Off", type: "Dark", kind: "dash", power: 1.3, cd: 2.6, range: 220, desc: "A rough hit." }),
     m({ id: "nightdaze", name: "Night Daze", type: "Dark", kind: "nova", power: 1.7, cd: 4.6, range: 150, windup: 0.3, desc: "A shockwave of darkness." }),
-    m({ id: "nastyplot", name: "Nasty Plot", type: "Dark", kind: "buff", fx: "nastyplot", power: 1.4, cd: 10, desc: "Scheme: hit harder for a while." }),
+    m({ id: "nastyplot", name: "Nasty Plot", type: "Dark", kind: "buff", fx: "nastyplot", power: 1.4, cd: 10, boost: { spa: 1.7 }, dur: 12, desc: "Sharply raises your Sp. Atk for a while: special moves hit much harder." }),
     m({ id: "pursuit", name: "Pursuit", type: "Dark", kind: "dash", power: 1.0, cd: 1.8, range: 230, desc: "Chase them down." }),
     m({ id: "ironhead", name: "Iron Head", type: "Steel", kind: "dash", power: 1.5, cd: 3, range: 220, desc: "A hard headbutt." }),
     m({ id: "irontail", name: "Iron Tail", type: "Steel", kind: "dash", power: 1.4, cd: 3, range: 210, desc: "A steel tail slam." }),
     m({ id: "gyroball", name: "Gyro Ball", type: "Steel", kind: "dash", power: 1.4, cd: 3, range: 220, desc: "Spin and crash into them." }),
     m({ id: "doomdesire", name: "Doom Desire", type: "Steel", kind: "lob", power: 2.4, cd: 6.4, range: 340, windup: 0.8, desc: "Destruction falls soon after." }),
     m({ id: "steelbeam", name: "Steel Beam", type: "Steel", kind: "bolt", power: 2.5, cd: 6, range: 500, windup: 0.6, pierce: true, fx: "laser", desc: "A beam of steel." }),
-    m({ id: "irondefense", name: "Iron Defense", type: "Steel", kind: "guard", power: 0, cd: 6, desc: "Harden and block almost everything." }),
+    m({ id: "irondefense", name: "Iron Defense", type: "Steel", kind: "guard", power: 0, cd: 6, boost: { def: 1.6 }, dur: 10, desc: "Harden: block almost everything, then keep a much higher Defense for a while." }),
     m({ id: "steelwing", name: "Steel Wing", type: "Steel", kind: "dash", power: 1.2, cd: 2.4, range: 220, desc: "Strike with hard wings." }),
     m({ id: "behemothblade", name: "Behemoth Blade", type: "Steel", kind: "dash", power: 2.0, cd: 4.6, range: 250, desc: "A giant sword slash." }),
     m({ id: "dazzlinggleam", name: "Dazzling Gleam", type: "Fairy", kind: "nova", power: 1.6, cd: 4.4, range: 160, windup: 0.3, desc: "A flash of light." }),
     m({ id: "playrough", name: "Play Rough", type: "Fairy", kind: "dash", power: 1.5, cd: 3, range: 220, desc: "A rough, cute tackle." }),
     m({ id: "drainingkiss", name: "Draining Kiss", type: "Fairy", kind: "homing", power: 1.0, cd: 2, speed: 420, drain: 0.5, desc: "A kiss that seeks the foe and steals its vitality: you heal half of the damage it deals." }),
+    // ---- stat moves
+    m({ id: "cosmicpower", name: "Cosmic Power", type: "Psychic", kind: "buff", power: 1.4, cd: 11, boost: { def: 1.4, spd: 1.4 }, dur: 14, desc: "Raises your Defense and Sp. Def for a while." }),
+    m({ id: "amnesia", name: "Amnesia", type: "Psychic", kind: "buff", power: 1.4, cd: 10, boost: { spd: 1.7 }, dur: 12, desc: "Sharply raises your Sp. Def for a while." }),
+    m({ id: "workup", name: "Work Up", type: "Normal", kind: "buff", power: 1.3, cd: 10, boost: { atk: 1.3, spa: 1.3 }, dur: 14, desc: "Raises your Attack and Sp. Atk for a while." }),
+    m({ id: "coil", name: "Coil", type: "Poison", kind: "buff", power: 1.3, cd: 10, boost: { atk: 1.3, def: 1.3 }, dur: 14, desc: "Raises your Attack and Defense for a while." }),
+    m({ id: "shellsmash", name: "Shell Smash", type: "Normal", kind: "buff", power: 1.6, cd: 12, boost: { atk: 1.6, spa: 1.6, spe: 1.5, def: 0.75, spd: 0.75 }, dur: 12, desc: "Raises Attack, Sp. Atk and Speed sharply, but lowers your Defense and Sp. Def." }),
+    m({ id: "harden", name: "Harden", type: "Normal", kind: "buff", power: 1.3, cd: 9, boost: { def: 1.5 }, dur: 14, desc: "Raises your Defense for a while." }),
+    m({ id: "acidarmor", name: "Acid Armor", type: "Poison", kind: "buff", power: 1.3, cd: 10, boost: { def: 1.7 }, dur: 12, desc: "Sharply raises your Defense for a while." }),
+    m({ id: "growth", name: "Growth", type: "Grass", kind: "buff", power: 1.3, cd: 10, boost: { atk: 1.3, spa: 1.3 }, dur: 14, desc: "Raises your Attack and Sp. Atk for a while." }),
+    // ---- floor hazards: leave a patch where you aim; foes who step on it are hurt
+    m({ id: "spikes", name: "Spikes", type: "Ground", kind: "hazard", hazard: "spikes", power: 0.5, cd: 9, range: 300, desc: "Scatter spikes where you aim. Foes that walk over them are hurt again and again (flyers and floaters are safe)." }),
+    m({ id: "toxicspikes", name: "Toxic Spikes", type: "Poison", kind: "hazard", hazard: "toxic", power: 0, cd: 11, range: 300, desc: "Scatter poison spikes where you aim. Foes that walk over them are poisoned (Poison types clean them up; flyers are safe)." }),
+    m({ id: "stealthrock", name: "Stealth Rock", type: "Rock", kind: "hazard", hazard: "rocks", power: 0.9, cd: 12, range: 300, desc: "Hang sharp rocks where you aim. Anyone who goes there is cut by them, more if weak to Rock." }),
+    // ---- grabs
+    m({ id: "seismictoss", name: "Seismic Toss", type: "Fighting", kind: "grab", slam: true, power: 2.4, cd: 8, range: 250, desc: "Grab the foe in front of you, leap up with it and throw it into the ground." }),
     m({ id: "fleurcannon", name: "Fleur Cannon", type: "Fairy", kind: "bolt", power: 2.8, cd: 7, range: 520, windup: 0.65, pierce: true, desc: "A beam of fairy light." }),
     m({ id: "lightofruin", name: "Light of Ruin", type: "Fairy", kind: "lob", power: 2.5, cd: 6.5, range: 340, windup: 0.7, desc: "A giant light." }),
     m({ id: "mistyexplosion", name: "Misty Explosion", type: "Fairy", kind: "nova", power: 2.3, cd: 6.5, range: 180, windup: 0.45, desc: "A big misty blast." }),
-    m({ id: "geomancy", name: "Geomancy", type: "Fairy", kind: "buff", power: 1.5, cd: 11, desc: "Gather power: hit harder for a while." }),
+    m({ id: "geomancy", name: "Geomancy", type: "Fairy", kind: "buff", power: 1.5, cd: 11, boost: { spa: 1.45, spd: 1.45, spe: 1.3 }, dur: 14, desc: "Raises your Sp. Atk, Sp. Def and Speed for a while." }),
     m({ id: "fairywind", name: "Fairy Wind", type: "Fairy", kind: "proj", power: 0.9, cd: 1, speed: 540, desc: "A light breeze." }),
     m({ id: "moonlight", name: "Moonlight", type: "Fairy", kind: "heal", power: 0.4, cd: 9, desc: "Moonlight restores HP." }),
     m({ id: "hypervoice", name: "Hyper Voice", type: "Normal", kind: "nova", power: 1.5, cd: 3.8, range: 150, windup: 0.25, desc: "A loud shout all around." }),
@@ -718,6 +746,15 @@ export function movePool(id: string): string[] {
   if (known) {
     const set = new Set([...sp.moves, ...known].filter((m) => MOVES[m]));
     for (const k of Object.keys(MOVES)) if (sp.types.includes(MOVES[k]!.type) && !SIGNATURE.has(k)) set.add(k);
+    // the newer stat moves, hazards and Seismic Toss reach the Pokémon they suit (by role, type and size)
+    const has = (...t: string[]) => sp.types.some((x) => t.includes(x));
+    const extra: string[] = [];
+    if (sp.role === "brawler") extra.push("swordsdance", "workup");
+    if (sp.role === "brawler" && (has("Rock", "Steel", "Bug", "Water", "Ground") || sp.size >= 30)) extra.push("harden");
+    if (has("Water", "Rock", "Bug")) extra.push("shellsmash");
+    if (has("Normal") || (sp.role === "brawler" && sp.size >= 28)) extra.push("seismictoss");
+    if (sp.role === "brawler" || sp.role === "bomber") extra.push("spikes");
+    for (const k of extra) if (MOVES[k]) set.add(k);
     list = [...set];
   }
   else {

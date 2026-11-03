@@ -74,6 +74,8 @@ export type Snap = {
   z: Collection;
   i: Collection;
   o: Collection;
+  /** Floor hazards (Spikes, Toxic Spikes, Stealth Rock). */
+  hz?: Collection;
   e: Ev[];
 };
 
@@ -111,7 +113,7 @@ function collect(prev: Map<number, J>, list: Keyed[], make: (x: J) => J, full: b
 /** Host side: turns the state of the fight into small messages. */
 export class SnapshotEncoder {
   private q = 0;
-  private prev = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>() };
+  private prev = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>(), hz: new Map<number, J>() };
   private prevHeader: J = {};
 
   /**
@@ -150,6 +152,7 @@ export class SnapshotEncoder {
       z: collect(this.prev.z, S.zones, (x) => plain(x), full),
       i: collect(this.prev.i, S.items, (x) => plain(x), full),
       o: collect(this.prev.o, S.obs, (x) => plain(x), full),
+      hz: collect(this.prev.hz, S.hazards ?? [], (x) => plain(x), full),
       e: events,
     };
   }
@@ -158,7 +161,7 @@ export class SnapshotEncoder {
 const emptyState = (): State =>
   ({
     mode: "royale", time: 0, nextId: 1, fighters: [], projs: [], zones: [], events: [], phase: "intro", introT: 0, wave: 1, score: 0,
-    freeze: 0, slow: 0, zPending: null, stage: "stone", obs: [], holes: [], pools: [], items: [], itemT: 0, hazardT: 0, field: "none",
+    hazards: [], freeze: 0, slow: 0, zPending: null, stage: "stone", obs: [], holes: [], pools: [], items: [], itemT: 0, hazardT: 0, field: "none",
     perks: [], taken: [], storm: { r: 520, on: false }, winner: false, place: 0, perfects: 0, easy: 1, mp: true,
   }) as State;
 
@@ -169,7 +172,7 @@ export class SnapshotDecoder {
   readonly S: State = emptyState();
   private lastQ = 0;
   private got = false;
-  private maps = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>() };
+  private maps = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>(), hz: new Map<number, J>() };
   private goal = new Map<object, Smooth>();
   /** Events that arrived since the last call to `takeEvents`. */
   private events: Ev[] = [];
@@ -231,6 +234,7 @@ export class SnapshotDecoder {
     this.merge("z", s.z, S.zones, false);
     this.merge("i", s.i, S.items, false);
     this.merge("o", s.o, S.obs, false);
+    this.merge("hz", s.hz ?? { u: {}, r: [] }, S.hazards, false);
     if (s.e.length) this.events.push(...s.e);
     return true;
   }

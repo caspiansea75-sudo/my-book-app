@@ -61,7 +61,7 @@ export function MovePicker({ species, moves, onChange }: { species: string; move
       if (flt === "stab") return own.includes(mv.type);
       if (flt === "hit") return ["proj", "spread", "homing", "beam", "bolt", "lob"].includes(mv.kind);
       if (flt === "area") return ["nova", "dash", "burrow"].includes(mv.kind);
-      if (flt === "support") return ["guard", "heal", "buff"].includes(mv.kind);
+      if (flt === "support") return ["guard", "heal", "buff", "hazard"].includes(mv.kind);
       return true;
     });
     if (order === "power") l = [...l].sort((a, b) => MOVES[b]!.power - MOVES[a]!.power);

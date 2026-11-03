@@ -11,6 +11,7 @@ import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinge
 import { drawAmbient } from "./arena-scenery";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
+import { drawHazard } from "@/components/pokemon/arena-hazard";
 import { organic, sigil, smooth } from "@/components/pokemon/arena-shape";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
@@ -107,6 +108,8 @@ function extendedGround(stage: StageKind): HTMLCanvasElement {
 const NAME_COLORS = ["#ff8a8a", "#74c0fc", "#ffe066", "#d0bfff", "#69dbb2"];
 
 const SHOW_SCORCH = false;
+export type View = "top" | "third" | "first";
+type Cam3 = { px: number; py: number; H: number; phi: number; cp: number; sp: number; fl: number; hz: number; fx: number; fy: number; rx: number; ry: number };
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
   private parts: Parti[] = [];
@@ -172,6 +175,19 @@ export class ArenaRenderer {
   private camY = ARENA.CY;
 
   private tilt = 90;
+  /** "top": the usual view from above (see `tilt`). "third": a camera behind the player. "first": through the player's eyes. */
+  private view: View = "top";
+  /** Which way the camera looks on the floor (an angle in the arena's own x/y plane). */
+  private yaw = -Math.PI / 2;
+  private yawInit = false;
+  /** While above 0 the player is turning the camera by hand, so it does not swing to the nearest foe. */
+  private manualT = 0;
+  private autoTurn = true;
+  private bob = 0;
+  /** How round the shadow under the Pokémon being drawn should be (set by the floor-perspective of its spot). */
+  private gkNow = 1;
+  private horCol = "#a9d6c2";
+  private c3: Cam3 = { px: ARENA.CX, py: ARENA.CY, H: 140, phi: 0.37, cp: 0.93, sp: 0.36, fl: 520, hz: 108, fx: 0, fy: -1, rx: 1, ry: 0 };
   /** Width of the screen in arena units (960 on a 16:10 box, more on a wide phone or monitor) and the extra zoom that fills it. */
   private sw = ARENA.W;
   private fit = 1;
@@ -193,9 +209,92 @@ export class ArenaRenderer {
     try {
       const v = Number(localStorage.getItem("arena-brawl-tilt"));
       this.tilt = v === 90 || v === 60 || v === 45 || v === 30 ? v : 60;
+      const w = localStorage.getItem("arena-brawl-view");
+      this.view = w === "third" || w === "first" ? w : "top";
     } catch {
       this.tilt = 60;
     }
+    this.c3 = this.makeC3();
+  }
+
+  /** The way the game is seen: from above, from behind the player, or through the player's eyes. */
+  setView(v: View) {
+    if (v !== this.view) this.yawInit = false;
+    this.view = v === "third" || v === "first" ? v : "top";
+    try {
+      localStorage.setItem("arena-brawl-view", this.view);
+    } catch {
+      /* storage unavailable */
+    }
+    this.c3 = this.makeC3();
+  }
+  getView(): View {
+    return this.view;
+  }
+  /** The direction the camera looks (the same angle the game uses for "which way is it facing"). */
+  getYaw() {
+    return this.yaw;
+  }
+  /** Turn the camera by hand (radians). For a moment it then stays where it was put instead of swinging to the nearest foe. */
+  turn(d: number) {
+    this.yaw += d;
+    this.manualT = 2.2;
+  }
+  /** Whether the camera may turn to face the nearest foe by itself (off while a mouse is aiming). */
+  setAutoTurn(on: boolean) {
+    this.autoTurn = on;
+  }
+  private get v3() {
+    return this.view !== "top";
+  }
+  /** Where the camera is and how it looks, worked out from the player's place, the way it faces and the zoom. */
+  private makeC3(): Cam3 {
+    const th = this.yaw;
+    const fx = Math.cos(th);
+    const fy = Math.sin(th);
+    const z = this.zoom;
+    const third = this.view === "third";
+    const H = third ? 140 / Math.sqrt(z) : 58 + this.bob;
+    const dist = third ? 290 / z : -12;
+    const fl = third ? 520 : 400 * Math.sqrt(z);
+    const phi = third ? Math.atan2(H, dist + 70) : 0.06;
+    return { px: this.camX - fx * dist, py: this.camY - fy * dist, H, phi, cp: Math.cos(phi), sp: Math.sin(phi), fl, hz: ARENA.CY - fl * Math.tan(phi), fx, fy, rx: -fy, ry: fx };
+  }
+  /** A floor point -> the screen, for the player-view cameras. null when it is behind the camera. */
+  private proj3(x: number, y: number) {
+    const c = this.c3;
+    const dx = x - c.px;
+    const dy = y - c.py;
+    const z = dx * c.fx + dy * c.fy;
+    const l = dx * c.rx + dy * c.ry;
+    const depth = z * c.cp + c.H * c.sp;
+    if (depth < 25) return null;
+    const sc = c.fl / depth;
+    return { x: this.cx + l * sc, y: ARENA.CY - (z * c.sp - c.H * c.cp) * sc, sc, depth, l, z };
+  }
+  /** Put the drawing at a floor point for the player-view cameras (saves the context; the caller restores it). */
+  private place3(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix"): boolean {
+    const q = this.proj3(x, y);
+    if (!q || (mode === "bb" && q.depth < 45)) return false;
+    const c = this.c3;
+    const k = this.scale;
+    const sc = q.sc;
+    // how squashed the floor looks at this distance
+    const sf = c.H / q.depth;
+    this.gkNow = Math.max(0.4, Math.min(2.4, sf * 2.3));
+    g.save();
+    if (mode === "bb") {
+      g.setTransform(k * sc, 0, 0, k * sc, k * (q.x + this.shx - x * sc), k * (q.y + this.shy - y * sc));
+    } else {
+      const f = mode === "fl" ? sf : 1 - (1 - sf) * 0.45;
+      const lc = (q.l / q.depth) * c.cp;
+      const a = sc * (c.rx - lc * c.fx);
+      const cc = sc * (c.ry - lc * c.fy);
+      const b = -sc * f * c.fx;
+      const d = -sc * f * c.fy;
+      g.setTransform(k * a, k * b, k * cc, k * d, k * (q.x + this.shx - a * x - cc * y), k * (q.y + this.shy - b * x - d * y));
+    }
+    return true;
   }
 
   /** Camera angle over the floor: 90 looks straight down, lower angles lean the view into a 3D-style perspective. */
@@ -227,11 +326,11 @@ export class ArenaRenderer {
     }
   }
   private get tilted() {
-    return this.tilt < 90;
+    return this.tilt < 90 || this.view !== "top";
   }
   /** Multiplies the short radius of a shadow or ring under a Pokémon. */
   private get gk() {
-    return this.tp.sh;
+    return this.v3 ? this.gkNow : this.tp.sh;
   }
   /** Floor point (world) -> place on the canvas, in arena units. */
   private proj(x: number, y: number) {
@@ -244,6 +343,12 @@ export class ArenaRenderer {
   /** Run a drawing at a world point: "bb" stands upright there (a billboard), "fl" lies flat on the floor. */
   private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix", fn: () => void, kind: "f" | "o" | "p" = "p") {
     if (!this.tilted) return fn();
+    if (this.v3) {
+      if (!this.place3(g, x, y, mode)) return;
+      fn();
+      g.restore();
+      return;
+    }
     const { s, fv, ov } = this.tp;
     const q = this.proj(x, y);
     const sx = q.Z * q.f;
@@ -257,6 +362,7 @@ export class ArenaRenderer {
   }
   /** Lay a flat world-sized picture onto the tilted floor, row by row. */
   private blit(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number) {
+    if (this.v3) return this.blit3(g, src, step);
     const { s, c, tz } = this.tp;
     const Z = this.zoom * tz;
     // the picture covers the arena plus a margin (PAD) on every side; `ext` tells how much
@@ -276,9 +382,61 @@ export class ArenaRenderer {
     }
     g.restore();
   }
+  /** Lay the flat floor picture onto the ground the player-view cameras see, one thin row of the screen at a time:
+   *  each row looks at a straight line on the floor, which is drawn there turned the way the camera is turned. */
+  private blit3(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number) {
+    const c = this.c3;
+    const ext = src === this.gc ? PAD : { l: 0, r: 0, t: 0, b: 0 };
+    const W = ARENA.W + ext.l + ext.r;
+    const kx = src.width / W;
+    const k = this.scale;
+    const y0 = Math.max(0, Math.floor(c.hz + 1));
+    g.save();
+    g.imageSmoothingEnabled = true;
+    for (let ys = y0; ys < ARENA.H; ys += step) {
+      const yc = ys + step / 2;
+      const ang = c.phi + Math.atan((yc - ARENA.CY) / c.fl);
+      if (ang < 0.012) continue;
+      const z = c.H / Math.tan(ang);
+      const depth = z * c.cp + c.H * c.sp;
+      const kk = depth / c.fl; // floor units across one screen unit
+      const dd = (c.fl * c.H) / (depth * depth); // screen units for one floor unit forward
+      const ax = c.px + c.fx * z;
+      const ay = c.py + c.fy * z;
+      const lat = (this.sw / 2 + 12) * kk;
+      const fw = (step / 2 + 2) / dd;
+      let x0 = 1e9, x1 = -1e9, y0w = 1e9, y1w = -1e9;
+      for (const sl of [-1, 1]) for (const sf of [-1, 1]) {
+        const wx = ax + c.rx * lat * sl + c.fx * fw * sf;
+        const wy = ay + c.ry * lat * sl + c.fy * fw * sf;
+        if (wx < x0) x0 = wx;
+        if (wx > x1) x1 = wx;
+        if (wy < y0w) y0w = wy;
+        if (wy > y1w) y1w = wy;
+      }
+      const tx0 = Math.max(0, Math.floor((x0 + ext.l) * kx));
+      const tx1 = Math.min(src.width, Math.ceil((x1 + ext.l) * kx));
+      const ty0 = Math.max(0, Math.floor((y0w + ext.t) * kx));
+      const ty1 = Math.min(src.height, Math.ceil((y1w + ext.t) * kx));
+      if (tx1 - tx0 < 1 || ty1 - ty0 < 1) continue;
+      g.save();
+      g.setTransform(k, 0, 0, k, 0, 0);
+      g.beginPath();
+      g.rect(0, ys + this.shy, this.sw, step + 0.8);
+      g.clip();
+      const a = c.rx / kk;
+      const cc = c.ry / kk;
+      const b = -c.fx * dd;
+      const d = -c.fy * dd;
+      g.setTransform(k * a, k * b, k * cc, k * d, k * (this.cx + this.shx - (ax * c.rx + ay * c.ry) / kk), k * (yc + this.shy + (ax * c.fx + ay * c.fy) * dd));
+      g.drawImage(src, tx0, ty0, tx1 - tx0, ty1 - ty0, tx0 / kx - ext.l, ty0 / kx - ext.t, (tx1 - tx0) / kx, (ty1 - ty0) / kx);
+      g.restore();
+    }
+    g.restore();
+  }
   private layer(which: "gc" | "ac") {
     const big = which === "gc";
-    const kk = Math.min(this.scale, big ? 1.1 : 1.5);
+    const kk = Math.min(this.scale, big ? (this.v3 ? 1.4 : 1.1) : 1.5);
     const w = Math.round((ARENA.W + (big ? PAD.l + PAD.r : 0)) * kk);
     const h = Math.round((ARENA.H + (big ? PAD.t + PAD.b : 0)) * kk);
     let c = this[which];
@@ -309,12 +467,21 @@ export class ArenaRenderer {
       coast: ["#2e86c1", "#bfe6f5", "#e6c78c"],
     };
     const [top, hor, hill] = SKY[S.stage] ?? SKY.stone!;
-    const far = this.proj(ARENA.CX, -PAD.t);
+    this.horCol = hor;
+    const far = this.v3 ? { y: this.c3.hz } : this.proj(ARENA.CX, -PAD.t);
     const horizon = Math.max(0, far.y + this.shy);
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.fillStyle = "#04070d";
     g.fillRect(0, 0, this.sw, ARENA.H);
+    if (this.v3) {
+      // beyond the edge of the floor: plain ground the colour of the distant hills
+      const gnd = g.createLinearGradient(0, horizon, 0, ARENA.H);
+      gnd.addColorStop(0, hill);
+      gnd.addColorStop(1, "#05080e");
+      g.fillStyle = gnd;
+      g.fillRect(0, horizon, this.sw, ARENA.H - horizon + 1);
+    }
     if (horizon > 4) {
       const sky = g.createLinearGradient(0, 0, 0, horizon);
       sky.addColorStop(0, top);
@@ -323,7 +490,7 @@ export class ArenaRenderer {
       g.fillRect(0, 0, this.sw, horizon + 2);
       // distant hills, drifting slightly against the camera
       const sh = Math.min(70, horizon * 0.55);
-      const drift = -this.camX * 0.05;
+      const drift = this.v3 ? -this.yaw * this.c3.fl : -this.camX * 0.05;
       for (let layer = 0; layer < 2; layer++) {
         g.fillStyle = layer === 0 ? hill + "88" : hill;
         g.beginPath();
@@ -343,14 +510,14 @@ export class ArenaRenderer {
   private finishGround(g: CanvasRenderingContext2D, G: CanvasRenderingContext2D) {
     void G;
     this.drawAim(this.gcx());
-    this.blit(g, this.gc!, 2);
-    const far = this.proj(ARENA.CX, -PAD.t);
-    const len = 150 * this.tp.s * this.zoom;
+    this.blit(g, this.gc!, this.v3 ? 3 : 2);
+    const far = this.v3 ? { y: this.c3.hz } : this.proj(ARENA.CX, -PAD.t);
+    const len = this.v3 ? 200 : 150 * this.tp.s * this.zoom;
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     const hz = g.createLinearGradient(0, far.y + this.shy, 0, far.y + this.shy + len);
-    hz.addColorStop(0, "rgba(10,18,34,.62)");
-    hz.addColorStop(1, "rgba(10,18,34,0)");
+    hz.addColorStop(0, this.v3 ? withA(this.horCol, 0.85) : "rgba(10,18,34,.62)");
+    hz.addColorStop(1, this.v3 ? withA(this.horCol, 0) : "rgba(10,18,34,0)");
     g.fillStyle = hz;
     g.fillRect(0, Math.max(0, far.y + this.shy - 2), this.sw, len + 4);
     g.restore();
@@ -380,12 +547,20 @@ export class ArenaRenderer {
   /** How close the view is: 1 shows the whole floor, more follows the player, less shows the stands around it. */
   setZoom(z: number) {
     this.zoom = Math.max(0.8, Math.min(2.2, z));
+    if (this.v3) this.c3 = this.makeC3();
   }
   getZoom() {
     return this.zoom;
   }
   /** Turns a point on the canvas (in arena units, 0–960 by 0–600) into a place on the floor, whatever the zoom. */
   toWorld(px: number, py: number) {
+    if (this.v3) {
+      const c = this.c3;
+      const ang = Math.max(0.02, c.phi + Math.atan((py - ARENA.CY) / c.fl));
+      const z = Math.min(1600, c.H / Math.tan(ang));
+      const l = ((px - this.cx) * (z * c.cp + c.H * c.sp)) / c.fl;
+      return { x: c.px + c.fx * z + c.rx * l, y: c.py + c.fy * z + c.ry * l };
+    }
     if (this.tilted) {
       const { s, c, tz } = this.tp;
       const Z = this.zoom * tz;
@@ -397,13 +572,51 @@ export class ArenaRenderer {
     return { x: this.camX + (px - this.cx) / Z0, y: this.camY + (py - ARENA.CY) / Z0 };
   }
   private toCanvas(x: number, y: number) {
+    if (this.v3) {
+      const q = this.proj3(x, y);
+      return q ? { x: q.x, y: q.y } : { x: this.cx, y: ARENA.CY };
+    }
     if (this.tilted) {
       const q = this.proj(x, y);
       return { x: q.x, y: q.y };
     }
     return { x: (x - this.camX) * this.zoom * this.fit + this.cx, y: (y - this.camY) * this.zoom * this.fit + ARENA.CY };
   }
-  private followCamera(you: Fighter | undefined, dt: number) {
+  /** The player-view cameras: stay on the player, and (unless the player is turning it) swing round to the nearest foe. */
+  private followCam3(you: Fighter | undefined, dt: number, S: State | undefined) {
+    const tx = you ? you.x : ARENA.CX;
+    const ty = you ? you.y : ARENA.CY;
+    if (!this.yawInit) {
+      this.camX = tx;
+      this.camY = ty;
+      if (you) this.yaw = you.face;
+      this.yawInit = true;
+    }
+    const k = this.view === "first" ? 1 : 1 - Math.exp(-dt * 14);
+    this.camX += (tx - this.camX) * k;
+    this.camY += (ty - this.camY) * k;
+    this.manualT = Math.max(0, this.manualT - dt);
+    if (you && S && this.autoTurn && this.manualT <= 0) {
+      let best: Fighter | null = null;
+      let bd = 1e9;
+      for (const f of S.fighters) {
+        if (!f.alive || f === you || f.team === you.team) continue;
+        const d = Math.hypot(f.x - you.x, f.y - you.y);
+        if (d < bd) { bd = d; best = f; }
+      }
+      if (best && bd > 50) {
+        let da = Math.atan2(best.y - you.y, best.x - you.x) - this.yaw;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        this.yaw += da * (1 - Math.exp(-dt * 4.5));
+      }
+    }
+    // a little head-bob while running, in the first-person view
+    const run = you && this.view === "first" ? Math.min(1, Math.hypot(you.mvx, you.mvy) / 200) : 0;
+    this.bob += ((Math.sin(this.t * 10) * 2.2 * run) - this.bob) * Math.min(1, dt * 18);
+    this.c3 = this.makeC3();
+  }
+  private followCamera(you: Fighter | undefined, dt: number, S?: State) {
+    if (this.v3) return this.followCam3(you, dt, S);
     let tx = ARENA.CX;
     let ty = ARENA.CY;
     const { s, tz } = this.tp;
@@ -837,6 +1050,40 @@ export class ArenaRenderer {
           this.ring(e.x, e.y, e.fx === "clones" ? "#9dffb0" : "#ffb04d", 70, 0.5);
           for (let i = 0; i < 8; i++) this.parts.push({ kind: "text", x: e.x + rnd(-24, 24), y: e.y + 6, vx: 0, vy: -60, g: 0, life: 0.9, max: 0.9, size: 14, grow: 0, color: "#ffb04d", text: "▲", weight: 800 });
           break;
+        case "stat": {
+          const L: Record<string, [string, string]> = { atk: ["ATTACK", "#ff6a4d"], spa: ["SP. ATK", "#c58bff"], def: ["DEFENSE", "#ffd24d"], spd: ["SP. DEF", "#6df08a"], spe: ["SPEED", "#4dd2ff"] };
+          let row = 0;
+          for (const [list, sym] of [[e.up, "▲"], [e.down, "▼"]] as const) {
+            for (const k of list) {
+              const [name, c] = L[k] ?? [k.toUpperCase(), "#fff"];
+              this.pop(e.x, e.y - 8 - row * 15, `${name} ${sym}`, sym === "▲" ? c : "#9aa0b4", 13);
+              for (let i = 0; i < 5; i++) this.parts.push({ kind: "text", x: e.x + rnd(-22, 22), y: e.y + rnd(0, 14), vx: 0, vy: sym === "▲" ? -70 : 50, g: 0, life: 0.8, max: 0.8, size: 12, grow: 0, color: sym === "▲" ? c : "#9aa0b4", text: sym, weight: 800 });
+              row++;
+            }
+          }
+          this.ring(e.x, e.y + 6, e.up.length ? "#ffffff" : "#8a90a8", 58, 0.45);
+          break;
+        }
+        case "hazard": {
+          if (e.kind === "clear") { for (let i = 0; i < 8; i++) this.parts.push({ kind: "puff", x: e.x + rnd(-e.r * 0.5, e.r * 0.5), y: e.y + rnd(-8, 8), vx: rnd(-20, 20), vy: rnd(-40, -10), g: 0, life: 0.6, max: 0.6, size: 7, grow: 14, color: "#b57bd8" }); break; }
+          const cc = e.kind === "toxic" ? ["#b45bff", "#e8a8ff"] : e.kind === "rocks" ? ["#8a7a68", "#ffcf80"] : ["#aeb8c6", "#ffffff"];
+          for (let i = 0; i < 16; i++) { const a = rnd(0, Math.PI * 2), d = rnd(0, e.r * 0.8); this.parts.push({ kind: e.kind === "rocks" ? "plank" : "shard", x: e.x + Math.cos(a) * d, y: e.y + Math.sin(a) * d * 0.7 - 30, vx: rnd(-20, 20), vy: rnd(40, 120), g: 600, life: 0.5, max: 0.5, size: rnd(3, 6), grow: 0, color: i % 2 ? cc[0]! : cc[1]!, rot: rnd(0, 6), vr: rnd(-8, 8) }); }
+          this.ring(e.x, e.y, cc[1]!, e.r, 0.5);
+          break;
+        }
+        case "slam":
+          if (e.phase === "lift") {
+            this.ring(e.x, e.y + 8, "#ffd9a0", 60, 0.4);
+            for (let i = 0; i < 8; i++) this.parts.push({ kind: "puff", x: e.x + rnd(-14, 14), y: e.y + 8, vx: rnd(-60, 60), vy: rnd(-30, -6), g: 0, life: 0.5, max: 0.5, size: 6, grow: 14, color: "#cdb892" });
+          } else {
+            this.sctx.shake(11, 0.35);
+            this.ring(e.x, e.y + 6, "#ffe0a8", 120, 0.5);
+            this.ring(e.x, e.y + 6, "#ffffff", 70, 0.3);
+            for (let i = 0; i < 22; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "plank", x: e.x, y: e.y, vx: Math.cos(a) * rnd(80, 280), vy: rnd(-380, -120), g: 900, life: rnd(0.6, 1), max: 1, size: rnd(3, 7), grow: 0, color: i % 2 ? "#8a7a68" : "#b8ab97", rot: rnd(0, 6), vr: rnd(-10, 10) }); }
+            for (let i = 0; i < 8; i++) this.parts.push({ kind: "puff", x: e.x + rnd(-30, 30), y: e.y + rnd(-6, 8), vx: rnd(-90, 90), vy: rnd(-40, -5), g: 0, life: 0.8, max: 0.8, size: 9, grow: 24, color: "#cdb892" });
+            for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + rnd(0, 0.5); this.parts.push({ kind: "crack", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 1.1, max: 1.1, size: 1, grow: 0, color: "#000", x2: e.x + Math.cos(a) * rnd(50, 95), y2: e.y + Math.sin(a) * rnd(30, 60), seed: Math.floor(rnd(1, 90)) }); }
+          }
+          break;
         default:
           break;
       }
@@ -1093,7 +1340,7 @@ export class ArenaRenderer {
     for (const d of this.debris) d.t -= dtReal;
     this.debris = this.debris.filter((d) => d.t > 0);
     if (you) this.youTeam = you.team;
-    this.followCamera(you, dtReal);
+    this.followCamera(you, dtReal, S);
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.fillStyle = "#04070d";
@@ -1184,6 +1431,7 @@ export class ArenaRenderer {
     }
 
     this.drawItems(G, S);
+    for (const hz of S.hazards ?? []) drawHazard(G, hz, this.t, hz.team !== (S.fighters.find((q) => q.isPlayer)?.team ?? 0));
     this.drawZones(G, S);
     this.drawTelegraphs(G, S);
     this.drawWaves(G, dt);
@@ -1194,8 +1442,10 @@ export class ArenaRenderer {
 
     // crates, pillars and Pokémon are drawn back to front so they stand behind and in front of each other
     const things: { y: number; draw: () => void }[] = [];
-    for (const o of S.obs) if (o.hp > 0) things.push({ y: o.y, draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), "o") });
-    for (const f of S.fighters) if (f.alive || f.koT < 0.01) things.push({ y: f.y, draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
+    // back to front: by height on the page from above, by distance from the camera in the player views
+    const dk = (x: number, y: number) => (this.v3 ? -((x - this.c3.px) * this.c3.fx + (y - this.c3.py) * this.c3.fy) : y);
+    for (const o of S.obs) if (o.hp > 0) things.push({ y: dk(o.x, o.y), draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), "o") });
+    for (const f of S.fighters) if ((f.alive || f.koT < 0.01) && !(this.view === "first" && f === you)) things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
     this.drawProjs(g, S);
@@ -1215,9 +1465,15 @@ export class ArenaRenderer {
         const sx = q.Z * q.f;
         const flat = p.kind === "gring" || p.kind === "crack";
         const mixed = p.kind === "streak" || p.kind === "arc" || p.kind === "ring";
-        const sy = flat ? sx * this.tp.s : mixed ? sx * (1 - (1 - this.tp.s) * 0.45) : sx;
-        g.save();
-        g.setTransform(this.scale * sx, 0, 0, this.scale * sy, this.scale * (q.x + this.shx - p.x * sx), this.scale * (q.y + this.shy - p.y * sy));
+        if (this.v3) {
+          if (!this.place3(g, p.x, p.y, flat ? "fl" : mixed ? "mix" : "bb")) continue; // behind the camera
+        } else {
+          const q = this.proj(p.x, p.y);
+          const sx = q.Z * q.f;
+          const sy = flat ? sx * this.tp.s : mixed ? sx * (1 - (1 - this.tp.s) * 0.45) : sx;
+          g.save();
+          g.setTransform(this.scale * sx, 0, 0, this.scale * sy, this.scale * (q.x + this.shx - p.x * sx), this.scale * (q.y + this.shy - p.y * sy));
+        }
       }
       g.globalAlpha = a;
       if (p.kind === "dot") {
@@ -1606,6 +1862,7 @@ export class ArenaRenderer {
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, ox * this.scale, 0);
     this.drawField(g, S);
+    if (this.v3) this.drawCross(g);
     this.drawZ(g);
     if (this.perfectT > 0) {
       const a = Math.min(1, this.perfectT / 0.8);
@@ -1863,6 +2120,25 @@ export class ArenaRenderer {
   }
 
   /** The Z-Move cinematic: the screen darkens, light rays turn from the caster, and the move's name sweeps in. */
+  /** A small aiming mark in the middle of the screen for the player views (moves fire where the camera looks / at the nearest foe). */
+  private drawCross(g: CanvasRenderingContext2D) {
+    const x = ARENA.CX;
+    const y = this.view === "first" ? ARENA.CY - 18 : ARENA.CY - 30;
+    g.save();
+    g.lineCap = "round";
+    for (const [col, w] of [["rgba(0,0,0,.45)", 4], ["rgba(255,255,255,.85)", 2]] as const) {
+      g.strokeStyle = col;
+      g.lineWidth = w;
+      g.beginPath();
+      g.arc(x, y, 9, 0, Math.PI * 2);
+      g.moveTo(x - 17, y); g.lineTo(x - 12, y);
+      g.moveTo(x + 12, y); g.lineTo(x + 17, y);
+      g.moveTo(x, y - 17); g.lineTo(x, y - 12);
+      g.moveTo(x, y + 12); g.lineTo(x, y + 17);
+      g.stroke();
+    }
+    g.restore();
+  }
   private drawZ(g: CanvasRenderingContext2D) {
     const z = this.z;
     if (!z) return;
@@ -3565,6 +3841,7 @@ export class ArenaRenderer {
         g.setLineDash([8, 6]);
         g.stroke();
         break;
+      case "hazard":
       case "lob": {
         const dist = Math.min(d, reach);
         const tx = f.x + ux * dist;
@@ -4014,7 +4291,9 @@ export class ArenaRenderer {
       ps.aura.t -= this.dtr;
       if (ps.aura.t <= 0) ps.aura = undefined;
     }
-    const wantBack = Math.sin(f.face) < -0.6;
+    // which way it faces as the camera sees it (in the player views the picture turns with the camera)
+    const fa = this.v3 ? f.face - this.yaw - Math.PI / 2 : f.face;
+    const wantBack = Math.sin(fa) < -0.6;
     const gif = this.loadAnim(usedId, wantBack) ?? (wantBack ? this.loadAnim(usedId, false) : null);
     const animated = !!gif && !formMissing;
     if (gif && animated) im = gif instanceof HTMLImageElement ? gif : frameAt(gif, ps.clock).el;
@@ -4027,11 +4306,13 @@ export class ArenaRenderer {
     }
     const size = f.r * 4.1 * grow;
     const c = col(f.types[0] ?? "Normal");
-    const faceLeft = Math.cos(f.face) < 0;
+    const faceLeft = Math.cos(fa) < 0;
+    // a direction in the arena -> across / away on the screen the camera sees
+    const vd = (dx: number, dy: number) => (this.v3 ? { x: dx * this.c3.rx + dy * this.c3.ry, y: -(dx * this.c3.fx + dy * this.c3.fy) } : { x: dx, y: dy });
 
     // ---- how it moves: each kind of mover has its own bounce, lean and dust
     const phase = f.stride * (f.loco === "run" ? 0.085 : 0.06);
-    const sway = clamp(f.mvx / 280, -1, 1);
+    const sway = clamp(vd(f.mvx, f.mvy).x / 280, -1, 1);
     const idle = Math.sin(t * 2.2 + f.id) * 0.018;
     let lift = 0;
     let sx = 1;
@@ -4107,18 +4388,20 @@ export class ArenaRenderer {
     let oy = 0;
     if (ps.atk > 0) {
       const k = Math.sin((1 - ps.atk / 0.32) * Math.PI);
-      ox += Math.cos(ps.atkDir) * f.r * 0.85 * k;
-      oy += Math.sin(ps.atkDir) * f.r * 0.5 * k;
+      const ad = vd(Math.cos(ps.atkDir), Math.sin(ps.atkDir));
+      ox += ad.x * f.r * 0.85 * k;
+      oy += ad.y * f.r * 0.5 * k;
       // stretches out along the attack, nose toward the target, as in the video
       sx *= 1 + 0.34 * k;
       sy *= 1 - 0.2 * k;
-      rot += (faceLeft ? 1 : -1) * -Math.sin(ps.atkDir) * 0.65 * k;
+      rot += (faceLeft ? 1 : -1) * -ad.y * 0.65 * k;
     }
     if (ps.hurt > 0) {
       const k = Math.sin((1 - ps.hurt / 0.26) * Math.PI);
-      ox += ps.hx * f.r * 0.55 * k;
-      oy += ps.hy * f.r * 0.35 * k;
-      rot += (ps.hx >= 0 ? 1 : -1) * 0.25 * k;
+      const hd = vd(ps.hx, ps.hy);
+      ox += hd.x * f.r * 0.55 * k;
+      oy += hd.y * f.r * 0.35 * k;
+      rot += (hd.x >= 0 ? 1 : -1) * 0.25 * k;
       sx *= 1 - 0.1 * k;
       sy *= 1 + 0.08 * k;
     }
@@ -4146,6 +4429,8 @@ export class ArenaRenderer {
       if (moving && Math.random() < 0.3) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r), y: f.y + f.r * 0.4, vx: rnd(-40, 40), vy: rnd(-120, -40), g: 360, life: 0.5, max: 0.5, size: rnd(2, 4), grow: 0, color: "#cfeaff" });
     }
     if (f.grabT > 0) lift += 26 + Math.sin(t * 8 + f.id) * 3;
+    if (f.air > 0) lift += f.air;
+    if (f.slamT > 0 && f.air > 4) rot += (faceLeft ? 1 : -1) * Math.PI * 0.92 * Math.min(1, f.air / 90); // carried upside down
     if (f.flyT > 0) {
       lift += 14;
       spin = t * 18;
@@ -4439,6 +4724,32 @@ export class ArenaRenderer {
       g.fillText(f.sp.name[0] ?? "?", px, py + 1);
     }
     g.restore();
+    // stat changes (Swords Dance, Calm Mind...): a small coloured badge for each stat that is raised or lowered
+    if (f.boostT > 0 && !under) {
+      const items: [string, string, number][] = [["A", "#ff6a4d", f.boost.atk], ["SA", "#c58bff", f.boost.spa], ["D", "#ffd24d", f.boost.def], ["SD", "#6df08a", f.boost.spd], ["S", "#4dd2ff", f.boost.spe]];
+      const act = items.filter((it) => Math.abs(it[2] - 1) > 0.02);
+      if (act.length) {
+        const bw = 19, gap = 2;
+        const x0 = f.x - ((act.length * (bw + gap) - gap) / 2);
+        const y0 = f.y - f.r * 2.5 - lift;
+        g.save();
+        g.globalAlpha = f.boostT < 2 ? 0.5 + 0.5 * Math.sin(t * 14) : 0.95;
+        g.font = "800 8px system-ui";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        act.forEach((it, i) => {
+          const up = it[2] > 1;
+          const x = x0 + i * (bw + gap);
+          g.fillStyle = "rgba(10,12,24,.78)";
+          g.strokeStyle = up ? it[1] : "#8a90a8";
+          g.lineWidth = 1.2;
+          g.beginPath(); g.roundRect(x, y0, bw, 11, 3); g.fill(); g.stroke();
+          g.fillStyle = up ? it[1] : "#9aa0b4";
+          g.fillText(`${it[0]}${up ? "▲" : "▼"}`, x + bw / 2, y0 + 6);
+        });
+        g.restore();
+      }
+    }
     // the water around the legs, and a mega gem over the head
     if (wet) {
       g.save();

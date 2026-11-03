@@ -3,7 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
 export const W = 960;
@@ -57,6 +57,15 @@ export type Fighter = {
   shield: number;
   buffT: number;
   buffMul: number;
+  /** Stat changes from moves like Swords Dance: multipliers on attack, special attack, defence, special defence and speed. */
+  boost: { atk: number; spa: number; def: number; spd: number; spe: number };
+  boostT: number;
+  /** Height off the ground in pixels (drawn only): used while a Seismic Toss carries someone up. */
+  air: number;
+  /** Seconds left of being slammed (the foe) or of slamming (the holder). */
+  slamT: number;
+  slamBy: number;
+  slamDmg: number;
   heal: { t: number; per: number } | null;
   status: Record<StatusKind, number> & { frzImmune: number };
   flash: number;
@@ -184,6 +193,9 @@ export type Ev =
   | { t: "ailment"; x: number; y: number; kind: "par" | "cnf" | "slp" }
   | { t: "shield"; x: number; y: number }
   | { t: "buff"; x: number; y: number; id: number; fx?: string }
+  | { t: "stat"; x: number; y: number; id: number; up: string[]; down: string[] }
+  | { t: "hazard"; x: number; y: number; kind: string; r: number; id: number }
+  | { t: "slam"; id: number; by: number; x: number; y: number; phase: "lift" | "hit" }
   | { t: "grab"; id: number; by: number; x: number; y: number }
   | { t: "throw"; id: number; dx: number; dy: number; x: number; y: number }
   | { t: "wave"; n: number; boss: boolean }
@@ -220,6 +232,8 @@ export type Input = {
 };
 export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false });
 
+export type Hazard = { id: number; owner: number; team: number; kind: "spikes" | "toxic" | "rocks"; x: number; y: number; r: number; life: number; max: number; hit: Record<number, number> };
+
 export type State = {
   mode: Mode;
   time: number;
@@ -227,6 +241,8 @@ export type State = {
   fighters: Fighter[];
   projs: Proj[];
   zones: Zone[];
+  /** Patches on the floor left by Spikes, Toxic Spikes and Stealth Rock. */
+  hazards: Hazard[];
   events: Ev[];
   phase: "intro" | "fight" | "perks" | "over";
   introT: number;
@@ -472,6 +488,12 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     shield: 0,
     buffT: 0,
     buffMul: 1,
+    boost: { atk: 1, spa: 1, def: 1, spd: 1, spe: 1 },
+    boostT: 0,
+    air: 0,
+    slamT: 0,
+    slamBy: 0,
+    slamDmg: 0,
     heal: null,
     status: emptyStatus(),
     flash: 0,
@@ -539,6 +561,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     fighters: [],
     projs: [],
     zones: [],
+    hazards: [],
     events: [],
     phase: "intro",
     introT: 1.6,
@@ -817,8 +840,14 @@ function nearestFoe(S: State, f: Fighter, from = { x: f.x, y: f.y }): Fighter | 
   return best;
 }
 
+/** How much the defender's Defense / Sp. Def changes (by the kind of move that is hitting it). */
+function defBoost(dst: Fighter, mvId?: string) {
+  const mv = mvId ? MOVES[mvId] : undefined;
+  return mv ? (isPhysical(mv) ? dst.boost.def : dst.boost.spd) : (dst.boost.def + dst.boost.spd) / 2;
+}
+
 function baseDamage(src: Fighter, mv: MoveDef, power = mv.power) {
-  return 13 * power * ((src.power * (src.mega > 0 ? src.megaP : 1)) / 90) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1) * (src.dyna > 0 ? 1.35 : 1);
+  return 13 * power * ((src.power * (src.mega > 0 ? src.megaP : 1)) / 90) * (isPhysical(mv) ? src.boost.atk : src.boost.spa) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1) * (src.dyna > 0 ? 1.35 : 1);
 }
 
 /** Weather helps some types and hurts others. */
@@ -878,7 +907,7 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   const crit = Math.random() < src.critChance;
   const comboMul = src.isPlayer ? 1 + Math.min(0.5, 0.1 * Math.max(0, src.combo.n - 1)) : 1;
   const focusMul = src.isPlayer && src.focus > 0 ? 1.5 : 1;
-  let dmg = dmgBase * fieldMul(S, type) * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + (dst.defence * (dst.mega > 0 ? dst.megaD : 1)) / 9));
+  let dmg = dmgBase * fieldMul(S, type) * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + (dst.defence * (dst.mega > 0 ? dst.megaD : 1) * defBoost(dst, o.mv)) / 9));
   if (dst.shield > 0) dmg *= 0.12;
   if (dst.crystal > 0) {
     const soak = Math.min(dst.crystal, dmg);
@@ -1060,6 +1089,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     case "guard":
       f.shield = 1.15;
       S.events.push({ t: "shield", x: f.x, y: f.y });
+      if (mv.boost) applyBoost(S, f, mv);
       break;
     case "heal":
       f.heal = { t: 1.2, per: (f.maxHp * mv.power) / 1.2 };
@@ -1069,7 +1099,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       let tgt: Fighter | null = null;
       let best = -Infinity;
       for (const o of foesOf(S, f)) {
-        if (!o.alive || o.invuln > 0 || o.boss || o.grabT > 0 || o.flyT > 0) continue;
+        if (!o.alive || o.invuln > 0 || o.boss || o.grabT > 0 || o.flyT > 0 || o.slamT > 0) continue;
         const d = len(o.x - f.x, o.y - f.y);
         if (d > reach) continue;
         const dot = ((o.x - f.x) * dx + (o.y - f.y) * dy) / Math.max(1, d);
@@ -1085,6 +1115,10 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
         boom(S, f.x + dx * 60, f.y + dy * 60, 56, mv.type, mv.fx);
         break;
       }
+      if (mv.slam) {
+        startSlam(S, f, tgt, mv);
+        break;
+      }
       tgt.grabT = 1.0;
       tgt.grabBy = f.id;
       tgt.grabDmg = baseDamage(f, mv);
@@ -1097,10 +1131,146 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       break;
     }
     case "buff":
-      f.buffT = 6;
-      f.buffMul = mv.power;
+      if (mv.boost) applyBoost(S, f, mv);
+      else {
+        f.buffT = 6;
+        f.buffMul = mv.power;
+      }
       S.events.push({ t: "buff", x: f.x, y: f.y, id: f.id, fx: mv.fx });
       break;
+    case "hazard": {
+      const range = mv.range ?? 300;
+      const d = len(tx - f.x, ty - f.y);
+      const k = d > range ? range / d : 1;
+      const x = clamp(f.x + (tx - f.x) * k, MARGIN, W - MARGIN);
+      const y = clamp(f.y + (ty - f.y) * k, MARGIN, H - MARGIN);
+      const kind = mv.hazard ?? "spikes";
+      // at most four patches per Pokémon: the oldest one goes
+      const mine = S.hazards.filter((h) => h.owner === f.id);
+      if (mine.length >= 4) S.hazards.splice(S.hazards.indexOf(mine[0]!), 1);
+      const r = kind === "rocks" ? 86 : kind === "toxic" ? 78 : 72;
+      S.hazards.push({ id: S.nextId++, owner: f.id, team: f.team, kind, x, y, r, life: 22, max: 22, hit: {} });
+      S.events.push({ t: "hazard", x, y, kind, r, id: f.id });
+      break;
+    }
+  }
+}
+
+/** Stat moves: multiply the stats (stacking up to a limit) and restart the timer. */
+function applyBoost(S: State, f: Fighter, mv: MoveDef) {
+  const up: string[] = [];
+  const down: string[] = [];
+  for (const k of ["atk", "spa", "def", "spd", "spe"] as const) {
+    const v = mv.boost?.[k];
+    if (!v) continue;
+    const next = clamp(f.boost[k] * v, 0.6, 2.6);
+    if (Math.abs(next - f.boost[k]) < 0.001) continue;
+    f.boost[k] = next;
+    (v >= 1 ? up : down).push(k);
+  }
+  f.boostT = Math.max(f.boostT, mv.dur ?? 14);
+  S.events.push({ t: "stat", x: f.x, y: f.y, id: f.id, up, down });
+}
+
+/** Patches on the floor: foes that step on one are hurt (spikes, rocks) or poisoned (toxic spikes). */
+function updateHazards(S: State, dt: number) {
+  if (!S.hazards.length) return;
+  for (const h of S.hazards) h.life -= dt;
+  const keep: Hazard[] = [];
+  for (const h of S.hazards) {
+    if (h.life <= 0) continue;
+    const owner = S.fighters.find((x) => x.id === h.owner);
+    if (!owner) continue;
+    let used = false;
+    for (const f of S.fighters) {
+      if (!f.alive || f.team === h.team || f.invuln > 0 || f.dash?.under || f.boss) continue;
+      if (len(f.x - h.x, f.y - h.y) > h.r + f.r * 0.3) continue;
+      const grounded = !f.canFly && f.loco !== "float" && f.air < 8 && f.flyT <= 0;
+      const ready = S.time >= (h.hit[f.id] ?? 0);
+      if (!ready) continue;
+      if (h.kind === "spikes" && grounded) {
+        const mv = MOVES.spikes!;
+        h.hit[f.id] = S.time + 0.9;
+        strike(S, owner, f, baseDamage(owner, mv), "Ground", { kx: f.x - h.x, ky: f.y - h.y, kb: 40, mv: "spikes" });
+      } else if (h.kind === "rocks") {
+        const mv = MOVES.stealthrock!;
+        h.hit[f.id] = S.time + 1.2;
+        strike(S, owner, f, baseDamage(owner, mv), "Rock", { kx: f.x - h.x, ky: f.y - h.y, kb: 40, mv: "stealthrock" });
+      } else if (h.kind === "toxic" && grounded) {
+        if (f.types.includes("Poison")) {
+          used = true; // a Poison type soaks them up
+          S.events.push({ t: "hazard", x: h.x, y: h.y, kind: "clear", r: h.r, id: f.id });
+          break;
+        }
+        if (f.types.includes("Steel")) continue;
+        h.hit[f.id] = S.time + 2.2;
+        applyStatus(S, f, "psn");
+      }
+    }
+    if (!used) keep.push(h);
+  }
+  S.hazards = keep;
+}
+
+/** Seismic Toss: the foe is carried up, held, then driven into the ground. */
+function startSlam(S: State, f: Fighter, tgt: Fighter, mv: MoveDef) {
+  tgt.slamT = 1.25;
+  tgt.slamBy = f.id;
+  tgt.slamDmg = baseDamage(f, mv);
+  tgt.stun = Math.max(tgt.stun, 1.35);
+  tgt.cast = null;
+  tgt.channel = null;
+  tgt.dash = null;
+  tgt.dodge.t = 0;
+  f.stun = Math.max(f.stun, 1.3);
+  f.mvx = 0;
+  f.mvy = 0;
+  S.events.push({ t: "slam", id: tgt.id, by: f.id, x: tgt.x, y: tgt.y, phase: "lift" });
+}
+
+function updateSlams(S: State, dt: number) {
+  for (const o of S.fighters) {
+    if (o.slamT <= 0) continue;
+    const by = S.fighters.find((x) => x.id === o.slamBy);
+    if (!o.alive || !by || !by.alive) {
+      o.slamT = 0;
+      o.air = 0;
+      if (by) by.air = 0;
+      continue;
+    }
+    const prev = o.slamT;
+    o.slamT -= dt;
+    const t = 1.25 - Math.max(0, o.slamT);
+    const k = Math.min(1, dt * 14);
+    o.x += (clamp(by.x + Math.cos(by.face) * 40, MARGIN, W - MARGIN) - o.x) * k;
+    o.y += (clamp(by.y + Math.sin(by.face) * 22, MARGIN, H - MARGIN) - o.y) * k;
+    o.kx = o.ky = o.mvx = o.mvy = 0;
+    by.mvx = by.mvy = 0;
+    o.stun = Math.max(o.stun, 0.25);
+    by.stun = Math.max(by.stun, 0.25);
+    // up (0 - 0.55s), hold at the top, then down fast (0.78 - 0.92s)
+    const PEAK = 150;
+    let h: number;
+    if (t < 0.55) h = PEAK * (1 - (1 - t / 0.55) ** 3);
+    else if (t < 0.78) h = PEAK;
+    else if (t < 0.92) h = PEAK * (1 - ((t - 0.78) / 0.14) ** 2.2);
+    else h = 0;
+    o.air = Math.max(0, h);
+    by.air = Math.max(0, h * 0.82);
+    if (prev > 0.33 && o.slamT <= 0.33) {
+      // the impact
+      o.air = 0;
+      strike(S, by, o, o.slamDmg, "Fighting", { kx: 0, ky: 0, kb: 0, mv: "seismictoss" });
+      boom(S, o.x, o.y, 95, "Fighting", "seismictoss");
+      for (const q of foesOf(S, by)) if (q !== o && len(q.x - o.x, q.y - o.y) <= 100 + q.r) strike(S, by, q, o.slamDmg * 0.4, "Fighting", { kx: q.x - o.x, ky: q.y - o.y, kb: 260, mv: "seismictoss" });
+      S.events.push({ t: "slam", id: o.id, by: by.id, x: o.x, y: o.y, phase: "hit" });
+      o.stun = Math.max(o.stun, 0.55);
+    }
+    if (o.slamT <= 0) {
+      o.slamT = 0;
+      o.air = 0;
+      by.air = 0;
+    }
   }
 }
 
@@ -1403,6 +1573,7 @@ const useRange = (mv: MoveDef): [number, number] => {
     case "lob": return [90, mv.range ?? 320];
     case "bolt": return [100, (mv.range ?? 480) * 0.9];
     case "grab": return [60, (mv.range ?? 380) * 0.85];
+    case "hazard": return [60, mv.range ?? 300];
     default: return [0, 9999];
   }
 };
@@ -1511,7 +1682,7 @@ function aiStep(S: State, f: Fighter, dt: number) {
       continue;
     }
     if (mv.kind === "buff") {
-      if (d < 360) options.push(i);
+      if (d < 360 && f.boostT < 5) options.push(i);
       continue;
     }
     const [lo, hi] = useRange(mv);
@@ -1555,6 +1726,7 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     }
     if (f.awaken > 0) k *= 1.25;
     if (f.mega > 0) k *= f.megaS;
+    k *= f.boost.spe;
     if (f.dyna > 0) k *= 0.92;
     if (f.haste > 0) k *= 1.3;
     if (f.status.par > 0) k *= 0.55;
@@ -1763,6 +1935,13 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     f.shield = Math.max(0, f.shield - dt);
     f.focus = Math.max(0, f.focus - dt);
     f.buffT = Math.max(0, f.buffT - dt);
+    if (f.boostT > 0) {
+      f.boostT -= dt;
+      if (f.boostT <= 0) {
+        f.boostT = 0;
+        f.boost.atk = f.boost.spa = f.boost.def = f.boost.spd = f.boost.spe = 1;
+      }
+    }
     f.dodge.cd = Math.max(0, f.dodge.cd - dt);
     if (f.dodge.t > 0) f.dodge.t = Math.max(0, f.dodge.t - dt);
     f.status.frzImmune = Math.max(0, f.status.frzImmune - dt);
@@ -1959,6 +2138,8 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
   S.projs = S.projs.filter((p2) => p2.life > 0);
 
   updateGrabs(S, dt);
+  updateSlams(S, dt);
+  updateHazards(S, dt);
 
   // ---- zones (telegraphed circles and lines)
   for (const z of S.zones) {
@@ -2228,7 +2409,7 @@ export function newQuickGame(picks: QuickPick[], arena: StageKind | "random", le
   return S;
 }
 
-const swapBusy = (f: Fighter) => !!(f.cast || f.channel || f.dash || f.grabT > 0 || f.stun > 0 || f.mega > 0 || f.dyna > 0 || f.tera || f.awaken > 0);
+const swapBusy = (f: Fighter) => !!(f.slamT > 0 || f.cast || f.channel || f.dash || f.grabT > 0 || f.stun > 0 || f.mega > 0 || f.dyna > 0 || f.tera || f.awaken > 0);
 
 function sendOut(S: State, team: number, cur: Fighter, nxt: Fighter) {
   const i = S.fighters.indexOf(cur);
