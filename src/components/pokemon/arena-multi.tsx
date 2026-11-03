@@ -442,6 +442,8 @@ type Row = { id: number; member: number; name: string; species: string; place: n
 
 type Wire = { k: string };
 
+let pendingFsExit: ReturnType<typeof setTimeout> | null = null;
+
 export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { init: ArenaRoomView; live: ArenaRoomView; onLeave: () => void; onRematch: () => void; onReport: (r: { memberId: number; place: number; kos: number }[]) => void; onNext: () => void }) {
   const { t } = useT();
   const me = useMe();
@@ -467,9 +469,13 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const nativeFs = useRef(false);
   /** Real full screen needs a tap; the screen-filling layout is on from the start and the first touch upgrades it. */
   const goNative = useCallback(async () => {
-    const el = shell.current as (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> }) | null;
+    // The WHOLE PAGE goes full screen, not this game's own box: every round of a match is a fresh MpGame,
+    // and a full-screen box that gets thrown away would drop everyone out of full screen at the start of round 2 and 3.
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
     try {
-      if (el && !document.fullscreenElement && (el.requestFullscreen || el.webkitRequestFullscreen)) {
+      if (document.fullscreenElement) {
+        nativeFs.current = true; // already full screen (kept from the last round)
+      } else if (el.requestFullscreen || el.webkitRequestFullscreen) {
         await (el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen!());
         nativeFs.current = true;
       }
@@ -493,6 +499,11 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     nativeFs.current = false;
   }, []);
   useEffect(() => {
+    // the next round mounted right after the last one ended: stay in full screen
+    if (pendingFsExit) {
+      clearTimeout(pendingFsExit);
+      pendingFsExit = null;
+    }
     void goNative();
     let done = false;
     const once = () => {
@@ -513,12 +524,17 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       window.removeEventListener("pointerdown", once);
       window.removeEventListener("keydown", once);
       document.removeEventListener("fullscreenchange", onChange);
-      try {
-        if (document.fullscreenElement) void document.exitFullscreen();
-        window.screen.orientation?.unlock?.();
-      } catch {
-        /* already out */
-      }
+      // leave full screen only if no new round takes over within a moment (i.e. the player really left)
+      if (pendingFsExit) clearTimeout(pendingFsExit);
+      pendingFsExit = setTimeout(() => {
+        pendingFsExit = null;
+        try {
+          if (document.fullscreenElement) void document.exitFullscreen();
+          window.screen.orientation?.unlock?.();
+        } catch {
+          /* already out */
+        }
+      }, 1500);
     };
   }, [goNative]);
   const [zoom, setZoomState] = useState(1);
