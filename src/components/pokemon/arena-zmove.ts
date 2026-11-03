@@ -7,6 +7,8 @@
  */
 import { texPat, type TexKind } from "./arena-tex";
 import type { SpecCtx, SP } from "./arena-spec";
+import { layeredBurst } from "./arena-layers";
+import { typePal } from "./arena-vfx";
 
 const TAU = Math.PI * 2;
 const W = 960, H = 600;
@@ -530,6 +532,8 @@ export function zFinale(type: string, x: number, y: number, c: SpecCtx) {
   c.ring(x, y, "#ffffff", 130, 0.45);
   P({ kind: "glow", life: 0.6, size: 40, grow: 260, color: tint });
   const burst = (n: number, f: (i: number) => FP) => { for (let i = 0; i < n; i++) P(f(i)); };
+  // the layers of its type under the finale's own show (dome, rune ring, orbiting / rising pieces)
+  layeredBurst(type, x, y, 150, "rest", typePal(type), c);
   switch (type) {
     case "Fire":
       burst(22, (i) => ({ kind: "flame", x: x + rnd(-40, 40), y: y + rnd(-10, 14), vx: rnd(-70, 70), vy: rnd(-380, -140), life: rnd(0.7, 1.2), size: rnd(12, 22), color: i % 2 ? "#ffb02e" : "#ff5a1a" }));

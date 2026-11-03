@@ -11,7 +11,7 @@
 import type { MoveDef } from "@/lib/pokemon/arena-data";
 import type { SpecCtx, SP } from "./arena-spec";
 import { texPat, typeTex, type TexKind } from "./arena-tex";
-import { layeredBurst } from "./arena-layers";
+import { layeredBurst, layeredCast, layeredHit } from "./arena-layers";
 
 export type Motif =
   | "orb" | "blade" | "claw" | "fist" | "kick" | "wave" | "vortex" | "beam" | "spike" | "cloud" | "bolt" | "flame"
@@ -80,6 +80,11 @@ for (const tok of TABLE.split(/\s+/)) {
 
 export type Sig = { motif: Motif; pal: Pal; tex: TexKind; seed: number; rot: number; big: boolean };
 const cache = new Map<string, Sig>();
+/** The colours of a type (one of its three colour variants). */
+export const typePal = (type: string, v = 0): Pal => {
+  const a = PAL[type] ?? PAL.Normal!;
+  return a[v % a.length]!;
+};
 
 const KIND_MOTIF: Record<string, Motif> = { beam: "beam", bolt: "beam", lob: "bomb", nova: "wave", dash: "fist", proj: "orb", spread: "star", homing: "wisp", par: "bolt", buff: "star", heal: "star", guard: "rune", grab: "claw", burrow: "rock" };
 
@@ -202,6 +207,7 @@ export function vfxCast(mv: MoveDef, e: { x: number; y: number; dir: number; tx:
       ringOf(c, sg, x, y, 34, 0.3);
       for (let i = 0; i < 6; i++) A({ kind: "spark", x, y, vx: ux * rnd(80, 260) + rnd(-70, 70), vy: uy * rnd(80, 260) + rnd(-70, 70), life: 0.35, size: rnd(1.6, 3), color: i % 2 ? lt : core });
   }
+  layeredCast(mv.type, e.x, e.y + 6, sg.pal, c);
 }
 
 /* ------------------------------------------------------------------ impact */
@@ -298,6 +304,7 @@ export function vfxHit(mvId: string, mv: Pick<MoveDef, "id" | "type" | "kind">, 
   impactFx(sg, x, y, k, c);
   // a heavy hit also gets the quick layers of its type: a flash, a shockwave and a few flying pieces
   if (heavy) layeredBurst(mv.type, x, y, 46 * k, "core", sg.pal, c);
+  else layeredHit(mv.type, x, y, dx, dy, sg.pal, c);
 }
 
 /** Extra flavour for every impact, chosen by the move's texture: a handful of particles that look like the element
@@ -382,6 +389,8 @@ export function vfxTrail(mv: MoveDef, p: { x: number; y: number; vx: number; vy:
   const [dk, md, lt, core] = sg.pal;
   if (Math.random() > 0.8) return true;
   const A = (q: SP) => add(c, q);
+  // on a fast device every shot also leaves a soft glowing wake
+  if (c.q >= 0.9 && c.load < 0.7 && Math.random() < 0.4) A({ kind: "glow", x: p.x, y: p.y, life: 0.26, size: 4, grow: 40, color: md });
   const bx = p.x + rnd(-3, 3), by = p.y + rnd(-3, 3);
   const bvx = -p.vx * 0.1, bvy = -p.vy * 0.1;
   switch (sg.motif) {

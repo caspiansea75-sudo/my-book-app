@@ -17,7 +17,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 /** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
@@ -144,7 +144,10 @@ export class ArenaRenderer {
   private nightT = 0;
   private sctxV: SpecCtx | null = null;
   private get sctx(): SpecCtx {
+    const self = this;
     return (this.sctxV ??= {
+      get q() { return self.q; },
+      get load() { return self.parts.length / Math.max(1, Math.round(950 * (0.45 + 0.55 * self.q))); },
       add: (p) => { this.parts.push({ vx: 0, vy: 0, g: 0, size: 5, grow: 0, max: p.life, ...p } as unknown as Parti); },
       ring: (x, y, color, r, life) => this.ring(x, y, color, r, life),
       later: (t, fn) => { this.later.push({ t, fn }); },
@@ -1497,6 +1500,113 @@ export class ArenaRenderer {
         g.fill();
         g.fillStyle = sg;
         g.fill();
+      } else if (p.kind === "orbit" && p.edge === "link") {
+        // a link of a chain turning round the point: an oval ring set along the way it travels
+        const rr = Math.max(1, p.size * (0.6 + a * 0.4));
+        const dir = (p.vr ?? 1) < 0 ? -1 : 1;
+        g.save();
+        g.translate(p.x, p.y);
+        g.rotate((p.rot ?? 0) + dir * (Math.PI / 2));
+        g.lineWidth = rr * 0.95;
+        g.strokeStyle = "rgba(8,6,14,.75)";
+        g.beginPath();
+        g.ellipse(0, 0, rr * 2.4, rr * 1.35, 0, 0, Math.PI * 2);
+        g.stroke();
+        g.globalCompositeOperation = "lighter";
+        g.lineWidth = rr * 0.5;
+        g.strokeStyle = withA(p.color, 0.9);
+        g.beginPath();
+        g.ellipse(0, 0, rr * 2.4, rr * 1.35, 0, 0, Math.PI * 2);
+        g.stroke();
+        g.restore();
+      } else if (p.kind === "orbit" && p.edge === "ribbon") {
+        // a swept ribbon: a long tail along the circle, thick at the head and fading to nothing
+        const rr = Math.max(0.8, p.size * (0.6 + a * 0.4));
+        const dir = (p.vr ?? 1) < 0 ? -1 : 1;
+        const cx0 = p.x2 ?? p.x;
+        const cy0 = p.y2 ?? p.y;
+        const rad = p.weight ?? 0;
+        g.save();
+        g.globalCompositeOperation = "lighter";
+        g.lineCap = "round";
+        let px = p.x;
+        let py = p.y;
+        const SEG = 11;
+        for (let i = 1; i <= SEG; i++) {
+          const fk = i / SEG;
+          const aa = (p.rot ?? 0) - dir * i * 0.13;
+          const nx = cx0 + Math.cos(aa) * rad * (1 + fk * 0.06);
+          const ny = cy0 + Math.sin(aa) * rad * (1 + fk * 0.06);
+          g.strokeStyle = withA(p.color, 0.8 * (1 - fk));
+          g.lineWidth = rr * (2.4 * (1 - fk) + 0.25);
+          g.beginPath();
+          g.moveTo(px, py);
+          g.lineTo(nx, ny);
+          g.stroke();
+          px = nx;
+          py = ny;
+        }
+        g.fillStyle = "rgba(255,255,255,.9)";
+        g.beginPath();
+        g.arc(p.x, p.y, rr * 0.8, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
+      } else if (p.kind === "plume") {
+        // a lump of smoke with volume: lit on one side by the effect's light, dark on the other, two lobes
+        const R = Math.max(2, p.size);
+        const sd = p.seed ?? 3;
+        g.save();
+        g.translate(p.x, p.y);
+        for (let lobe = 0; lobe < 2; lobe++) {
+          const ox = lobe === 0 ? 0 : (hsh(sd) - 0.5) * R * 0.9;
+          const oy = lobe === 0 ? 0 : (hsh(sd + 3) - 0.6) * R * 0.5;
+          const rr = lobe === 0 ? R : R * 0.7;
+          const gr = g.createRadialGradient(ox - rr * 0.35, oy - rr * 0.4, rr * 0.08, ox, oy, rr);
+          gr.addColorStop(0, withA(p.edge ?? p.color, 0.8));
+          gr.addColorStop(0.5, withA(p.color, 0.72));
+          gr.addColorStop(1, withA(p.color, 0));
+          g.fillStyle = gr;
+          g.beginPath();
+          g.arc(ox, oy, rr, 0, Math.PI * 2);
+          g.fill();
+        }
+        g.restore();
+      } else if (p.kind === "pillar") {
+        // a soft column that shoots up out of the floor, bright at its foot and thin at the top, with a hot line down its middle
+        const W = Math.max(1, p.size) * (0.35 + 0.65 * a);
+        const Hh = (p.weight ?? 120) * Math.min(1, (1 - a) * 7 + 0.15);
+        g.save();
+        g.translate(p.x, p.y);
+        g.globalCompositeOperation = "lighter";
+        const pg = g.createLinearGradient(0, 0, 0, -Hh);
+        pg.addColorStop(0, withA(p.color, 0.8));
+        pg.addColorStop(0.55, withA(p.color, 0.32));
+        pg.addColorStop(1, withA(p.color, 0));
+        g.fillStyle = pg;
+        g.beginPath();
+        g.moveTo(-W, 0);
+        g.lineTo(-W * 0.5, -Hh);
+        g.lineTo(W * 0.5, -Hh);
+        g.lineTo(W, 0);
+        g.closePath();
+        g.fill();
+        const hg = g.createLinearGradient(0, 0, 0, -Hh);
+        hg.addColorStop(0, withA(p.edge ?? "#ffffff", 0.9));
+        hg.addColorStop(1, withA(p.edge ?? "#ffffff", 0));
+        g.strokeStyle = hg;
+        g.lineWidth = Math.max(1, W * 0.22);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(0, -Hh);
+        g.stroke();
+        const bg = g.createRadialGradient(0, 0, 0, 0, 0, W * 1.7);
+        bg.addColorStop(0, withA(p.edge ?? "#ffffff", 0.7));
+        bg.addColorStop(1, withA(p.color, 0));
+        g.fillStyle = bg;
+        g.beginPath();
+        g.ellipse(0, 0, W * 1.7, W * 0.6, 0, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
       } else if (p.kind === "orbit") {
         // a light on a circle: a short bright tail behind it and a soft glow round it
         const rr = Math.max(0.8, p.size * (0.5 + a * 0.5));

@@ -29,6 +29,10 @@ export interface SpecCtx {
   night(t: number): void;
   decal(d: Omit<Decal, "t">): void;
   scorch(x: number, y: number, r: number, type: string): void;
+  /** How fast this device is running the game: 1 = full speed, down to about 0.55 on a slow one. */
+  readonly q: number;
+  /** How full the particle list is (0 = empty, 1 = at its limit): new effects thin themselves out when it is high. */
+  readonly load: number;
 }
 
 const TAU = Math.PI * 2;
