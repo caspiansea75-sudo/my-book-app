@@ -15,6 +15,8 @@ async function authorise(request: Request, room: string, peer: string) {
   const me = await memberFromCookieHeader(request.headers.get("cookie"));
   if (!me || me.role === "guest") return null;
   if (peer !== `m${me.id}`) return null;
+  // Fight Showdown friend rooms: "fight-" + a 5-character code. Any signed-in member who has the code may join.
+  if (/^fight-[A-Z0-9]{5}$/.test(room)) return me;
   const m = /^arena-(\d+)-(\d+)$/.exec(room);
   if (!m) return null;
   const sql = await getSql();

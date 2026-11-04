@@ -9,6 +9,7 @@ import { Z_TINT, drawZScene, zFinale } from "./arena-zmove";
 import { OWN_SHOT_ART, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./arena-vfx";
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
+import { Scars } from "./arena-scars";
 import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
 import { drawHazard } from "@/components/pokemon/arena-hazard";
@@ -18,7 +19,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { ox?: number; oy?: number; oy2?: number; /** height above the floor (the player views lift it on screen) */ z?: number; vz?: number; gz?: number; kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { baked?: boolean; ox?: number; oy?: number; oy2?: number; ax?: number; ay?: number; /** height above the floor (the player views lift it on screen) */ z?: number; vz?: number; gz?: number; kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 /** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
@@ -129,7 +130,20 @@ export class ArenaRenderer {
   /** Animated (limb-moving) sprites, front and back views, and how far each fighter's animation has played. */
   private anims = new Map<string, GifFrames | HTMLImageElement | "loading" | "fail">();
   private rigs = new Map<number, RigState>();
-  private poses = new Map<number, { clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number } }>();
+  private poses = new Map<number, {
+    clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number };
+    /** the way it faces, smoothed (so a full turn glides) */
+    fs?: number;
+    /** facing left / away, with a margin so it does not flicker at the edge */
+    left?: boolean;
+    back?: boolean;
+    /** -1 .. 1, eased: the picture turns round through its edge instead of flipping */
+    fd?: number;
+    /** the picture it is changing from, and how much of that change is left (a cross-fade between its front and back views) */
+    fade?: number;
+    fadeIm?: Pic;
+    lastIm?: Pic;
+  }>();
   private dtr = 0;
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private meleeFx = new MeleeFx();
@@ -160,7 +174,12 @@ export class ArenaRenderer {
       shake: (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); },
       flash: (t) => { this.flashT = Math.max(this.flashT, t); },
       night: (t) => { this.nightT = Math.max(this.nightT, t); },
-      decal: (d) => { this.decals.push({ ...d, t: 0 }); if (this.decals.length > 22) this.decals.shift(); },
+      decal: (d) => {
+        this.decals.push({ ...d, t: 0 });
+        if (this.decals.length > 22) this.decals.shift();
+        if (d.kind === "crater") this.scar(d.x, d.y, Math.max(11, d.r * 0.5), "Ground");
+        else if (d.kind === "quake") { this.scars.web(d.x, d.y, d.r * 0.95); this.scars.ring(d.x, d.y, d.r * 0.5); }
+      },
       scorch: (x, y, r, type) => { this.scorch.push({ x, y, r, seed: Math.random() * 100, t: 2.5, max: 2.5, type }); if (this.scorch.length > 28) this.scorch.shift(); },
     });
   }
@@ -180,6 +199,18 @@ export class ArenaRenderer {
   private morphs = new Map<number, { kind: "mega" | "dyna" | "tera" | "awaken"; t: number; max: number; swap: number; color: string; z?: boolean; gmax?: boolean }>();
   private hist = new Map<number, { x: number; y: number }[]>();
   private debris: { x: number; y: number; seed: number; t: number }[] = [];
+  /** damage that stays on the floor for the whole match */
+  private scars = new Scars();
+  private scarKey: unknown = null;
+  private scarStage: string = "";
+  private recentScars: { x: number; y: number; t: number }[] = [];
+  /** lay a lasting crater, unless one was just made on the same spot by another layer of the same impact */
+  private scar(x: number, y: number, r: number, type: string) {
+    this.recentScars = this.recentScars.filter((q) => this.t - q.t < 0.5);
+    if (this.recentScars.some((q) => Math.hypot(q.x - x, q.y - y) < 28)) return;
+    this.recentScars.push({ x, y, t: this.t });
+    this.scars.crater(x, y, r, type);
+  }
   private camX = ARENA.CX;
   private camY = ARENA.CY;
 
@@ -873,6 +904,7 @@ export class ArenaRenderer {
           ps.atkDir = e.dir;
           this.poses.set(e.id, ps);
           this.specialCast(e);
+          this.beamTrench(e);
           if (SPEC_ART.has(e.mv)) {
             specCast(e.mv, e, MOVES[e.mv]?.range ?? 260, this.sctx);
             if (e.mv === "ironfortress") this.auras.set(e.id, { kind: e.mv, start: this.t, until: this.t + 1.15 });
@@ -927,6 +959,11 @@ export class ArenaRenderer {
         }
         case "explode": {
           const c = col(e.type);
+          // every blast marks the ground for good: small ones pit it, big ones dig a crater, throw rubble and crack it
+          if (this.scars.count < 320) {
+            if (e.r < 36) { if (Math.random() < 0.45) this.scar(e.x, e.y + 4, Math.max(6, e.r * 0.3), e.type); }
+            else if (e.r >= 100) { this.scars.web(e.x, e.y, e.r * 0.8); this.scars.rubble(e.x, e.y, e.r * 0.9, Math.round(e.r / 8)); }
+          }
           const sigStyle = e.mv ? SIG_MOVES[e.mv] : undefined;
           if (sigStyle) {
             // a hurricane, a wave, a blizzard...: its own look replaces the generic burst
@@ -1466,7 +1503,12 @@ export class ArenaRenderer {
     }
     for (const hole of S.holes) (S.stage === "lava" ? drawLavaPit : drawHole)(G, hole, this.t);
     drawArenaFx(G, S, this.t);
+    // lasting damage: craters, cracks and trenches stay for the whole match
+    if (this.scarKey !== S || this.scarStage !== S.stage) { this.scarKey = S; this.scarStage = S.stage; this.scars.reset(S.stage); this.recentScars = []; }
+    const scv = this.scars.canvas;
+    if (scv) G.drawImage(scv, 0, 0, ARENA.W, ARENA.H);
     // blast marks: a dark patch with a glowing rim that cools
+    for (const sc of this.scorch) if (!(sc as { b?: boolean }).b) { (sc as { b?: boolean }).b = true; this.scar(sc.x, sc.y, Math.max(12, sc.r * 0.85), sc.type); }
     for (const sc of this.scorch) {
       if (!SHOW_SCORCH) break; // blast patches are off: impacts are the type-specific marks only
       const k = sc.t / sc.max;
@@ -1585,6 +1627,19 @@ export class ArenaRenderer {
         p.ox = p.x;
         p.oy = p.y;
         p.oy2 = p.y2;
+        // The spot on the floor it belongs to. Something that comes DOWN (a falling streak, a bolt from the sky, a meteor shard) belongs to
+        // the spot where it ends, so that in the player views it drops from straight above that spot instead of sliding in from the side.
+        const T0 = p.max ?? p.life;
+        if (p.kind === "bolt" && p.x2 !== undefined && p.y2 !== undefined && p.y2 > p.y) {
+          p.ax = p.x2;
+          p.ay = p.y2;
+        } else if (p.vy > 0 && p.g >= 0 && p.kind !== "orbit") {
+          p.ax = p.x + p.vx * T0;
+          p.ay = p.y + p.vy * T0 + 0.5 * p.g * T0 * T0;
+        } else {
+          p.ax = p.x;
+          p.ay = p.y;
+        }
       }
       if (p.z !== undefined) {
         p.z += (p.vz ?? 0) * dt;
@@ -1618,7 +1673,7 @@ export class ArenaRenderer {
           let ay = p.y;
           if (!flat && !mixed) {
             if (p.kind === "orbit") ay = p.y - ((p.y2 ?? p.y) - (p.oy2 ?? p.y2 ?? p.y));
-            else { ax = p.ox ?? p.x; ay = p.oy ?? p.y; }
+            else { ax = p.ax ?? p.ox ?? p.x; ay = p.ay ?? p.oy ?? p.y; }
           }
           if (!this.place3(g, ax, ay, flat ? "fl" : mixed ? "mix" : "bb", flat ? 0 : (p.z ?? 0))) continue; // behind the camera
         } else {
@@ -1997,6 +2052,7 @@ export class ArenaRenderer {
         g.stroke();
         g.restore();
       } else if (p.kind === "crack" && p.x2 !== undefined && p.y2 !== undefined) {
+        if (!p.baked) { p.baked = true; this.scars.crack(p.x, p.y, p.x2, p.y2, (p.seed ?? 1) * 7.7 + p.x, 1.2, 1); }
         const n = 7;
         const len = Math.hypot(p.x2 - p.x, p.y2 - p.y);
         const nx = -(p.y2 - p.y) / (len || 1);
@@ -3854,6 +3910,15 @@ export class ArenaRenderer {
   }
 
   /** The burst when something lands, shaped by its element. */
+  /** a heavy beam cuts a dark channel into the ground along its length (and a lighter one scuffs it) */
+  private beamTrench(e: { mv: string; dir: number; x: number; y: number; type: string; kind: string }) {
+    const md = MOVES[e.mv];
+    if (!md || md.kind !== "beam" || (md.range ?? 0) < 300 || this.scars.count > 260) return;
+    const L = Math.min(md.range ?? 260, 520) * 0.85;
+    const x2 = e.x + Math.cos(e.dir) * L, y2 = e.y + Math.sin(e.dir) * L;
+    this.scars.trench(e.x + Math.cos(e.dir) * 30, e.y + Math.sin(e.dir) * 30, x2, y2, e.type, 14);
+  }
+
   /** A shockwave along the floor, a ring of dust and a few pebbles: for anything that lands hard. */
   private groundImpact(x: number, y: number, color: string, r: number) {
     const big = r >= 70;
@@ -4753,12 +4818,14 @@ export class ArenaRenderer {
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
-  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }, rig?: { st: RigState; p: Persona; o: Omit<RigOpts, "wk" | "face" | "q"> }) {
+  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean | number, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }, rig?: { st: RigState; p: Persona; o: Omit<RigOpts, "wk" | "face" | "q"> }) {
+    // 1 = faces left, -1 = faces right, and anything between while it turns round
+    const dir = typeof faceLeft === "number" ? faceLeft : faceLeft ? 1 : -1;
     g.save();
     g.globalAlpha *= alpha;
     g.translate(x, y);
     g.rotate(rot);
-    g.scale((faceLeft ? 1 : -1) * sx, sy);
+    g.scale(dir * sx, sy);
     const k = size / Math.max(picW(im), picH(im), 1);
     const w = picW(im) * k;
     const h = picH(im) * k;
@@ -4767,7 +4834,7 @@ export class ArenaRenderer {
     const x0 = -w / 2;
     const y0 = -h / 2 - size * 0.05;
     if (rig) {
-      drawRigged(g, src, picW(im), picH(im), x0, y0, w, h, rig.st, rig.p, { ...rig.o, wk, face: faceLeft ? 1 : -1, q: this.q });
+      drawRigged(g, src, picW(im), picH(im), x0, y0, w, h, rig.st, rig.p, { ...rig.o, wk, face: dir >= 0 ? 1 : -1, q: this.q });
     } else if (wk) {
       // a walking puppet: the body bobs, and the lower part is cut into a left and a right foot that step in turn
       const sw = picW(im);
@@ -4882,13 +4949,27 @@ export class ArenaRenderer {
     ps.clock += this.dtr * (moving ? 1 + Math.min(1.3, speed / 240) : 0.85);
     ps.atk = Math.max(0, ps.atk - this.dtr);
     ps.hurt = Math.max(0, ps.hurt - this.dtr);
+    if (ps.fade) ps.fade = Math.max(0, ps.fade - this.dtr / 0.22);
     if (ps.aura) {
       ps.aura.t -= this.dtr;
       if (ps.aura.t <= 0) ps.aura = undefined;
     }
     // which way it faces as the camera sees it (in the player views the picture turns with the camera)
-    const fa = this.v3 ? f.face - this.yaw - Math.PI / 2 : f.face;
-    const wantBack = Math.sin(fa) < -0.6;
+    // the way it faces is eased, so a full turn glides through its views instead of snapping from one to the next
+    if (ps.fs === undefined) ps.fs = f.face;
+    {
+      const dfa = Math.atan2(Math.sin(f.face - ps.fs), Math.cos(f.face - ps.fs));
+      ps.fs += dfa * (1 - Math.exp(-this.dtr * 13));
+    }
+    const fa = this.v3 ? ps.fs - this.yaw - Math.PI / 2 : ps.fs;
+    // front or back view, with a margin either side so it does not flicker while it is turning through the edge
+    const sn = Math.sin(fa);
+    const wantBack = ps.back === undefined ? sn < -0.6 : ps.back ? sn < -0.34 : sn < -0.66;
+    if (ps.back !== undefined && ps.back !== wantBack && ps.lastIm) {
+      ps.fadeIm = ps.lastIm;
+      ps.fade = 1;
+    }
+    ps.back = wantBack;
     const gif = this.loadAnim(usedId, wantBack) ?? (wantBack ? this.loadAnim(usedId, false) : null);
     const animated = !!gif && !formMissing;
     if (gif && animated) im = gif instanceof HTMLImageElement ? gif : frameAt(gif, ps.clock).el;
@@ -4901,7 +4982,14 @@ export class ArenaRenderer {
     }
     const size = f.r * 4.1 * grow;
     const c = col(f.types[0] ?? "Normal");
-    const faceLeft = Math.cos(fa) < 0;
+    const cf = Math.cos(fa);
+    const faceLeft = ps.left === undefined ? cf < 0 : ps.left ? cf < 0.14 : cf < -0.14;
+    ps.left = faceLeft;
+    // left / right is a turn-around: the picture narrows to its edge and widens on the other side
+    const fdTarget = faceLeft ? 1 : -1;
+    ps.fd = ps.fd === undefined ? fdTarget : ps.fd + (fdTarget - ps.fd) * (1 - Math.exp(-this.dtr * 15));
+    const faceN = Math.abs(ps.fd) < 0.12 ? (ps.fd < 0 ? -0.12 : 0.12) : ps.fd;
+    ps.lastIm = im ?? undefined;
     // a direction in the arena -> across / away on the screen the camera sees
     const vd = (dx: number, dy: number) => (this.v3 ? { x: dx * this.c3.rx + dy * this.c3.ry, y: -(dx * this.c3.fx + dy * this.c3.fy) } : { x: dx, y: dy });
 
@@ -5150,13 +5238,13 @@ export class ArenaRenderer {
       for (let i = 0; i < 4; i++) {
         const an = this.t * 2.6 + (i * Math.PI) / 2;
         const bob = Math.sin(this.t * 5 + i) * 3;
-        this.body(g, im, usedId, f.x + Math.cos(an) * f.r * 2.3, f.y + Math.sin(an) * f.r * 1.1 - f.r * 0.6 - lift + bob, size * 0.92, faceLeft, sx, sy, rot, "#9dffb0", 0.3 * fade);
+        this.body(g, im, usedId, f.x + Math.cos(an) * f.r * 2.3, f.y + Math.sin(an) * f.r * 1.1 - f.r * 0.6 - lift + bob, size * 0.92, faceN, sx, sy, rot, "#9dffb0", 0.3 * fade);
       }
     }
     if (im && !under && f.loco !== "slither" && ((f.dash && !f.dash.under) || rolling)) {
       for (const idx of [3, 6, 9]) {
         const h = hist[idx];
-        if (h) this.body(g, im, usedId, h.x, h.y - f.r * 0.6 - lift, size, faceLeft, sx, sy, rot + spin, c, 0.34 - idx * 0.02);
+        if (h) this.body(g, im, usedId, h.x, h.y - f.r * 0.6 - lift, size, faceN, sx, sy, rot + spin, c, 0.34 - idx * 0.02);
       }
     }
     // underground: only a moving mound of earth shows
@@ -5286,10 +5374,13 @@ export class ArenaRenderer {
       stepRig(rs, persona, f.mvx, f.mvy, this.dtr, speed);
       const rigA = { st: rs, p: persona, o: { t, moving: moving && !f.dash && !rolling, speed, loco: f.loco, animated, id: f.id } };
       const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
-      this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin + (f.status.slp > 0 ? 0.4 : 0) + (f.status.par > 0 ? Math.sin(t * 60) * 0.05 : 0) + (f.status.cnf > 0 ? Math.sin(t * 9) * 0.12 : 0), undefined, 1, wk, rigA);
-      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
-      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
-      else if (f.tera) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
+      const rotMain = rot + spin + (f.status.slp > 0 ? 0.4 : 0) + (f.status.par > 0 ? Math.sin(t * 60) * 0.05 : 0) + (f.status.cnf > 0 ? Math.sin(t * 9) * 0.12 : 0);
+      // changing between its front and back view: the old picture fades out while the new one fades in
+      if (ps.fade && ps.fadeIm && ps.fadeIm !== im) this.body(g, ps.fadeIm, usedId, px, py, size, faceN, sxx, syy, rotMain, undefined, ps.fade, wk, rigA);
+      this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rotMain, undefined, ps.fade ? 1 - ps.fade * 0.6 : 1, wk, rigA);
+      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
+      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
+      else if (f.tera) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
       // held by a mind attack: a glowing outline all round
       if (ps.aura) {
         const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);
