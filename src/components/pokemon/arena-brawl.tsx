@@ -5,10 +5,12 @@ import { sfx } from "@/components/pokemon/arena-sfx";
 import { aimHandlers, currentAim, type AimCtl } from "@/components/pokemon/aim-pad";
 import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
+import { TrainPanel, type TrainHud } from "@/components/pokemon/arena-train";
+import { PhotoMode } from "@/components/pokemon/arena-photo";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { FIELDS, GIMMICKS, GMAX, gimInfo, isOriginSpecies, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
-import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, spawnDummy, step, swapTo, trainReset, trainSet, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
+import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, step, swapTo, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
@@ -33,7 +35,9 @@ function readView(): View {
   }
 }
 const SAVE_KEY = "arena-brawl-v1";
-const ZOOM_KEY = "arena-brawl-zoom";
+/** The arena is bigger now, so the first view is a little closer than "the whole floor" (1 shows all of it). */
+const ZOOM0 = 1.4;
+const ZOOM_KEY = "arena-brawl-zoom2";
 const loadSave = (): Save => {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE_KEY) ?? "{}") as Partial<Save>;
@@ -51,7 +55,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: { dummy: "idle" | "walk" | "fight"; immortal: boolean; nocd: boolean; species: string; last: number; total: number; hits: number; dps: number; best: number } };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: TrainHud };
 const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"] };
 const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water" };
 const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
@@ -82,6 +86,8 @@ type Runtime = {
   mfx: number;
   pinch: number;
   drawFailed: boolean;
+  /** Photo mode: whether it is open, how fast time runs in it (0 = frozen) and a request to advance one frame. */
+  photo: { on: boolean; speed: number; step: number };
 } & AimCtl;
 
 const coarse = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
@@ -98,9 +104,9 @@ export function ArenaBrawl() {
   const [save, setSave] = useState<Save>({ bestWave: 0, bestScore: 0, royaleWins: 0, royalePlays: 0 });
   const [hud, setHud] = useState<Hud | null>(null);
   const [paused, setPaused] = useState(false);
-  const [trainOpen, setTrainOpen] = useState(true);
+  const [photo, setPhoto] = useState(false);
   const [muted, setMuted] = useState(false);
-  const [zoom, setZoomState] = useState(1);
+  const [zoom, setZoomState] = useState(ZOOM0);
   const [tilt, setTiltState] = useState(60);
   useEffect(() => setTiltState(readTilt()), []);
   const [view, setViewState] = useState<View>("top");
@@ -120,12 +126,12 @@ export function ArenaBrawl() {
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: 1, pointers: new Map(), mfx: -1, yaw: null, pinch: 0, drawFailed: false, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: ZOOM0, pointers: new Map(), mfx: -1, yaw: null, pinch: 0, drawFailed: false, photo: { on: false, speed: 0, step: 0 }, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
 
   useEffect(() => {
     setSave(loadSave());
     setMuted(sfx.isMuted());
-    const z = clampZoom(Number(localStorage.getItem(ZOOM_KEY)) || 1);
+    const z = clampZoom(Number(localStorage.getItem(ZOOM_KEY)) || ZOOM0);
     rt.current.zoom = z;
     setZoomState(z);
   }, []);
@@ -279,6 +285,8 @@ export function ArenaBrawl() {
     r.queue = [false, false, false, false];
     r.held = [false, false, false, false];
     r.paused = false;
+    r.photo = { on: false, speed: 0, step: 0 };
+    setPhoto(false);
     r.drawFailed = false;
     setPaused(false);
     setResult(null);
@@ -421,12 +429,19 @@ export function ArenaBrawl() {
         // with a mouse the player aims by hand; without one the camera keeps the nearest foe in front
         rend.setAutoTurn(r.mfx < 0);
       } else r.yaw = null;
-      if (!r.paused) {
+      // photo mode: time stands still, crawls or runs, as chosen; a single frame can be stepped
+      let tdt = dt;
+      let doStep = !r.paused;
+      if (r.photo.on) {
+        tdt = dt * r.photo.speed;
+        if (r.photo.step > 0) { tdt = 1 / 40; r.photo.step--; doStep = true; } else doStep = r.photo.speed > 0;
+      }
+      if (doStep) {
         if (r.swapQ >= 0) {
           if (S.mode === "quick") swapTo(S, 0, r.swapQ);
           r.swapQ = -1;
         }
-        step(S, build(), dt);
+        step(S, build(), tdt);
         if (S.events.length) {
           onEvents(S, S.events);
           S.events.length = 0;
@@ -436,7 +451,7 @@ export function ArenaBrawl() {
       r.me = p;
       r.R!.setAim(r.preview ? { from: p, mv: moveOf(p, r.preview.slot), x: r.preview.x, y: r.preview.y } : null, r.aim);
       try {
-        r.R!.render(S, r.paused ? 0 : dt, p);
+        r.R!.render(S, r.photo.on ? tdt : r.paused ? 0 : dt, p);
       } catch (err) {
         // One bad frame must never freeze the whole game on a black screen: skip it and keep going.
         if (!r.drawFailed) console.error("Arena Brawl: a frame failed to draw", err);
@@ -477,7 +492,24 @@ export function ArenaBrawl() {
           foes: S.fighters.filter((f) => f.alive && f.team !== 0).length,
           field: S.field,
           name: p.sp.name,
-          ...(S.train ? { train: { dummy: S.train.dummy, immortal: S.train.immortal, nocd: S.train.nocd, species: S.train.species, last: S.train.last, total: S.train.total, hits: S.train.hits, dps: S.train.dps, best: S.train.best } } : {}),
+          ...(S.train
+            ? {
+                train: {
+                  immortal: S.train.immortal,
+                  nocd: S.train.nocd,
+                  last: S.train.last,
+                  total: S.train.total,
+                  hits: S.train.hits,
+                  dps: S.train.dps,
+                  best: S.train.best,
+                  me: { species: p.sp.id, gimmick: p.gimmick, mega: p.megaForm?.id ?? "", tera: p.teraType, moves: [...(p.loadout ?? p.sp.moves)], busy: gimmickActive(p) },
+                  dums: S.train.dums.map((c) => {
+                    const d = S.fighters.find((x) => !x.isPlayer && x.dumKey === c.key);
+                    return { key: c.key, species: c.species, mode: c.mode, gimmick: c.gimmick, mega: c.mega, tera: c.tera, moves: [...(d?.loadout ?? c.moves ?? speciesOf(c.species).moves)], busy: d ? gimmickActive(d) : false, alive: !!d?.alive };
+                  }),
+                } satisfies TrainHud,
+              }
+            : {}),
           ...(S.squads
             ? {
                 squad: S.squads[0]!.map((f) => ({ name: f.sp.name, hp: f.hp, max: f.maxHp, alive: f.alive, active: f === p })),
@@ -511,6 +543,30 @@ export function ArenaBrawl() {
 
   /* ------------------------------------------------------------- input */
 
+  /** Photo mode: the picture alone, time frozen, the camera in your hands. */
+  const openPhoto = useCallback(() => {
+    const r = rt.current;
+    if (!r.R || !r.S) return;
+    const me = playerOf(r.S);
+    r.photo = { on: true, speed: 0, step: 0 };
+    r.R.setPhoto(true, me ? { x: me.x, y: me.y } : undefined);
+    r.paused = false;
+    setPaused(false);
+    setPhoto(true);
+  }, []);
+  const closePhoto = useCallback(() => {
+    const r = rt.current;
+    r.photo = { on: false, speed: 0, step: 0 };
+    r.R?.setPhoto(false);
+    setPhoto(false);
+  }, []);
+  const photoSpeed = useCallback((v: number) => {
+    rt.current.photo.speed = v;
+  }, []);
+  const photoStep = useCallback(() => {
+    rt.current.photo.step += 1;
+  }, []);
+
   const setPausedBoth = useCallback((v: boolean) => {
     rt.current.paused = v;
     setPaused(v);
@@ -533,7 +589,7 @@ export function ArenaBrawl() {
       else if (k === "-" || k === "_") setZoom(r.zoom - 0.15);
       else if (k === "t") cycleTilt();
       else if (k === "v") cycleView();
-      else if (k === "0") setZoom(1);
+      else if (k === "0") setZoom(ZOOM0);
       else if (k === "1" || k === "j") r.queue[0] = true;
       else if (k === "2" || k === "k") r.queue[1] = true;
       else if (k === "3" || k === "l") r.queue[2] = true;
@@ -578,7 +634,7 @@ export function ArenaBrawl() {
     if (!cv || !R || e.pointerType !== "mouse") return;
     const b = cv.getBoundingClientRect();
     rt.current.mfx = (e.clientX - b.left) / b.width;
-    rt.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * R.viewW, ((e.clientY - b.top) / b.height) * ARENA.H);
+    rt.current.aim = R.toWorld(((e.clientX - b.left) / b.width) * R.viewW, ((e.clientY - b.top) / b.height) * R.viewH);
   }
 
   // two fingers pinch to zoom
@@ -871,7 +927,9 @@ export function ArenaBrawl() {
           <canvas ref={canvas} />
         </div>
 
-        {hud ? (
+        {photo && rt.current.R && canvas.current ? <PhotoMode R={rt.current.R} canvas={canvas.current} t={t} onClose={closePhoto} onSpeed={photoSpeed} onStep={photoStep} /> : null}
+
+        {hud && !photo ? (
           <div className="ab-hud">
             <div className="ab-me">
               <b>{hud.formName ?? hud.name}</b>
@@ -889,40 +947,7 @@ export function ArenaBrawl() {
               {hud.train ? null : <span className="sc">★ {hud.score}</span>}
               {fld ? <span title={t(fld.bn, fld.name)}>{fld.icon}<i className="wx"> {t(fld.bn, fld.name)}</i></span> : null}
             </div>
-            {hud.train ? (
-              <div className="ab-train" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()} onPointerUp={(e) => e.stopPropagation()}>
-                <button type="button" className="ab-train-h" onClick={() => setTrainOpen((o) => !o)}>{trainOpen ? "▾" : "▸"} {t("ট্রেনিং", "Training")}</button>
-                {trainOpen ? (
-                  <>
-                    <label className="ab-train-row">
-                      <span>{t("ডামি", "Dummy")}</span>
-                      <select value={hud.train.species} onChange={(e) => { const S = rt.current.S; if (S) spawnDummy(S, e.target.value); e.currentTarget.blur(); }}>
-                        {ROSTER.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-                      </select>
-                    </label>
-                    <div className="ab-train-row">
-                      {(["idle", "walk", "fight"] as const).map((m) => (
-                        <button key={m} type="button" className={`ab-chip ${hud.train!.dummy === m ? "on" : ""}`} onClick={() => { const S = rt.current.S; if (S) trainSet(S, { dummy: m }); }}>
-                          {m === "idle" ? t("দাঁড়িয়ে", "Still") : m === "walk" ? t("হাঁটে", "Walks") : t("লড়ে", "Fights")}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="ab-train-row">
-                      <button type="button" className={`ab-chip ${hud.train.immortal ? "on" : ""}`} onClick={() => { const S = rt.current.S; if (S) trainSet(S, { immortal: !hud.train!.immortal }); }}>{t("ডামি মরে না", "Dummy can't faint")}</button>
-                      <button type="button" className={`ab-chip ${hud.train.nocd ? "on" : ""}`} onClick={() => { const S = rt.current.S; if (S) trainSet(S, { nocd: !hud.train!.nocd }); }}>{t("কুলডাউন নেই", "No cooldowns")}</button>
-                    </div>
-                    <div className="ab-train-stats">
-                      <span>{t("শেষ আঘাত", "Last hit")}<b>{Math.round(hud.train.last)}</b></span>
-                      <span>{t("মোট", "Total")}<b>{Math.round(hud.train.total)}</b></span>
-                      <span>{t("আঘাত", "Hits")}<b>{hud.train.hits}</b></span>
-                      <span>DPS<b>{hud.train.dps.toFixed(1)}</b></span>
-                      <span>{t("সেরা DPS", "Best DPS")}<b>{hud.train.best.toFixed(1)}</b></span>
-                    </div>
-                    <button type="button" className="ab-chip" onClick={() => { const S = rt.current.S; if (S) trainReset(S); }}>{t("রিসেট", "Reset")}</button>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
+            {hud.train ? <TrainPanel hud={hud.train} getS={() => rt.current.S} t={t} onPhoto={openPhoto} /> : null}
             {hud.squad ? (
               <div className="ab-squad">
                 <div className="ab-foes">
@@ -948,7 +973,7 @@ export function ArenaBrawl() {
               <button type="button" className="ab-ic tilt" onClick={() => cycleView()} aria-label={t("দৃশ্য: উপর থেকে / তৃতীয় ব্যক্তি / প্রথম ব্যক্তি", "View: top-down / third person / first person")} title="V">{view === "top" ? t("উপর", "Top") : view === "third" ? t("৩য়", "3rd") : t("১ম", "1st")}</button>
               {view === "top" ? <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button> : null}
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label={t("ছোট করুন", "Zoom out")}><ZoomOut size={16} /></button>
-              <button type="button" className="ab-ic wide" onClick={() => setZoom(1)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
+              <button type="button" className="ab-ic wide" onClick={() => setZoom(ZOOM0)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label={t("বড় করুন", "Zoom in")}><ZoomIn size={16} /></button>
               <button type="button" className="ab-ic" onClick={() => (fs ? exitFs() : void enterFs(false))} aria-label={fs ? t("ফুল স্ক্রিন থেকে বের হন", "Exit full screen") : t("ফুল স্ক্রিন", "Full screen")}>{fs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
               <button type="button" className="ab-ic" onClick={() => { const v = !sfx.isMuted(); sfx.setMuted(v); setMuted(v); }} aria-label={t("শব্দ", "Sound")}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>

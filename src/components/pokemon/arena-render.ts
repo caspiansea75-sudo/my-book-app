@@ -18,7 +18,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { ox?: number; oy?: number; oy2?: number; /** height above the floor (the player views lift it on screen) */ z?: number; vz?: number; gz?: number; kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 /** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
@@ -61,6 +61,9 @@ const defaultSources: SpriteSource = (id, num) => {
 /** One colour per seat in a multiplayer fight, so every name can be told apart. */
 /** How far the ground continues past the arena's edges, so a wide screen or a tilted view never shows black. */
 const PAD = { l: 420, r: 420, t: 70, b: 300 };
+/** The screen is always laid out as these units (the arena itself is bigger now: the picture is scaled so zoom 1 shows all of it). */
+const SCR = { W: 960, H: 600, CX: 480, CY: 300 };
+const ARENA_FIT = SCR.W / ARENA.W;
 const groundCache = new Map<string, HTMLCanvasElement>();
 /** The floor plus a margin around it: the floor mirrored outward and dimmed, so it reads as the arena's surroundings. */
 function extendedGround(stage: StageKind): HTMLCanvasElement {
@@ -195,10 +198,14 @@ export class ArenaRenderer {
   private horCol = "#a9d6c2";
   private c3: Cam3 = { px: ARENA.CX, py: ARENA.CY, H: 140, phi: 0.37, cp: 0.93, sp: 0.36, fl: 520, hz: 108, fx: 0, fy: -1, rx: 1, ry: 0 };
   /** Width of the screen in arena units (960 on a 16:10 box, more on a wide phone or monitor) and the extra zoom that fills it. */
-  private sw = ARENA.W;
+  private sw = SCR.W;
   private fit = 1;
   get viewW() {
     return this.sw;
+  }
+  /** Height of the screen in the same units as `viewW`. */
+  get viewH() {
+    return SCR.H;
   }
   private get cx() {
     return this.sw / 2;
@@ -246,6 +253,38 @@ export class ArenaRenderer {
     this.yaw += d;
     this.manualT = 2.2;
   }
+  /** Photo mode: the camera stays on a spot of the floor you choose (null = follow the player again). */
+  private photo: { x: number; y: number } | null = null;
+  /** Photo mode: no bars, names, numbers or banners over the picture. */
+  private clean = false;
+  setPhoto(on: boolean, at?: { x: number; y: number }) {
+    this.clean = on;
+    if (on) this.photo = this.photo ?? (at ? { x: at.x, y: at.y } : { x: this.camX, y: this.camY });
+    else this.photo = null;
+    if (on) this.manualT = 1e9;
+    else this.manualT = 0;
+    // the picture is drawn at full sharpness while taking photos
+    if (on) { this.q = 1; this.qAt = this.t; }
+    this.resize();
+  }
+  isPhoto() {
+    return this.clean;
+  }
+  /** Slide the photo camera by a drag of (sx, sy) screen pixels: sideways and forwards in the player views, over the floor from above. */
+  panBy(sx: number, sy: number) {
+    if (!this.photo) return;
+    const lim = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+    if (this.v3) {
+      const c = this.c3;
+      const k = 1.3;
+      this.photo.x = lim(this.photo.x - sx * k * c.rx + sy * k * c.fx, ARENA.W);
+      this.photo.y = lim(this.photo.y - sx * k * c.ry + sy * k * c.fy, ARENA.H);
+    } else {
+      const k = 1 / Math.max(0.3, this.zoom * this.fit * this.tp.tz);
+      this.photo.x = lim(this.photo.x - sx * k * (SCR.W / Math.max(1, this.canvas.clientWidth)), ARENA.W);
+      this.photo.y = lim(this.photo.y - (sy * k * (SCR.H / Math.max(1, this.canvas.clientHeight))) / Math.max(0.3, this.tp.s), ARENA.H);
+    }
+  }
   /** Whether the camera may turn to face the nearest foe by itself (off while a mouse is aiming). */
   setAutoTurn(on: boolean) {
     this.autoTurn = on;
@@ -264,7 +303,7 @@ export class ArenaRenderer {
     const dist = third ? 290 / z : -12;
     const fl = third ? 520 : 400 * Math.sqrt(z);
     const phi = third ? Math.atan2(H, dist + 70) : 0.06;
-    return { px: this.camX - fx * dist, py: this.camY - fy * dist, H, phi, cp: Math.cos(phi), sp: Math.sin(phi), fl, hz: ARENA.CY - fl * Math.tan(phi), fx, fy, rx: -fy, ry: fx };
+    return { px: this.camX - fx * dist, py: this.camY - fy * dist, H, phi, cp: Math.cos(phi), sp: Math.sin(phi), fl, hz: SCR.CY - fl * Math.tan(phi), fx, fy, rx: -fy, ry: fx };
   }
   /** A floor point -> the screen, for the player-view cameras. null when it is behind the camera. */
   private proj3(x: number, y: number) {
@@ -276,10 +315,10 @@ export class ArenaRenderer {
     const depth = z * c.cp + c.H * c.sp;
     if (depth < 25) return null;
     const sc = c.fl / depth;
-    return { x: this.cx + l * sc, y: ARENA.CY - (z * c.sp - c.H * c.cp) * sc, sc, depth, l, z };
+    return { x: this.cx + l * sc, y: SCR.CY - (z * c.sp - c.H * c.cp) * sc, sc, depth, l, z };
   }
   /** Put the drawing at a floor point for the player-view cameras (saves the context; the caller restores it). */
-  private place3(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix"): boolean {
+  private place3(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix", lift = 0): boolean {
     const q = this.proj3(x, y);
     if (!q || (mode === "bb" && q.depth < 45)) return false;
     const c = this.c3;
@@ -290,7 +329,7 @@ export class ArenaRenderer {
     this.gkNow = Math.max(0.4, Math.min(2.4, sf * 2.3));
     g.save();
     if (mode === "bb") {
-      g.setTransform(k * sc, 0, 0, k * sc, k * (q.x + this.shx - x * sc), k * (q.y + this.shy - y * sc));
+      g.setTransform(k * sc, 0, 0, k * sc, k * (q.x + this.shx - x * sc), k * (q.y + this.shy - y * sc - lift * sc));
     } else {
       const f = mode === "fl" ? sf : 1 - (1 - sf) * 0.45;
       const lc = (q.l / q.depth) * c.cp;
@@ -298,7 +337,7 @@ export class ArenaRenderer {
       const cc = sc * (c.ry - lc * c.fy);
       const b = -sc * f * c.fx;
       const d = -sc * f * c.fy;
-      g.setTransform(k * a, k * b, k * cc, k * d, k * (q.x + this.shx - a * x - cc * y), k * (q.y + this.shy - b * x - d * y));
+      g.setTransform(k * a, k * b, k * cc, k * d, k * (q.x + this.shx - a * x - cc * y), k * (q.y + this.shy - b * x - d * y - lift * sc));
     }
     return true;
   }
@@ -344,13 +383,13 @@ export class ArenaRenderer {
     const Z = this.zoom * tz;
     const dy = y - this.camY;
     const f = 1 + (c * dy) / ARENA.H;
-    return { x: this.cx + (x - this.camX) * Z * f, y: ARENA.CY + Z * s * (dy + (c * dy * dy) / (2 * ARENA.H)), f, Z };
+    return { x: this.cx + (x - this.camX) * Z * f, y: SCR.CY + Z * s * (dy + (c * dy * dy) / (2 * ARENA.H)), f, Z };
   }
   /** Run a drawing at a world point: "bb" stands upright there (a billboard), "fl" lies flat on the floor. */
-  private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix", fn: () => void, kind: "f" | "o" | "p" = "p") {
+  private at(g: CanvasRenderingContext2D, x: number, y: number, mode: "bb" | "fl" | "mix", fn: () => void, kind: "f" | "o" | "p" = "p", lift = 0) {
     if (!this.tilted) return fn();
     if (this.v3) {
-      if (!this.place3(g, x, y, mode)) return;
+      if (!this.place3(g, x, y, mode, lift)) return;
       fn();
       g.restore();
       return;
@@ -384,7 +423,7 @@ export class ArenaRenderer {
       if (fm < 0.1) continue;
       const y0 = Z * s * (d0 + (c * d0 * d0) / (2 * H));
       const y1 = Z * s * (d1 + (c * d1 * d1) / (2 * H));
-      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, this.cx + (-ext.l - this.camX) * Z * fm + this.shx, ARENA.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
+      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, this.cx + (-ext.l - this.camX) * Z * fm + this.shx, SCR.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
     }
     g.restore();
   }
@@ -399,9 +438,9 @@ export class ArenaRenderer {
     const y0 = Math.max(0, Math.floor(c.hz + 1));
     g.save();
     g.imageSmoothingEnabled = true;
-    for (let ys = y0; ys < ARENA.H; ys += step) {
+    for (let ys = y0; ys < SCR.H; ys += step) {
       const yc = ys + step / 2;
-      const ang = c.phi + Math.atan((yc - ARENA.CY) / c.fl);
+      const ang = c.phi + Math.atan((yc - SCR.CY) / c.fl);
       if (ang < 0.012) continue;
       const z = c.H / Math.tan(ang);
       const depth = z * c.cp + c.H * c.sp;
@@ -442,7 +481,7 @@ export class ArenaRenderer {
   }
   private layer(which: "gc" | "ac") {
     const big = which === "gc";
-    const kk = Math.min(this.scale, big ? (this.v3 ? 1.4 : 1.1) : 1.5);
+    const kk = Math.min(this.scale, big ? (this.v3 ? 1.0 : 0.95) : 1.0);
     const w = Math.round((ARENA.W + (big ? PAD.l + PAD.r : 0)) * kk);
     const h = Math.round((ARENA.H + (big ? PAD.t + PAD.b : 0)) * kk);
     let c = this[which];
@@ -479,14 +518,14 @@ export class ArenaRenderer {
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.fillStyle = "#04070d";
-    g.fillRect(0, 0, this.sw, ARENA.H);
+    g.fillRect(0, 0, this.sw, SCR.H);
     if (this.v3) {
       // beyond the edge of the floor: plain ground the colour of the distant hills
-      const gnd = g.createLinearGradient(0, horizon, 0, ARENA.H);
+      const gnd = g.createLinearGradient(0, horizon, 0, SCR.H);
       gnd.addColorStop(0, hill);
       gnd.addColorStop(1, "#05080e");
       g.fillStyle = gnd;
-      g.fillRect(0, horizon, this.sw, ARENA.H - horizon + 1);
+      g.fillRect(0, horizon, this.sw, SCR.H - horizon + 1);
     }
     if (horizon > 4) {
       const sky = g.createLinearGradient(0, 0, 0, horizon);
@@ -539,20 +578,21 @@ export class ArenaRenderer {
   private qAt = 0;
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1) * this.q;
-    const w = this.canvas.clientWidth || ARENA.W;
-    const h = this.canvas.clientHeight || w * (ARENA.H / ARENA.W);
+    const w = this.canvas.clientWidth || SCR.W;
+    const h = this.canvas.clientHeight || w * (SCR.H / SCR.W);
     // the screen may be wider than the arena's 16:10 (a phone on its side, a monitor): the view then shows more, instead of black bars
     const aspect = Math.max(1.25, Math.min(2.6, w / h));
-    this.sw = Math.max(ARENA.W, ARENA.H * aspect);
-    this.fit = Math.min(1.35, Math.max(1, (this.sw / ARENA.W) * 0.82));
+    this.sw = Math.max(SCR.W, SCR.H * aspect);
+    // zoom 1 shows the whole arena, however big it is (a wide screen also shows a bit more of the stands)
+    this.fit = Math.min(1.35, Math.max(1, (this.sw / SCR.W) * 0.82)) * ARENA_FIT;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
-    this.scale = this.canvas.height / ARENA.H;
+    this.scale = this.canvas.height / SCR.H;
   }
 
   /** How close the view is: 1 shows the whole floor, more follows the player, less shows the stands around it. */
   setZoom(z: number) {
-    this.zoom = Math.max(0.8, Math.min(2.2, z));
+    this.zoom = Math.max(0.8, Math.min(this.clean ? 3.4 : 2.2, z));
     if (this.v3) this.c3 = this.makeC3();
   }
   getZoom() {
@@ -562,7 +602,7 @@ export class ArenaRenderer {
   toWorld(px: number, py: number) {
     if (this.v3) {
       const c = this.c3;
-      const ang = Math.max(0.02, c.phi + Math.atan((py - ARENA.CY) / c.fl));
+      const ang = Math.max(0.02, c.phi + Math.atan((py - SCR.CY) / c.fl));
       const z = Math.min(1600, c.H / Math.tan(ang));
       const l = ((px - this.cx) * (z * c.cp + c.H * c.sp)) / c.fl;
       return { x: c.px + c.fx * z + c.rx * l, y: c.py + c.fy * z + c.ry * l };
@@ -570,28 +610,28 @@ export class ArenaRenderer {
     if (this.tilted) {
       const { s, c, tz } = this.tp;
       const Z = this.zoom * tz;
-      const u = (py - ARENA.CY) / (Z * s);
+      const u = (py - SCR.CY) / (Z * s);
       const dy = c > 0 ? (ARENA.H * (Math.sqrt(Math.max(0, 1 + (2 * c * u) / ARENA.H)) - 1)) / c : u;
       return { x: this.camX + (px - this.cx) / (Z * (1 + (c * dy) / ARENA.H)), y: this.camY + dy };
     }
     const Z0 = this.zoom * this.fit;
-    return { x: this.camX + (px - this.cx) / Z0, y: this.camY + (py - ARENA.CY) / Z0 };
+    return { x: this.camX + (px - this.cx) / Z0, y: this.camY + (py - SCR.CY) / Z0 };
   }
   private toCanvas(x: number, y: number) {
     if (this.v3) {
       const q = this.proj3(x, y);
-      return q ? { x: q.x, y: q.y } : { x: this.cx, y: ARENA.CY };
+      return q ? { x: q.x, y: q.y } : { x: this.cx, y: SCR.CY };
     }
     if (this.tilted) {
       const q = this.proj(x, y);
       return { x: q.x, y: q.y };
     }
-    return { x: (x - this.camX) * this.zoom * this.fit + this.cx, y: (y - this.camY) * this.zoom * this.fit + ARENA.CY };
+    return { x: (x - this.camX) * this.zoom * this.fit + this.cx, y: (y - this.camY) * this.zoom * this.fit + SCR.CY };
   }
   /** The player-view cameras: stay on the player, and (unless the player is turning it) swing round to the nearest foe. */
   private followCam3(you: Fighter | undefined, dt: number, S: State | undefined) {
-    const tx = you ? you.x : ARENA.CX;
-    const ty = you ? you.y : ARENA.CY;
+    const tx = this.photo ? this.photo.x : you ? you.x : ARENA.CX;
+    const ty = this.photo ? this.photo.y : you ? you.y : ARENA.CY;
     if (!this.yawInit) {
       this.camX = tx;
       this.camY = ty;
@@ -602,7 +642,7 @@ export class ArenaRenderer {
     this.camX += (tx - this.camX) * k;
     this.camY += (ty - this.camY) * k;
     this.manualT = Math.max(0, this.manualT - dt);
-    if (you && S && this.autoTurn && this.manualT <= 0) {
+    if (you && S && this.autoTurn && this.manualT <= 0 && !this.photo) {
       let best: Fighter | null = null;
       let bd = 1e9;
       for (const f of S.fighters) {
@@ -627,11 +667,12 @@ export class ArenaRenderer {
     let ty = ARENA.CY;
     const { s, tz } = this.tp;
     const Ze = this.zoom * tz;
-    if (Ze > 1 && you) {
+    const focus = this.photo ?? you;
+    if (focus) {
       const hw = this.sw / (2 * Ze);
-      const hh = ARENA.H / (2 * Ze * s);
-      if (hw < ARENA.W / 2) tx = Math.max(hw, Math.min(ARENA.W - hw, you.x));
-      if (hh < ARENA.H / 2) ty = Math.max(hh, Math.min(ARENA.H - hh, you.y));
+      const hh = SCR.H / (2 * Ze * s);
+      if (hw < ARENA.W / 2) tx = Math.max(hw, Math.min(ARENA.W - hw, focus.x));
+      if (hh < ARENA.H / 2) ty = Math.max(hh, Math.min(ARENA.H - hh, focus.y));
     }
     const k = 1 - Math.exp(-dt * 9);
     this.camX += (tx - this.camX) * k;
@@ -668,7 +709,11 @@ export class ArenaRenderer {
       console.warn("[arena] no picture could be loaded for", id, urls);
     };
     urls.forEach((u, k) => {
-      const im = new Image();
+      let im = new Image();
+      // asked "for pixels" first, so a saved photo can include it; a server that does not allow that gets a second, plain request
+      const plain = !/^https?:/.test(u) ? false : u.startsWith(location.origin) ? false : true;
+      if (plain) im.crossOrigin = "anonymous";
+      let again = plain;
       im.onload = () => {
         got[k] = im;
         // do not wait for the better ones forever: after a moment, take what has arrived
@@ -685,6 +730,15 @@ export class ArenaRenderer {
         settle();
       };
       im.onerror = () => {
+        if (again) {
+          again = false;
+          const im2 = new Image();
+          im2.onload = im.onload;
+          im2.onerror = im.onerror;
+          im = im2;
+          im2.src = u;
+          return;
+        }
         got[k] = null;
         settle();
       };
@@ -715,8 +769,14 @@ export class ArenaRenderer {
     // the browser's own animated picture: needs no permission from the picture server, and plays by itself
     const viaImg = () => {
       const im = new Image();
+      im.crossOrigin = "anonymous";
       im.onload = () => this.anims.set(key, im);
-      im.onerror = fail;
+      im.onerror = () => {
+        const im2 = new Image();
+        im2.onload = () => this.anims.set(key, im2);
+        im2.onerror = fail;
+        im2.src = direct ?? url;
+      };
       im.src = direct ?? url;
     };
     const get = (u: string) => fetch(u).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))));
@@ -792,7 +852,20 @@ export class ArenaRenderer {
   }
 
   feed(events: Ev[], mine: Fighter | undefined) {
+    // in the player views what a hit or a cast throws out starts at body height, not on the floor
+    let from = this.parts.length;
+    let lift = 0;
+    const stamp = () => {
+      if (!lift || !this.v3) return;
+      for (let k = from; k < this.parts.length; k++) {
+        const p = this.parts[k]!;
+        if (p.z === undefined && p.kind !== "gring" && p.kind !== "crack") p.z = lift;
+      }
+    };
     for (const e of events) {
+      stamp();
+      from = this.parts.length;
+      lift = e.t === "hit" || e.t === "cast" ? 34 : 0;
       switch (e.t) {
         case "cast": {
           const ps = this.poses.get(e.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
@@ -1113,6 +1186,7 @@ export class ArenaRenderer {
           break;
       }
     }
+    stamp();
   }
 
   /** Extra art for particular moves, taken from how they look in the video: embers, cracks, waves, lightning from the sky. */
@@ -1321,7 +1395,7 @@ export class ArenaRenderer {
     this.dtr = dtReal;
     if (dtReal > 0 && dtReal < 0.5) {
       this.frameEma += (dtReal - this.frameEma) * 0.05;
-      if (this.t - this.qAt > 2 && !this.z && !this.tint) {
+      if (this.t - this.qAt > 2 && !this.z && !this.tint && !this.clean) {
         if (this.frameEma > 0.027 && this.q > 0.55) { this.q = Math.max(0.55, this.q - 0.15); this.qAt = this.t; this.resize(); }
         else if (this.frameEma < 0.019 && this.q < 1) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
       }
@@ -1369,7 +1443,7 @@ export class ArenaRenderer {
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     g.fillStyle = "#04070d";
-    g.fillRect(0, 0, this.sw, ARENA.H);
+    g.fillRect(0, 0, this.sw, SCR.H);
     const k = this.shakeT > 0 ? this.shake * (this.shakeT / 0.3) : 0;
     const zoom = this.zoom * this.fit * (1 + this.zoomPulse * 0.025);
     const T = this.tilted;
@@ -1381,7 +1455,7 @@ export class ArenaRenderer {
       this.drawBackdrop(g, S);
       G = this.layer("gc");
     } else {
-      g.translate(this.cx, ARENA.CY);
+      g.translate(this.cx, SCR.CY);
       g.scale(zoom, zoom);
       g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
     }
@@ -1456,8 +1530,11 @@ export class ArenaRenderer {
     }
 
     this.drawItems(G, S);
-    for (const hz of S.hazards ?? []) drawHazard(G, hz, this.t, hz.team !== (S.fighters.find((q) => q.isPlayer)?.team ?? 0));
+    const myTeam = S.fighters.find((q) => q.isPlayer)?.team ?? 0;
+    for (const hz of S.hazards ?? []) drawHazard(G, hz, this.t, hz.team !== myTeam, this.v3);
     this.drawZones(G, S);
+    // in the player views the spikes and rocks stand up out of the floor, in order with the fighters
+    if (this.v3) for (const hz of S.hazards ?? []) this.hazardPieces(G, hz);
     this.drawTelegraphs(G, S);
     this.drawWaves(G, dt);
     // what lies on the floor under a signature move; the parts that stand up are put among the Pokémon below
@@ -1477,15 +1554,43 @@ export class ArenaRenderer {
     // back to front: by height on the page from above, by distance from the camera in the player views
     const dk = (x: number, y: number) => (this.v3 ? -((x - this.c3.px) * this.c3.fx + (y - this.c3.py) * this.c3.fy) : y);
     for (const o of S.obs) if (o.hp > 0) things.push({ y: dk(o.x, o.y), draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), "o") });
-    for (const f of S.fighters) if ((f.alive || f.koT < 0.01) && !(this.view === "first" && f === you)) things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
+    for (const f of S.fighters) if ((f.alive || f.koT < 0.01) && !(this.view === "first" && f === you && !this.photo)) things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
     for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    // standing things (spikes, rocks, whirls) take their place among the fighters
+    for (const q of this.standQ) things.push({ y: dk(q.x, q.y), draw: () => this.at(g, q.x, q.y, "bb", () => q.draw(g)) });
+    this.standQ.length = 0;
+    // the wall of the storm in a royale, as the player views see it: a curtain standing on the ring
+    if (this.v3 && S.storm.on) {
+      const N = this.q > 0.85 ? 44 : this.q > 0.7 ? 32 : 22;
+      const w = ((Math.PI * 2 * S.storm.r) / N) * 1.3;
+      for (let i = 0; i < N; i++) {
+        const an = (i / N) * Math.PI * 2;
+        const sx = ARENA.CX + Math.cos(an) * S.storm.r;
+        const sy = ARENA.CY + Math.sin(an) * S.storm.r;
+        things.push({ y: dk(sx, sy), draw: () => this.at(g, sx, sy, "bb", () => this.drawStormPanel(g, sx, sy, w, i)) });
+      }
+    }
     things.sort((a, b) => a.y - b.y);
     for (const th of things) th.draw();
+    // whatever hangs or falls in the air, upright and on top of the fighters
+    for (const q of this.skyQ) this.at(g, q.x, q.y, "bb", () => q.draw(g));
+    this.skyQ.length = 0;
     this.drawProjs(g, S);
-    if (!T) this.drawAim(g);
+    if (!T && !this.clean) this.drawAim(g);
 
     // particles
     for (const p of this.parts) {
+      if (p.ox === undefined) {
+        // where it came from: in the player views a piece moves on the screen's own plane around this spot
+        p.ox = p.x;
+        p.oy = p.y;
+        p.oy2 = p.y2;
+      }
+      if (p.z !== undefined) {
+        p.z += (p.vz ?? 0) * dt;
+        p.vz = (p.vz ?? 0) + (p.gz ?? 0) * dt;
+        if (p.z < 0) { p.z = 0; p.vz = 0; }
+      }
       p.life -= dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -1501,13 +1606,21 @@ export class ArenaRenderer {
         p.y = p.y2 + Math.sin(p.rot ?? 0) * p.weight;
       }
       const a = Math.max(0, p.life / p.max);
+      if (this.clean && p.kind === "text") continue;
       if (T) {
         const q = this.proj(p.x, p.y);
         const sx = q.Z * q.f;
         const flat = p.kind === "gring" || p.kind === "crack";
         const mixed = p.kind === "streak" || p.kind === "arc" || p.kind === "ring";
         if (this.v3) {
-          if (!this.place3(g, p.x, p.y, flat ? "fl" : mixed ? "mix" : "bb")) continue; // behind the camera
+          // flat things lie where they are; everything else is upright and moves on the screen plane around its spawn spot
+          let ax = p.x;
+          let ay = p.y;
+          if (!flat && !mixed) {
+            if (p.kind === "orbit") ay = p.y - ((p.y2 ?? p.y) - (p.oy2 ?? p.y2 ?? p.y));
+            else { ax = p.ox ?? p.x; ay = p.oy ?? p.y; }
+          }
+          if (!this.place3(g, ax, ay, flat ? "fl" : mixed ? "mix" : "bb", flat ? 0 : (p.z ?? 0))) continue; // behind the camera
         } else {
           const q = this.proj(p.x, p.y);
           const sx = q.Z * q.f;
@@ -2064,61 +2177,61 @@ export class ArenaRenderer {
     g.restore();
 
     // screen tints (not shaken): the HUD-style layer keeps its 960x600 layout, centred on a wider screen
-    const ox = (this.sw - ARENA.W) / 2;
+    const ox = (this.sw - SCR.W) / 2;
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, ox * this.scale, 0);
     this.drawField(g, S);
-    if (this.v3) this.drawCross(g);
+    if (this.v3 && !this.clean) this.drawCross(g);
     this.drawZ(g);
     if (this.perfectT > 0) {
       const a = Math.min(1, this.perfectT / 0.8);
-      const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 140, ARENA.CX, ARENA.CY, 560);
+      const gr = g.createRadialGradient(SCR.CX, SCR.CY, 140, SCR.CX, SCR.CY, 560);
       gr.addColorStop(0, "rgba(80,200,255,0)");
       gr.addColorStop(1, `rgba(60,170,255,${0.4 * a})`);
       g.fillStyle = gr;
-      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+      g.fillRect(-(this.sw - SCR.W) / 2, 0, this.sw, SCR.H);
     }
     if (this.nightT > 0) {
       const k = Math.min(1, this.nightT / 0.4, (1.7 - this.nightT) / 0.3 + 0.0001);
-      const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 160, ARENA.CX, ARENA.CY, 620);
+      const gr = g.createRadialGradient(SCR.CX, SCR.CY, 160, SCR.CX, SCR.CY, 620);
       gr.addColorStop(0, `rgba(10,4,30,${0.12 * k})`);
       gr.addColorStop(1, `rgba(10,4,30,${0.5 * k})`);
       g.fillStyle = gr;
-      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+      g.fillRect(-(this.sw - SCR.W) / 2, 0, this.sw, SCR.H);
     }
     if (this.tint) {
       this.tint.t -= this.dtr;
       if (this.tint.t <= 0) this.tint = null;
       else {
         const ta = Math.min(0.34, this.tint.t * 0.9);
-        const tg = g.createRadialGradient(ARENA.CX, ARENA.CY, 80, ARENA.CX, ARENA.CY, 640);
+        const tg = g.createRadialGradient(SCR.CX, SCR.CY, 80, SCR.CX, SCR.CY, 640);
         tg.addColorStop(0, "rgba(0,0,0,0)");
         tg.addColorStop(1, withA(this.tint.c, ta));
         g.fillStyle = tg;
-        g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+        g.fillRect(-(this.sw - SCR.W) / 2, 0, this.sw, SCR.H);
       }
     }
     if (this.flashT > 0) {
       g.fillStyle = `rgba(255,255,255,${Math.min(0.4, this.flashT * 1.6)})`;
-      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+      g.fillRect(-(this.sw - SCR.W) / 2, 0, this.sw, SCR.H);
     }
     // the player is in danger: the edges glow red
-    if (you && you.alive && you.hp < you.maxHp * 0.25) {
+    if (!this.clean && you && you.alive && you.hp < you.maxHp * 0.25) {
       const pulse = 0.5 + Math.sin(this.t * 6) * 0.5;
-      const gr = g.createRadialGradient(ARENA.CX, ARENA.CY, 260, ARENA.CX, ARENA.CY, 580);
+      const gr = g.createRadialGradient(SCR.CX, SCR.CY, 260, SCR.CX, SCR.CY, 580);
       gr.addColorStop(0, "rgba(255,40,40,0)");
       gr.addColorStop(1, `rgba(255,40,40,${0.18 + pulse * 0.16})`);
       g.fillStyle = gr;
-      g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+      g.fillRect(-(this.sw - SCR.W) / 2, 0, this.sw, SCR.H);
     }
     // short notices sit in a small tag near the top, out of the way of the fight
-    let ty = ARENA.H * 0.125;
-    if (this.ultBanner) {
+    let ty = SCR.H * 0.125;
+    if (this.ultBanner && !this.clean) {
       const u = this.ultBanner;
       this.toastTag(g, u.sub, "ULTIMATE", u.color, 1.7 - u.t, u.t, ty);
       ty += 46;
     }
-    if (this.banner) {
+    if (this.banner && !this.clean) {
       this.toastTag(g, this.banner.text, "", this.banner.color, 1.6 - this.banner.t, this.banner.t, ty);
     }
     g.restore();
@@ -2262,7 +2375,7 @@ export class ArenaRenderer {
     const lw = label ? g.measureText(label).width : 0;
     const w = Math.max(tw, lw) + 34;
     const h = label ? 40 : 30;
-    const x = ARENA.CX - w / 2;
+    const x = SCR.CX - w / 2;
     const yy = y - (1 - inK) * 14;
     g.fillStyle = "rgba(6,10,22,.66)";
     g.beginPath();
@@ -2277,11 +2390,11 @@ export class ArenaRenderer {
     if (label) {
       g.font = "800 10px system-ui, sans-serif";
       g.fillStyle = "rgba(255,255,255,.7)";
-      g.fillText(label.split("").join(" "), ARENA.CX + 2, yy + 11);
+      g.fillText(label.split("").join(" "), SCR.CX + 2, yy + 11);
     }
     g.font = "800 19px system-ui, sans-serif";
     g.fillStyle = color;
-    g.fillText(title, ARENA.CX + 2, yy + (label ? 28 : h / 2 + 1));
+    g.fillText(title, SCR.CX + 2, yy + (label ? 28 : h / 2 + 1));
     g.restore();
   }
 
@@ -2328,8 +2441,8 @@ export class ArenaRenderer {
   /** The Z-Move cinematic: the screen darkens, light rays turn from the caster, and the move's name sweeps in. */
   /** A small aiming mark in the middle of the screen for the player views (moves fire where the camera looks / at the nearest foe). */
   private drawCross(g: CanvasRenderingContext2D) {
-    const x = ARENA.CX;
-    const y = this.view === "first" ? ARENA.CY - 18 : ARENA.CY - 30;
+    const x = SCR.CX;
+    const y = this.view === "first" ? SCR.CY - 18 : SCR.CY - 30;
     g.save();
     g.lineCap = "round";
     for (const [col, w] of [["rgba(0,0,0,.45)", 4], ["rgba(255,255,255,.85)", 2]] as const) {
@@ -2357,7 +2470,7 @@ export class ArenaRenderer {
     const at = this.toCanvas(z.x, z.y);
     g.save();
     g.fillStyle = `rgba(0,0,8,${0.72 * a})`;
-    g.fillRect(-(this.sw - ARENA.W) / 2, 0, this.sw, ARENA.H);
+    g.fillRect(-(this.sw - SCR.W) / 2, 0, this.sw, SCR.H);
     g.restore();
     // each type has its own show; Normal keeps the turning rays
     g.save();
@@ -2399,8 +2512,8 @@ export class ArenaRenderer {
     // letterbox bars and the name
     const bar = 70 * Math.min(1, z.t / 0.2) * outA;
     g.fillStyle = "#000";
-    g.fillRect(0, 0, ARENA.W, bar);
-    g.fillRect(0, ARENA.H - bar, ARENA.W, bar);
+    g.fillRect(0, 0, SCR.W, bar);
+    g.fillRect(0, SCR.H - bar, SCR.W, bar);
     // the name sits in the top bar, so the middle stays clear for the show
     const slide = (1 - Math.min(1, z.t / 0.35)) * 300;
     g.save();
@@ -2409,13 +2522,13 @@ export class ArenaRenderer {
     g.textBaseline = "middle";
     g.font = "800 12px system-ui, sans-serif";
     g.fillStyle = "#ffd54a";
-    g.fillText("Z - M O V E", ARENA.CX - slide, bar * 0.28);
+    g.fillText("Z - M O V E", SCR.CX - slide, bar * 0.28);
     g.font = "italic 900 26px system-ui, sans-serif";
     g.lineWidth = 5;
     g.strokeStyle = "rgba(0,0,0,.8)";
-    g.strokeText(z.name, ARENA.CX + slide, bar * 0.66);
+    g.strokeText(z.name, SCR.CX + slide, bar * 0.66);
     g.fillStyle = "#fff";
-    g.fillText(z.name, ARENA.CX + slide, bar * 0.66);
+    g.fillText(z.name, SCR.CX + slide, bar * 0.66);
     g.restore();
   }
 
@@ -2424,40 +2537,40 @@ export class ArenaRenderer {
     if (S.field === "none") return;
     g.save();
     if (S.field === "sun") {
-      const gr = g.createRadialGradient(ARENA.W * 0.9, 0, 20, ARENA.W * 0.9, 0, 760);
+      const gr = g.createRadialGradient(SCR.W * 0.9, 0, 20, SCR.W * 0.9, 0, 760);
       gr.addColorStop(0, "rgba(255,210,90,.34)");
       gr.addColorStop(1, "rgba(255,180,60,.05)");
       g.fillStyle = gr;
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(0, 0, SCR.W, SCR.H);
     } else if (S.field === "rain") {
       g.fillStyle = "rgba(40,70,130,.18)";
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(0, 0, SCR.W, SCR.H);
       g.strokeStyle = "rgba(190,215,255,.45)";
       g.lineWidth = 1.5;
       g.beginPath();
       for (let i = 0; i < 70; i++) {
-        const x = (i * 97 + this.t * 140) % (ARENA.W + 80) - 40;
-        const y = (i * 53 + this.t * 900) % (ARENA.H + 40) - 20;
+        const x = (i * 97 + this.t * 140) % (SCR.W + 80) - 40;
+        const y = (i * 53 + this.t * 900) % (SCR.H + 40) - 20;
         g.moveTo(x, y);
         g.lineTo(x - 7, y + 20);
       }
       g.stroke();
     } else if (S.field === "sand") {
       g.fillStyle = "rgba(190,140,70,.2)";
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(0, 0, SCR.W, SCR.H);
       g.fillStyle = "rgba(235,200,140,.5)";
       for (let i = 0; i < 90; i++) {
-        const x = (i * 131 + this.t * 420) % (ARENA.W + 40) - 20;
-        const y = (i * 71 + Math.sin(this.t * 2 + i) * 14) % ARENA.H;
+        const x = (i * 131 + this.t * 420) % (SCR.W + 40) - 20;
+        const y = (i * 71 + Math.sin(this.t * 2 + i) * 14) % SCR.H;
         g.fillRect(x, y, 3, 2);
       }
     } else {
       g.fillStyle = "rgba(170,220,255,.14)";
-      g.fillRect(0, 0, ARENA.W, ARENA.H);
+      g.fillRect(0, 0, SCR.W, SCR.H);
       g.fillStyle = "rgba(240,250,255,.8)";
       for (let i = 0; i < 80; i++) {
-        const x = (i * 113 + Math.sin(this.t + i) * 22 + this.t * 30) % ARENA.W;
-        const y = (i * 61 + this.t * 120) % (ARENA.H + 20);
+        const x = (i * 113 + Math.sin(this.t + i) * 22 + this.t * 30) % SCR.W;
+        const y = (i * 61 + this.t * 120) % (SCR.H + 20);
         g.beginPath();
         g.arc(x, y, 1.6 + (i % 3) * 0.7, 0, Math.PI * 2);
         g.fill();
@@ -2466,7 +2579,23 @@ export class ArenaRenderer {
     g.restore();
   }
 
+  /** Things that fall or hang in the air above a spot (meteors, falling blasts, a void). On the floor layer they would be
+   *  flattened and turned with the camera, so they would come in from the side: in the player views they are queued and
+   *  drawn upright on the main picture instead. */
+  private skyQ: { x: number; y: number; draw: (g: CanvasRenderingContext2D) => void }[] = [];
+  /** Things that stand up out of the floor (a whirl, spikes, rocks): drawn upright, in order with the fighters, so they can be walked behind and in front of. */
+  private standQ: { x: number; y: number; draw: (g: CanvasRenderingContext2D) => void }[] = [];
+  private stand(g: CanvasRenderingContext2D, x: number, y: number, draw: (g: CanvasRenderingContext2D) => void, always = false) {
+    if (this.v3 || always) this.standQ.push({ x, y, draw });
+    else draw(g);
+  }
+  private sky(g: CanvasRenderingContext2D, x: number, y: number, draw: (g: CanvasRenderingContext2D) => void) {
+    if (this.v3) this.skyQ.push({ x, y, draw });
+    else draw(g);
+  }
   private drawZones(g: CanvasRenderingContext2D, S: State) {
+    this.skyQ.length = 0;
+    this.standQ.length = 0;
     for (const z of S.zones) {
       const c = col(z.type);
       if (z.struck && z.team !== -1 && !SPEC_ART.has(z.mv.id) && !this.vfxSeen.has(z.id)) {
@@ -2486,9 +2615,15 @@ export class ArenaRenderer {
             z.player ? c : sky ? `rgba(255,${210 + pulse * 40},60,.95)` : `rgba(255,${90 + pulse * 80},70,.9)`,
             z.player ? `${c}33` : sky ? `rgba(255,225,70,${0.1 + prog * 0.22})` : `rgba(255,70,60,${0.1 + prog * 0.22})`,
             typeTex(z.type), this.t, z.id);
-          if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.orbFall(g, z, prog);
-          if (z.team !== -1 && SPEC_ART.has(z.mv.id)) specWindup(g, z.mv.id, z, prog, this.t);
-          if ((z.mv.fx ?? z.mv.id) === "fireblast") {
+          if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.sky(g, z.x, z.y, (g) => this.orbFall(g, z, prog));
+          if (z.team !== -1 && SPEC_ART.has(z.mv.id)) {
+            if (this.v3 && z.mv.id === "rockwrecker") {
+              // the stone falls through the air, so it is drawn upright; only its shadow lies on the floor
+              specWindup(g, z.mv.id, z, prog, this.t, "ground");
+              this.sky(g, z.x, z.y, (g) => specWindup(g, z.mv.id, z, prog, this.t, "air"));
+            } else specWindup(g, z.mv.id, z, prog, this.t);
+          }
+          if ((z.mv.fx ?? z.mv.id) === "fireblast") this.sky(g, z.x, z.y, (g) => {
             // the big blast comes down as a burning "大" of five flames, as in the video
             const sy = z.y - (1 - prog) * 320 - 20;
             const sz = z.r * (0.6 + prog * 0.5);
@@ -2513,8 +2648,8 @@ export class ArenaRenderer {
             }
             g.restore();
             if (Math.random() < 0.6) this.parts.push({ kind: "dot", x: z.x + rnd(-sz, sz), y: sy + rnd(-sz, sz), vx: rnd(-30, 30), vy: rnd(-60, 20), g: -40, life: 0.45, max: 0.45, size: rnd(2, 4.5), grow: 0, color: Math.random() < 0.5 ? "#ffd84d" : "#ff7a2a" });
-          }
-          if (z.type === "Dark" && z.mv.kind === "lob") {
+          });
+          if (z.type === "Dark" && z.mv.kind === "lob") this.sky(g, z.x, z.y, (g) => {
             // a void opens: a black sphere with a violet rim and cracks running out of it
             const rr = z.r * (0.35 + prog * 0.65);
             g.save();
@@ -2539,9 +2674,9 @@ export class ArenaRenderer {
               g.stroke();
             }
             g.restore();
-          }
+          });
           // meteors, boulders and lightning fall toward the circle before they land
-          if ((z.mv.fx ?? z.mv.id) === "dracometeor" || (z.mv.fx ?? z.mv.id) === "rockslide") {
+          if ((z.mv.fx ?? z.mv.id) === "dracometeor" || (z.mv.fx ?? z.mv.id) === "rockslide") this.sky(g, z.x, z.y, (g) => {
             for (let i = 0; i < 5; i++) {
               const mx = z.x + (i - 2) * z.r * 0.42;
               const my = z.y - (1 - prog) * 420 - i * 34 + 10;
@@ -2578,7 +2713,7 @@ export class ArenaRenderer {
                 g.fill();
               }
             }
-          }
+          });
           g.fillStyle = z.player ? `${c}55` : z.team === -1 ? "rgba(255,225,70,.4)" : "rgba(255,90,70,.35)";
           const fk = Math.max(0.05, Math.min(1, prog));
           smoothPath(g, organic(z.x, z.y, z.r * fk, z.r * fk, z.id + 9, 0.16, this.t * 1.1, 30));
@@ -2601,7 +2736,8 @@ export class ArenaRenderer {
         }
         g.restore();
       } else if (z.mv.linger && z.shape === "circle") {
-        this.drawWhirl(g, z);
+        if (this.v3) this.stand(g, z.x, z.y, (g) => this.drawWhirl(g, z));
+        else this.drawWhirl(g, z);
       } else {
         // the strike itself
         const a = Math.max(0, z.life / (z.shape === "line" ? 0.55 : 0.35));
@@ -2925,6 +3061,154 @@ export class ArenaRenderer {
       if (Math.random() < 0.8) this.parts.push({ kind: "dot", x: z.x + Math.cos(an) * R * 0.9, y: z.y + Math.sin(an) * R * 0.3 - Math.random() * H, vx: Math.cos(an + 1.6) * 120, vy: rnd(-90, -20), g: 160, life: 0.6, max: 0.6, size: rnd(1.8, 3.2), grow: 0, color: Math.random() < 0.5 ? "#d9bd8a" : "#8a6a3e" });
       if (Math.random() < 0.25) this.parts.push({ kind: "smoke", x: z.x + rnd(-R * 0.8, R * 0.8), y: z.y + rnd(-6, 6), vx: rnd(-40, 40), vy: -30, g: 0, life: 0.8, max: 0.8, size: rnd(7, 12), grow: 20, color: "#c9ae80" });
     }
+  }
+
+  /** One upright panel of the storm's wall: purple smoke thick at the foot and thin at the top, with streaks running up it. */
+  private drawStormPanel(g: CanvasRenderingContext2D, x: number, y: number, w: number, i: number) {
+    const H = 250;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    const gr = g.createLinearGradient(0, y, 0, y - H);
+    gr.addColorStop(0, "rgba(190,100,255,.5)");
+    gr.addColorStop(0.45, "rgba(140,60,210,.22)");
+    gr.addColorStop(1, "rgba(100,40,170,0)");
+    g.fillStyle = gr;
+    g.fillRect(x - w / 2, y - H, w, H);
+    g.strokeStyle = "rgba(230,170,255,.35)";
+    g.lineWidth = 1.5;
+    for (let k = 0; k < 3; k++) {
+      const u = (hsh(i * 3 + k) + this.t * 0.18 * (1 + k * 0.3)) % 1;
+      const lx = x + (hsh(i * 5 + k + 9) - 0.5) * w * 0.9;
+      g.globalAlpha = 0.5 * (1 - u);
+      g.beginPath();
+      g.moveTo(lx, y - u * H * 0.2);
+      g.lineTo(lx + Math.sin(this.t + k) * 4, y - u * H);
+      g.stroke();
+    }
+    g.globalAlpha = 0.55;
+    g.fillStyle = "rgba(220,150,255,.8)";
+    g.fillRect(x - w / 2, y - 2, w, 3);
+    g.restore();
+  }
+
+  /** The spikes or rocks of a hazard standing up out of the floor (the player views): they rise when it lands and sink as it fades. */
+  private hazardPieces(_g: CanvasRenderingContext2D, h: State["hazards"][number]) {
+    const id = h.kind === "toxic" ? "toxicspikes" : h.kind === "rocks" ? "stealthrock" : "spikes";
+    const age = h.max - h.life;
+    const fade = Math.max(0, Math.min(1, h.life / 1.2));
+    if (fade <= 0) return;
+    const N = id === "stealthrock" ? 6 : id === "toxicspikes" ? 8 : 9;
+    for (let i = 0; i < N; i++) {
+      const an = i * 2.399963 + h.id * 1.3;
+      const d = h.r * 0.86 * Math.sqrt((i + 0.6) / N);
+      const ix = h.x + Math.cos(an) * d;
+      const iy = h.y + Math.sin(an) * d;
+      const t = Math.max(0, Math.min(1, (age - i * 0.035) / 0.28));
+      const rise = (1 - Math.pow(1 - t, 3)) * fade;
+      const alpha = Math.min(1, fade * 1.4);
+      this.standQ.push({ x: ix, y: iy, draw: (g) => this.drawHazardItem(g, id, ix, iy, i, rise, alpha) });
+    }
+  }
+
+  /** One spike cluster or one floating rock, its foot at (x, y) and its top towards the top of the screen. */
+  private drawHazardItem(g: CanvasRenderingContext2D, id: string, x: number, y: number, i: number, rise: number, alpha: number) {
+    const r = hsh(i * 7.3 + 1);
+    g.save();
+    g.globalAlpha = alpha;
+    if (id === "stealthrock") {
+      // an angular stone hanging just above the floor, turning a little, with a faint warm glow round it
+      const R = 13 + r * 8;
+      const lift = (11 + (i % 3) * 5 + Math.sin(this.t * 1.7 + i * 1.9) * 3) * rise;
+      const cy = y - lift - R * 0.8 * rise;
+      g.fillStyle = `rgba(0,0,0,${0.3 * rise})`;
+      g.beginPath();
+      g.ellipse(x, y, R * 0.9, R * 0.3, 0, 0, Math.PI * 2);
+      g.fill();
+      const gl = g.createRadialGradient(x, cy, R * 0.4, x, cy, R * 1.9);
+      gl.addColorStop(0, `rgba(240,200,120,${0.2 + 0.08 * Math.sin(this.t * 3 + i)})`);
+      gl.addColorStop(1, "rgba(240,200,120,0)");
+      g.save();
+      g.globalCompositeOperation = "lighter";
+      g.fillStyle = gl;
+      g.beginPath();
+      g.arc(x, cy, R * 1.9, 0, Math.PI * 2);
+      g.fill();
+      g.restore();
+      const pts: [number, number][] = [];
+      for (let k = 0; k < 8; k++) {
+        const an = (k / 8) * Math.PI * 2 + i + this.t * 0.25;
+        const rr = R * (0.7 + 0.5 * hsh(i * 13 + k)) * (k === 0 ? 1.3 : 1);
+        pts.push([x + Math.cos(an) * rr * 0.9, cy + Math.sin(an) * rr]);
+      }
+      const rg = g.createLinearGradient(x - R, cy - R, x + R, cy + R);
+      rg.addColorStop(0, "#e2cfa6");
+      rg.addColorStop(0.5, "#8a7352");
+      rg.addColorStop(1, "#3c2f20");
+      g.fillStyle = rg;
+      g.strokeStyle = "#2a2016";
+      g.lineWidth = 1.6;
+      g.beginPath();
+      pts.forEach(([px, py], k) => (k ? g.lineTo(px, py) : g.moveTo(px, py)));
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.strokeStyle = "rgba(30,20,10,.35)";
+      g.lineWidth = 1;
+      g.beginPath();
+      for (const k of [1, 3, 5]) { g.moveTo(x, cy); g.lineTo(pts[k]![0], pts[k]![1]); }
+      g.stroke();
+      g.fillStyle = "rgba(255,255,255,.7)";
+      g.beginPath();
+      g.arc(x - R * 0.3, cy - R * 0.35, R * 0.1, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      // three spikes in a cluster: a tall one and two leaning ones, steel (or glassy purple for the poisoned kind)
+      const toxic = id === "toxicspikes";
+      const S = 9 + r * 5;
+      g.fillStyle = "rgba(0,0,0,.3)";
+      g.beginPath();
+      g.ellipse(x + 1, y + 1, S * 0.95, S * 0.3, 0, 0, Math.PI * 2);
+      g.fill();
+      for (const [j, hk] of [[-1, 0.7], [1, 0.78], [0, 1]] as const) {
+        const bx = x + j * S * 0.55;
+        const h = S * (1.9 + 0.5 * hsh(i * 5 + j + 3)) * hk * rise;
+        const w = S * 0.26;
+        const tx = bx + j * S * 0.28 + (hsh(i * 3 + j) - 0.5) * S * 0.3;
+        const sg = g.createLinearGradient(bx - w, y, bx + w, y);
+        if (toxic) { sg.addColorStop(0, "#f0c8ff"); sg.addColorStop(0.5, "#b259d6"); sg.addColorStop(1, "#4d2266"); }
+        else { sg.addColorStop(0, "#f4f7fb"); sg.addColorStop(0.5, "#9aa6b5"); sg.addColorStop(1, "#444c58"); }
+        g.fillStyle = sg;
+        g.strokeStyle = toxic ? "#2d1040" : "#2a3038";
+        g.lineWidth = 1.3;
+        g.beginPath();
+        g.moveTo(bx - w, y);
+        g.lineTo(tx, y - h);
+        g.lineTo(bx + w, y);
+        g.closePath();
+        g.fill();
+        g.stroke();
+        g.strokeStyle = "rgba(255,255,255,.6)";
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(bx - w * 0.4, y - 1);
+        g.lineTo(tx, y - h);
+        g.stroke();
+        if (toxic && rise > 0.5) {
+          // a bead of poison at the tip, glowing
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          const bg = g.createRadialGradient(tx, y - h, 0, tx, y - h, 6);
+          bg.addColorStop(0, "rgba(230,170,255,.9)");
+          bg.addColorStop(1, "rgba(180,90,220,0)");
+          g.fillStyle = bg;
+          g.beginPath();
+          g.arc(tx, y - h, 6, 0, Math.PI * 2);
+          g.fill();
+          g.restore();
+        }
+      }
+    }
+    g.restore();
   }
 
   /** A tornado of fire, water or sand that stays where it landed: stacked turning rings that widen going up. */
@@ -4154,7 +4438,16 @@ export class ArenaRenderer {
         continue;
       }
       const c = col(p.type);
-      this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t));
+      if (this.v3) {
+        // a shot flies at body height: a shadow runs along the floor under it
+        this.at(g, p.x, p.y, "fl", () => {
+          g.fillStyle = "rgba(0,0,0,.28)";
+          g.beginPath();
+          g.ellipse(p.x, p.y, 9, 9, 0, 0, Math.PI * 2);
+          g.fill();
+        });
+      }
+      this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t), "p", this.v3 ? 32 : 0);
       if (!specShotTrail(p, this.sctx)) {
         const tmd = MOVES[p.mv];
         if (tmd && !OWN_SHOT_ART.has(p.mv)) vfxTrail(tmd, p, this.sctx);
@@ -4165,7 +4458,7 @@ export class ArenaRenderer {
       const f = S.fighters.find((x) => x.id === owner);
       if (!f) continue;
       if (!this.v3 || !this.tilted) {
-        this.at(g, f.x, f.y, "fl", () => this.drawStream(g, f, list));
+        this.at(g, f.x, f.y, "fl", () => this.drawStream(g, f, list), "p", this.v3 ? 26 : 0);
         continue;
       }
       // seen from behind or through the eyes, a jet running away from the camera must shrink with distance: draw it in short
@@ -4198,7 +4491,7 @@ export class ArenaRenderer {
           g.clip();
           this.drawStream(g, f, list);
           g.restore();
-        });
+        }, "p", 26);
       }
     }
   }
@@ -5157,7 +5450,7 @@ export class ArenaRenderer {
       if (f.status.par > 0 && Math.random() < 0.3) this.parts.push({ kind: "streak", x: f.x + rnd(-f.r, f.r), y: f.y - f.r, vx: rnd(-90, 90), vy: rnd(-90, 90), g: 0, life: 0.15, max: 0.15, size: 6, grow: 0, color: "#ffe14d" });
       if (f.heal && Math.random() < 0.4) this.parts.push({ kind: "text", x: f.x + rnd(-f.r, f.r), y: f.y, vx: 0, vy: -50, g: 0, life: 0.8, max: 0.8, size: 13, grow: 0, color: "#6df08a", text: "+", weight: 800 });
       // health bar over foes (the player's is in the HUD)
-      if (!isYou) {
+      if (!isYou && !this.clean) {
         const bw = Math.max(44, f.r * 2.6);
         const x = f.x - bw / 2;
         const y = f.y - f.r * 2.5 - 4;
@@ -5176,7 +5469,7 @@ export class ArenaRenderer {
         }
       }
       // your running combo floats over your own head
-      if (isYou && f.combo.n > 1) {
+      if (isYou && f.combo.n > 1 && !this.clean) {
         g.save();
         g.font = "900 15px system-ui, sans-serif";
         g.textAlign = "center";
@@ -5190,7 +5483,7 @@ export class ArenaRenderer {
         g.restore();
       }
       // a member's name above their Pokémon (multiplayer): their own one is marked with an arrow
-      if (f.name) {
+      if (f.name && !this.clean) {
         const base = f.y - f.r * 2.5 - (isYou ? 4 : 10);
         const label = isYou ? `▼ ${f.name}` : f.name;
         g.save();

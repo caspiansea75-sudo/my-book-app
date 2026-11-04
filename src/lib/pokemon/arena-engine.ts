@@ -3,11 +3,13 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
-import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, movePool, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 
-export const W = 960;
-export const H = 600;
+/** The arena is this many times the size the first one was (960 x 600): more room to run, circle and dodge. */
+const K = 1.5;
+export const W = 960 * K;
+export const H = 600 * K;
 const MARGIN = 46;
 const CX = W / 2;
 const CY = H / 2;
@@ -57,6 +59,8 @@ export type Fighter = {
   place?: number;
   /** Training Ground practice dummy: stands still, wanders, or fights back. */
   dummy?: "idle" | "walk" | "fight";
+  /** Training Ground: which dummy slot this fighter is. */
+  dumKey?: number;
   cast: { slot: number; t: number; total: number; dx: number; dy: number; tx: number; ty: number } | null;
   channel: { slot: number; t: number; tick: number; dx: number; dy: number } | null;
   dash: { t: number; total: number; dx: number; dy: number; dist: number; mv: MoveDef; hit: Set<number>; under?: boolean } | null;
@@ -247,13 +251,27 @@ export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, fa
 
 export type Hazard = { id: number; owner: number; team: number; kind: "spikes" | "toxic" | "rocks"; x: number; y: number; r: number; life: number; max: number; hit: Record<number, number> };
 
+/** One practice dummy: which Pokémon, how it behaves, which gimmick it carries and which four moves it knows. */
+export type DummyCfg = {
+  key: number;
+  species: string;
+  mode: "idle" | "walk" | "fight";
+  gimmick: GimmickKind | "none";
+  mega: string;
+  tera: string;
+  /** null = the Pokémon's own four moves */
+  moves: string[] | null;
+  respawn: number;
+};
+
 export type Train = {
-  dummy: "idle" | "walk" | "fight";
-  /** the dummy is put back to full HP whenever it gets low (so it never goes down) */
+  /** the practice dummies (up to five) */
+  dums: DummyCfg[];
+  nextKey: number;
+  /** the dummies are put back to full HP whenever they get low (so they never go down) */
   immortal: boolean;
   /** the player's move cooldowns and gauge are always ready */
   nocd: boolean;
-  species: string;
   last: number;
   total: number;
   hits: number;
@@ -262,7 +280,6 @@ export type Train = {
   best: number;
   start: number;
   lastT: number;
-  respawn: number;
 };
 
 export type State = {
@@ -390,7 +407,8 @@ export function buildStage(S: State, kind: StageKind) {
     S.pools.every((h) => !inPatch(h, x, y, r + 20)) &&
     S.fighters.every((f) => !f.alive || len(f.x - x, f.y - y) > f.r + r + 60);
   const scatter = (k: ObsKind, n: number) => {
-    for (let i = 0; i < n; i++) {
+    // a bigger floor gets more things standing on it (a little thinner than before, so there is still room to run)
+    for (let i = 0; i < Math.round(n * K * K * 0.75); i++) {
       for (let t = 0; t < 30; t++) {
         const x = rnd(MARGIN + 40, W - MARGIN - 40);
         const y = rnd(MARGIN + 40, H - MARGIN - 40);
@@ -404,7 +422,7 @@ export function buildStage(S: State, kind: StageKind) {
   const patch = (list: Patch[], rx: number, ry: number, x: number, y: number) => list.push({ id: S.nextId++, x, y, rx, ry });
   switch (kind) {
     case "grass":
-      patch(S.pools, rnd(80, 110), rnd(55, 75), rnd(300, 660), rnd(190, 410));
+      patch(S.pools, rnd(80, 110) * K, rnd(55, 75) * K, rnd(300, 660) * K, rnd(190, 410) * K);
       scatter("tree", 6);
       scatter("crate", 4);
       scatter("rock", 2);
@@ -419,7 +437,7 @@ export function buildStage(S: State, kind: StageKind) {
       scatter("rock", 5);
       break;
     case "crystal":
-      patch(S.holes, 190, 105, CX, CY);
+      patch(S.holes, 190 * K, 105 * K, CX, CY);
       scatter("crystal", 8);
       scatter("pillar", 1);
       break;
@@ -430,19 +448,19 @@ export function buildStage(S: State, kind: StageKind) {
       scatter("crate", 3);
       break;
     case "lava":
-      patch(S.holes, 120, 70, CX, CY);
+      patch(S.holes, 120 * K, 70 * K, CX, CY);
       S.vents = [
-        { x: 250, y: 150 }, { x: W - 250, y: 150 }, { x: 250, y: H - 150 }, { x: W - 250, y: H - 150 },
-        { x: CX, y: 120 }, { x: CX, y: H - 120 },
+        { x: 250 * K, y: 150 * K }, { x: W - 250 * K, y: 150 * K }, { x: 250 * K, y: H - 150 * K }, { x: W - 250 * K, y: H - 150 * K },
+        { x: CX, y: 120 * K }, { x: CX, y: H - 120 * K },
       ];
       scatter("basalt", 5);
       scatter("rock", 2);
       scatter("crate", 3);
       break;
     case "coast": {
-      const a = rnd(150, 190), b = rnd(80, 100);
-      S.pools.push({ id: S.nextId++, x: 250, y: H - 190, rx: a, ry: b, base: a });
-      S.pools.push({ id: S.nextId++, x: W - 250, y: 190, rx: a, ry: b, base: a });
+      const a = rnd(150, 190) * K, b = rnd(80, 100) * K;
+      S.pools.push({ id: S.nextId++, x: 250 * K, y: H - 190 * K, rx: a, ry: b, base: a });
+      S.pools.push({ id: S.nextId++, x: W - 250 * K, y: 190 * K, rx: a, ry: b, base: a });
       scatter("palm", 4);
       scatter("crate", 4);
       scatter("rock", 3);
@@ -616,13 +634,13 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     field: "none",
     perks: [],
     taken: [],
-    storm: { r: 520, on: false },
+    storm: { r: 520 * K, on: false },
     winner: false,
     place: 0,
     perfects: 0,
     easy: 1,
   };
-  const player = makeFighter(S, speciesOf(speciesId), 0, true, mode === "royale" ? CX : 230, mode === "royale" ? CY + 150 : CY);
+  const player = makeFighter(S, speciesOf(speciesId), 0, true, mode === "royale" ? CX : 230 * K, mode === "royale" ? CY + 150 * K : CY);
   player.loadout = cleanMoves(speciesId, opts.moves);
   player.auto = !!opts.auto;
   player.cpuGimmick = !!opts.auto; // an auto-piloted player also uses its gimmick
@@ -633,8 +651,8 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   S.fighters.push(player);
   buildStage(S, mode === "royale" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : mode === "training" ? opts.arena ?? "grass" : "grass");
   if (mode === "training") {
-    S.train = { dummy: "idle", immortal: true, nocd: true, species: "", last: 0, total: 0, hits: 0, dps: 0, best: 0, start: 0, lastT: -99, respawn: 0 };
-    spawnDummy(S, opts.dummy);
+    S.train = { dums: [], nextKey: 1, immortal: true, nocd: true, last: 0, total: 0, hits: 0, dps: 0, best: 0, start: 0, lastT: -99 };
+    trainAdd(S, opts.dummy);
     S.wave = 1;
   }
   if (mode === "royale") {
@@ -642,7 +660,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     for (let i = 0; i < 4; i++) {
       const sp = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
       const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const cpu = makeFighter(S, sp, i + 1, false, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200, { hp: 0.95, dmg: 0.95 });
+      const cpu = makeFighter(S, sp, i + 1, false, CX + Math.cos(a) * 300 * K, CY + Math.sin(a) * 200 * K, { hp: 0.95, dmg: 0.95 });
       // in a royale everybody brings a gimmick
       const kinds = gimmicksFor(sp.id);
       cpu.cpuGimmick = true;
@@ -654,37 +672,170 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     }
     unstick(S);
     S.wave = 1;
-    S.storm = { r: 520, on: false };
+    S.storm = { r: 520 * K, on: false };
     const kinds: FieldKind[] = ["none", "sun", "rain", "sand", "hail"];
     S.field = kinds[Math.floor(Math.random() * kinds.length)]!;
   }
   return S;
 }
 
-/** (Re)place the practice dummy on the right-hand side, at full health. */
+export const MAX_DUMMIES = 5;
+
+/** Every move a Pokémon can be given in the Training Ground: what it learns, what its types allow (signature moves too), or all of them. */
+export function trainMovePool(speciesId: string, everything = false): string[] {
+  const sp = ROSTER.find((x) => x.id === speciesId);
+  if (!sp) return [];
+  if (everything) return Object.keys(MOVES);
+  const set = new Set<string>([...movePool(speciesId), ...sp.moves]);
+  for (const k of Object.keys(MOVES)) if (sp.types.includes(MOVES[k]!.type)) set.add(k);
+  return [...set].filter((m) => MOVES[m]);
+}
+
+/** Where dummy number `i` stands: the middle of the right-hand side first, then above and below it. */
+function dummySpot(i: number): [number, number] {
+  const row = Math.ceil(i / 2) * (i % 2 ? -1 : 1);
+  return [CX + (190 + (i > 2 ? 90 : 0)) * K, CY + row * 120 * K];
+}
+
+/** Build the fighter for one dummy and put it in the arena (replacing the one with the same key). */
+function placeDummy(S: State, cfg: DummyCfg, at?: { x: number; y: number }) {
+  const T = S.train!;
+  const sp = ROSTER.find((x) => x.id === cfg.species) ?? ROSTER[0]!;
+  const i = Math.max(0, T.dums.indexOf(cfg));
+  const [sx, sy] = dummySpot(i);
+  S.fighters = S.fighters.filter((f) => f.isPlayer || f.dumKey !== cfg.key);
+  const d = makeFighter(S, sp, 1, false, at?.x ?? sx, at?.y ?? sy);
+  d.loadout = cleanMoves(sp.id, null);
+  if (cfg.moves && cfg.moves.length === 4 && cfg.moves.every((m) => MOVES[m])) d.loadout = [...cfg.moves];
+  d.dummy = cfg.mode;
+  d.dumKey = cfg.key;
+  if (cfg.gimmick !== "none") {
+    d.gimmick = cfg.gimmick;
+    d.megaForm = (MEGAS[sp.id] ?? []).find((m) => m.id === cfg.mega) ?? MEGAS[sp.id]?.[0] ?? null;
+    if (d.gimmick === "mega" && !d.megaForm) d.gimmick = "awaken";
+    if (TERA_TYPES.includes(cfg.tera)) d.teraType = cfg.tera;
+    d.cpuGimmick = cfg.mode === "fight";
+  }
+  cfg.respawn = 0;
+  S.fighters.push(d);
+  return d;
+}
+
+const dummyOf = (S: State, key: number) => S.fighters.find((f) => !f.isPlayer && f.dumKey === key);
+
+/** Add a practice dummy (at most five). */
+export function trainAdd(S: State, speciesId?: string) {
+  const T = S.train;
+  if (!T || T.dums.length >= MAX_DUMMIES) return;
+  const me = S.fighters.find((f) => f.isPlayer);
+  const used = new Set(T.dums.map((d) => d.species));
+  const sp = ROSTER.find((x) => x.id === speciesId) ?? ROSTER.find((x) => x.id === "snorlax" && !used.has(x.id) && x.id !== me?.sp.id) ?? ROSTER.find((x) => !used.has(x.id) && x.id !== me?.sp.id) ?? ROSTER[0]!;
+  const cfg: DummyCfg = { key: T.nextKey++, species: sp.id, mode: "idle", gimmick: "none", mega: MEGAS[sp.id]?.[0]?.id ?? "", tera: TERA_TYPES[0]!, moves: null, respawn: 0 };
+  T.dums.push(cfg);
+  placeDummy(S, cfg);
+}
+
+/** Take a dummy away (at least one stays). */
+export function trainRemove(S: State, key: number) {
+  const T = S.train;
+  if (!T || T.dums.length <= 1) return;
+  T.dums = T.dums.filter((d) => d.key !== key);
+  S.fighters = S.fighters.filter((f) => f.isPlayer || f.dumKey !== key);
+}
+
+/** Change what one dummy is: its Pokémon, behaviour, gimmick or moves. It is rebuilt where it stands. */
+export function trainDummy(S: State, key: number, patch: Partial<Pick<DummyCfg, "species" | "mode" | "gimmick" | "mega" | "tera">> & { moves?: string[] | null; slot?: number; move?: string }) {
+  const T = S.train;
+  const cfg = T?.dums.find((d) => d.key === key);
+  if (!T || !cfg) return;
+  const old = dummyOf(S, key);
+  const at = old ? { x: old.x, y: old.y } : undefined;
+  if (patch.species && patch.species !== cfg.species && ROSTER.some((x) => x.id === patch.species)) {
+    cfg.species = patch.species;
+    cfg.moves = null;
+    cfg.mega = MEGAS[cfg.species]?.[0]?.id ?? "";
+    if (cfg.gimmick !== "none" && !gimmicksFor(cfg.species).includes(cfg.gimmick)) cfg.gimmick = "none";
+  }
+  if (patch.mode) cfg.mode = patch.mode;
+  if (patch.gimmick) cfg.gimmick = patch.gimmick === "none" || gimmicksFor(cfg.species).includes(patch.gimmick) ? patch.gimmick : "none";
+  if (patch.mega !== undefined) cfg.mega = patch.mega;
+  if (patch.tera !== undefined && TERA_TYPES.includes(patch.tera)) cfg.tera = patch.tera;
+  if (patch.moves !== undefined) cfg.moves = patch.moves;
+  if (patch.slot !== undefined && patch.move && MOVES[patch.move] && patch.slot >= 0 && patch.slot < 4) {
+    const cur = [...(cfg.moves ?? cleanMoves(cfg.species, null))];
+    const was = cur.indexOf(patch.move);
+    if (was >= 0) cur[was] = cur[patch.slot]!;
+    cur[patch.slot] = patch.move;
+    cfg.moves = cur;
+  }
+  placeDummy(S, cfg, at);
+}
+
+/** Make a dummy cast one of its moves at you now (to see it, or to practise dodging it). */
+export function trainCast(S: State, key: number, slot: number) {
+  const d = dummyOf(S, key);
+  if (!d || !d.alive || slot < 0 || slot > 3) return;
+  d.cd[slot] = 0;
+  d.gcd = 0;
+  d.cast = null;
+  d.channel = null;
+  tryCast(S, d, slot, null);
+}
+
+/** Make a dummy use its gimmick (Mega, Z-Move, Dynamax, Tera or Awaken) right now. */
+export function trainGimmickNow(S: State, key: number) {
+  const d = dummyOf(S, key);
+  if (!d || !d.alive || gimmickActive(d)) return;
+  d.ult = 100;
+  if (d.gimmick === "mega" && !d.megaForm) d.gimmick = "awaken";
+  activateGimmick(S, d);
+}
+
+/** Give the player a different move in one of its four slots (any move it may have; a move it already has swaps places). */
+export function trainPlayerMove(S: State, slot: number, move: string, everything = false) {
+  const p = playerOf(S);
+  if (!p || slot < 0 || slot > 3 || !MOVES[move]) return;
+  if (!trainMovePool(p.sp.id, everything).includes(move)) return;
+  const cur = [...(p.loadout ?? cleanMoves(p.sp.id, null))];
+  const was = cur.indexOf(move);
+  if (was >= 0) {
+    cur[was] = cur[slot]!;
+    p.cd[was] = 0;
+  }
+  cur[slot] = move;
+  p.cd[slot] = 0;
+  p.loadout = cur;
+  p.override = {};
+}
+
+/** Change the player's gimmick (only while none is running). */
+export function trainPlayerGimmick(S: State, kind: GimmickKind, mega?: string, tera?: string) {
+  const p = playerOf(S);
+  if (!p || gimmickActive(p) || !gimmicksFor(p.sp.id).includes(kind)) return;
+  p.gimmick = kind;
+  if (mega !== undefined) p.megaForm = (MEGAS[p.sp.id] ?? []).find((m) => m.id === mega) ?? MEGAS[p.sp.id]?.[0] ?? null;
+  if (kind === "mega" && !p.megaForm) p.gimmick = "awaken";
+  if (tera && TERA_TYPES.includes(tera)) p.teraType = tera;
+}
+
+/** (Re)place the dummies at full health: the first one's Pokémon can be changed here. Kept for the old call. */
 export function spawnDummy(S: State, speciesId?: string) {
   const T = S.train;
   if (!T) return;
-  const me = S.fighters.find((f) => f.isPlayer);
-  const sp = ROSTER.find((x) => x.id === (speciesId ?? T.species)) ?? ROSTER.find((x) => x.id === "snorlax" && x.id !== me?.sp.id) ?? ROSTER.find((x) => x.id !== me?.sp.id) ?? ROSTER[0]!;
-  S.fighters = S.fighters.filter((f) => f.isPlayer);
-  const d = makeFighter(S, sp, 1, false, CX + 190, CY);
-  d.loadout = cleanMoves(sp.id, null);
-  d.dummy = T.dummy;
-  S.fighters.push(d);
-  T.species = sp.id;
-  T.respawn = 0;
+  if (speciesId && T.dums[0]) trainDummy(S, T.dums[0].key, { species: speciesId });
+  else for (const c of T.dums) placeDummy(S, c);
 }
 
-/** Change the dummy's behaviour or the other switches; the screen calls this from its buttons. */
-export function trainSet(S: State, patch: Partial<Pick<Train, "dummy" | "immortal" | "nocd">>) {
+/** Change the switches that belong to every dummy: how it behaves (all of them) or the two practice options. */
+export function trainSet(S: State, patch: Partial<Pick<Train, "immortal" | "nocd">> & { dummy?: DummyCfg["mode"] }) {
   const T = S.train;
   if (!T) return;
-  Object.assign(T, patch);
-  for (const f of S.fighters) if (!f.isPlayer) f.dummy = T.dummy;
+  if (patch.immortal !== undefined) T.immortal = patch.immortal;
+  if (patch.nocd !== undefined) T.nocd = patch.nocd;
+  if (patch.dummy) for (const c of T.dums) trainDummy(S, c.key, { mode: patch.dummy });
 }
 
-/** Back to a clean slate: full health, no status, cooldowns ready, the dummy back in the middle and the numbers cleared. */
+/** Back to a clean slate: full health, no status, cooldowns ready, everyone back in place and the numbers cleared. */
 export function trainReset(S: State) {
   const T = S.train;
   if (!T) return;
@@ -693,7 +844,7 @@ export function trainReset(S: State) {
     p.hp = p.ghost = p.maxHp;
     p.cd = [0, 0, 0, 0];
     p.ult = 0;
-    p.x = 230;
+    p.x = 230 * K;
     p.y = CY;
   }
   S.projs = [];
@@ -701,7 +852,7 @@ export function trainReset(S: State) {
   S.hazards = [];
   T.last = T.total = T.hits = T.dps = T.best = 0;
   T.lastT = -99;
-  spawnDummy(S);
+  for (const c of T.dums) placeDummy(S, c);
 }
 
 function trainStep(S: State, dt: number) {
@@ -734,18 +885,19 @@ function trainStep(S: State, dt: number) {
     T.dps = T.total / Math.max(1, S.time - T.start);
     T.best = Math.max(T.best, T.dps);
   }
-  const d = S.fighters.find((f) => !f.isPlayer);
-  if (!d) return;
-  if (d.alive) {
-    if (T.immortal && d.hp < d.maxHp * 0.2) {
-      d.hp = d.maxHp;
-      d.ghost = d.maxHp;
+  for (const cfg of T.dums) {
+    const d = dummyOf(S, cfg.key);
+    if (d && d.alive) {
+      if (T.immortal && d.hp < d.maxHp * 0.2) {
+        d.hp = d.maxHp;
+        d.ghost = d.maxHp;
+      }
+      // quiet for a while: top it up
+      if (S.time - T.lastT > 2.5 && d.hp < d.maxHp) d.hp = Math.min(d.maxHp, d.hp + d.maxHp * 0.5 * dt);
+    } else {
+      cfg.respawn += dt;
+      if (cfg.respawn > 1.3) placeDummy(S, cfg);
     }
-    // quiet for a while: top it up
-    if (S.time - T.lastT > 2.5 && d.hp < d.maxHp) d.hp = Math.min(d.maxHp, d.hp + d.maxHp * 0.5 * dt);
-  } else {
-    T.respawn += dt;
-    if (T.respawn > 1.3) spawnDummy(S);
   }
 }
 
@@ -766,8 +918,8 @@ export function newMpGame(players: MpPlayer[], mode: Mode = "royale", teamBattle
     // royale: everybody on their own team around the ring. Co-op: one team in a line on the left.
     const f =
       mode === "royale"
-        ? makeFighter(S, speciesOf(pl.species), i, true, CX + Math.cos(a) * 300, CY + Math.sin(a) * 200)
-        : makeFighter(S, speciesOf(pl.species), 0, true, 200, CY + (i - (n - 1) / 2) * 90);
+        ? makeFighter(S, speciesOf(pl.species), i, true, CX + Math.cos(a) * 300 * K, CY + Math.sin(a) * 200 * K)
+        : makeFighter(S, speciesOf(pl.species), 0, true, 200 * K, CY + (i - (n - 1) / 2) * 90 * K);
     f.gimmick = pl.gimmick ?? "awaken";
     f.megaForm = (MEGAS[pl.species] ?? []).find((m) => m.id === pl.mega) ?? MEGAS[pl.species]?.[0] ?? null;
     if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
@@ -791,8 +943,8 @@ function newTeamBattle(S: State, players: MpPlayer[]): State {
   for (const team of [0, 1]) {
     const mine = sides[team]!;
     for (let i = 0; i < 3; i++) {
-      const x = team === 0 ? 230 : W - 230;
-      const y = CY + (i - 1) * 130;
+      const x = team === 0 ? 230 * K : W - 230 * K;
+      const y = CY + (i - 1) * 130 * K;
       const pl = mine[i];
       if (pl) {
         const f = makeFighter(S, speciesOf(pl.species), team, true, x, y);
@@ -838,7 +990,7 @@ export function newMpQuick(a: MpSquad, b: MpSquad, arena: StageKind | "random" =
   S.mp = true;
   const make = (sq: MpSquad, team: number) =>
     sq.picks.slice(0, 3).map((pk) => {
-      const f = makeFighter(S, speciesOf(pk.species), team, true, team === 0 ? 230 : W - 230, CY);
+      const f = makeFighter(S, speciesOf(pk.species), team, true, team === 0 ? 230 * K : W - 230 * K, CY);
       f.auto = false;
       f.gimmick = pk.gimmick ?? "awaken";
       f.megaForm = (MEGAS[pk.species] ?? []).find((m) => m.id === pk.mega) ?? MEGAS[pk.species]?.[0] ?? null;
@@ -2408,7 +2560,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       S.storm.on = true;
       S.events.push({ t: "storm" });
     }
-    if (S.storm.on) S.storm.r = Math.max(130, S.storm.r - 7 * dt);
+    if (S.storm.on) S.storm.r = Math.max(130 * K, S.storm.r - 7 * K * dt);
   }
 
   // ---- pickups: berries, orbs, boots and crystals appear now and then
@@ -2556,7 +2708,7 @@ export function newQuickGame(picks: QuickPick[], arena: StageKind | "random", le
   S.swapCd = [0, 0];
   S.wave = 1;
   const mine: Fighter[] = picks.slice(0, 3).map((pk) => {
-    const f = makeFighter(S, speciesOf(pk.species), 0, true, 230, CY);
+    const f = makeFighter(S, speciesOf(pk.species), 0, true, 230 * K, CY);
     f.auto = false;
     f.gimmick = pk.gimmick ?? "awaken";
     f.megaForm = (MEGAS[pk.species] ?? []).find((m) => m.id === pk.mega) ?? MEGAS[pk.species]?.[0] ?? null;
@@ -2572,7 +2724,7 @@ export function newQuickGame(picks: QuickPick[], arena: StageKind | "random", le
   const theirs: Fighter[] = [];
   for (let i = 0; i < 3; i++) {
     const sp = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]!;
-    const f = makeFighter(S, sp, 1, false, W - 230, CY, { hp: sc.hp, dmg: sc.dmg });
+    const f = makeFighter(S, sp, 1, false, W - 230 * K, CY, { hp: sc.hp, dmg: sc.dmg });
     f.cdMul = sc.cd;
     f.face = Math.PI;
     const kinds = gimmicksFor(sp.id);
@@ -2749,7 +2901,7 @@ function quickStep(S: State, dt: number) {
       S.storm.on = true;
       S.events.push({ t: "storm" });
     }
-    if (S.storm.on) S.storm.r = Math.max(130, S.storm.r - 9 * dt);
+    if (S.storm.on) S.storm.r = Math.max(130 * K, S.storm.r - 9 * K * dt);
   }
 
   // ---- the end: a whole squad is down

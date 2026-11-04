@@ -15,6 +15,7 @@ import {
   ArrowDown,
   ArrowUp,
   Bold,
+  Check,
   Copy,
   Eraser,
   Eye,
@@ -1346,6 +1347,11 @@ function SmallBtn({
   );
 }
 
+/** A switched-on option: filled, ringed, glowing and ticked, so it can't be missed even when its own label glows or changes colour. */
+const CHIP_ON =
+  "border-lamp bg-lamp/25 text-fg ring-2 ring-lamp/70 font-semibold shadow-[0_0_14px_color-mix(in_oklab,var(--color-lamp)_55%,transparent)]";
+const CHIP_OFF = "border-border text-muted hover:text-fg";
+
 function FmtBtn({
   children,
   label,
@@ -1455,7 +1461,7 @@ function TextToolbar({
           title="ডিফল্ট"
           className={cn(
             "pressable size-6 rounded-full border border-border bg-bg text-[10px] text-muted",
-            !color && "ring-1 ring-lamp",
+            !color && "border-lamp bg-lamp/25 text-fg ring-2 ring-lamp/70",
           )}
         >
           ×
@@ -1469,11 +1475,14 @@ function TextToolbar({
             aria-label={c.label}
             title={c.label}
             style={{ backgroundColor: c.value }}
+            aria-pressed={color === c.value}
             className={cn(
-              "pressable size-6 rounded-full border border-border",
-              color === c.value && "ring-2 ring-lamp ring-offset-1 ring-offset-transparent",
+              "pressable grid size-6 place-items-center rounded-full border border-border",
+              color === c.value && "scale-110 border-white ring-2 ring-lamp ring-offset-2 ring-offset-black/60",
             )}
-          />
+          >
+            {color === c.value && <Check className="size-3.5 text-black drop-shadow-[0_0_2px_rgba(255,255,255,.95)]" strokeWidth={3.5} />}
+          </button>
         ))}
         <CustomColor onPick={(v) => onFmt({ k: "c", v })} />
       </div>
@@ -1500,7 +1509,7 @@ function TextToolbar({
             aria-pressed={sizeOf(effects) === n}
             className={cn(
               "pressable h-7 min-w-7 rounded-full border px-1.5 font-sans text-[11px]",
-              sizeOf(effects) === n ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+              sizeOf(effects) === n ? CHIP_ON : CHIP_OFF,
             )}
           >
             {formatCount(n)}
@@ -1527,10 +1536,11 @@ function TextToolbar({
             onClick={() => onFmt({ k: "fx", id: f.id })}
             aria-pressed={effects.includes(f.id)}
             className={cn(
-              "pressable h-7 rounded-full border px-2.5 text-[12px]",
-              effects.includes(f.id) ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+              "pressable inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-[12px]",
+              effects.includes(f.id) ? CHIP_ON : CHIP_OFF,
             )}
           >
+            {effects.includes(f.id) && <Check className="size-3 shrink-0" strokeWidth={3.5} />}
             <span className={`tx-${f.id}`}>{f.label}</span>
           </button>
         ))}
@@ -1543,11 +1553,13 @@ function TextToolbar({
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onFmt({ k: "fx", id: fx.id })}
+            aria-pressed={effects.includes(fx.id)}
             className={cn(
-              "pressable h-7 rounded-full border px-2.5 font-sans text-[11px]",
-              effects.includes(fx.id) ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+              "pressable inline-flex h-7 items-center gap-1 rounded-full border px-2.5 font-sans text-[11px]",
+              effects.includes(fx.id) ? CHIP_ON : CHIP_OFF,
             )}
           >
+            {effects.includes(fx.id) && <Check className="size-3 shrink-0" strokeWidth={3.5} />}
             {fx.label}
           </button>
         ))}
@@ -1562,10 +1574,11 @@ function TextToolbar({
             onClick={() => onFmt({ k: "fx", id: fx.id })}
             aria-pressed={effects.includes(fx.id)}
             className={cn(
-              "pressable h-7 rounded-full border px-2.5 font-sans text-[11px]",
-              effects.includes(fx.id) ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+              "pressable inline-flex h-7 items-center gap-1 rounded-full border px-2.5 font-sans text-[11px]",
+              effects.includes(fx.id) ? CHIP_ON : CHIP_OFF,
             )}
           >
+            {effects.includes(fx.id) && <Check className="size-3 shrink-0" strokeWidth={3.5} />}
             <span className={`tx-${fx.id} tx-chip`}>{fx.label}</span>
           </button>
         ))}

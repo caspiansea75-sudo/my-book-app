@@ -18,6 +18,9 @@ import { useMe } from "@/lib/use-me";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import "@/components/pokemon/arena-brawl.css";
 
+/** The arena is bigger now, so the first view is a little closer than "the whole floor" (1 shows all of it). */
+const ZOOM0 = 1.4;
+
 const TILTS = [90, 60, 45, 30];
 function readTilt() {
   try {
@@ -537,7 +540,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       }, 1500);
     };
   }, [goNative]);
-  const [zoom, setZoomState] = useState(1);
+  const [zoom, setZoomState] = useState(ZOOM0);
   const [tilt, setTiltState] = useState(60);
   useEffect(() => setTiltState(readTilt()), []);
   const [view, setViewState] = useState<View>("top");
@@ -591,7 +594,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       else if ((k === "arrowright" || k === "arrowleft") && c.R && c.R.getView() !== "top") c.keys.add(k); // turns the camera
       else if (k === "arrowright" || k === "]" || k === "tab") c.specStep = 1;
       else if (k === "arrowleft" || k === "[") c.specStep = -1;
-      else if (k === "0") setZoom(1);
+      else if (k === "0") setZoom(ZOOM0);
       else if (k === "1" || k === "j") c.queue[0] = true;
       else if (k === "2" || k === "k") c.queue[1] = true;
       else if (k === "3" || k === "l") c.queue[2] = true;

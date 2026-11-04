@@ -62,17 +62,18 @@ function vignette(g: CanvasRenderingContext2D, strength = 0.55) {
 
 /** Painted lines on the floor, like a football pitch (as in the video). */
 function pitchLines(g: CanvasRenderingContext2D, color: string, width = 3) {
+  const k = W / 960; // the markings grow with the pitch
   g.strokeStyle = color;
   g.lineWidth = width;
   g.beginPath();
-  g.arc(W / 2, H / 2, 105, 0, Math.PI * 2);
+  g.arc(W / 2, H / 2, 105 * k, 0, Math.PI * 2);
   g.moveTo(W / 2, 30);
   g.lineTo(W / 2, H - 30);
   g.stroke();
-  g.strokeRect(30, H / 2 - 135, 120, 270);
-  g.strokeRect(W - 150, H / 2 - 135, 120, 270);
-  g.strokeRect(30, H / 2 - 62, 52, 124);
-  g.strokeRect(W - 82, H / 2 - 62, 52, 124);
+  g.strokeRect(30, H / 2 - 135 * k, 120 * k, 270 * k);
+  g.strokeRect(W - 30 - 120 * k, H / 2 - 135 * k, 120 * k, 270 * k);
+  g.strokeRect(30, H / 2 - 62 * k, 52 * k, 124 * k);
+  g.strokeRect(W - 30 - 52 * k, H / 2 - 62 * k, 52 * k, 124 * k);
   g.beginPath();
   g.arc(W / 2, H / 2, 5, 0, Math.PI * 2);
   g.fillStyle = color;

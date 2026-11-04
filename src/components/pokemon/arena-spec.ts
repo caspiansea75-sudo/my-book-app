@@ -396,15 +396,20 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
 
 /* ------------------------------------------------------------------ the telegraph while a specialty is winding up */
 
-export function specWindup(g: CanvasRenderingContext2D, id: string, z: { x: number; y: number; x2: number; y2: number; r: number; id: number; shape: string }, prog: number, t: number) {
+export function specWindup(g: CanvasRenderingContext2D, id: string, z: { x: number; y: number; x2: number; y2: number; r: number; id: number; shape: string }, prog: number, t: number, part: "all" | "ground" | "air" = "all") {
   g.save();
+  // part "air": only what is up in the sky (the falling stone), for the player views where it is drawn upright; "ground": the rest
+  if (part === "air" && id !== "rockwrecker") { g.restore(); return; }
   if (z.shape === "circle") {
     const R = z.r;
     if (id === "rockwrecker") {
       const sy = z.y - (1 - prog) * 380 - 26;
       const s = 18 + prog * 14;
-      g.fillStyle = `rgba(0,0,0,${0.15 + prog * 0.35})`;
-      smooth(g, organic(z.x, z.y + 4, R * (0.3 + prog * 0.7), R * (0.3 + prog * 0.7) * 0.5, z.id, 0.2, t, 26)); g.fill();
+      if (part !== "air") {
+        g.fillStyle = `rgba(0,0,0,${0.15 + prog * 0.35})`;
+        smooth(g, organic(z.x, z.y + 4, R * (0.3 + prog * 0.7), R * (0.3 + prog * 0.7) * 0.5, z.id, 0.2, t, 26)); g.fill();
+      }
+      if (part === "ground") { g.restore(); return; }
       g.strokeStyle = "rgba(200,190,170,.4)"; g.lineWidth = 5; g.lineCap = "round";
       for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(z.x + k * 12, sy - 20); g.lineTo(z.x + k * 12, sy - 70 - Math.abs(k) * 12); g.stroke(); }
       g.translate(z.x, sy); g.rotate((1 - prog) * 3);

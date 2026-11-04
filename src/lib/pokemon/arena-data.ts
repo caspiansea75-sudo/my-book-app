@@ -738,6 +738,13 @@ export const Z_SIGNATURE: Record<string, { name: string; bn: string; type: strin
 /** Signature moves: only the Pokémon that have them in their default four can use them. */
 const SIGNATURE = new Set(["roaroftime", "spacialrend", "aeroblast", "sacredfire", "blastburn", "eternabeam", "judgment", "prismaticlaser", "moongeistbeam", "coreenforcer", "behemothblade", "fleurcannon", "lightofruin", "precipiceblades", "originpulse", "waterspout", "eruption", "psychoboost", "photongeyser", "doomdesire", "zapcannon", "boltstrike", "fusionflare", "fusionbolt", "astralbarrage", "futuresight", "diamondstorm", "oblivionwing", "darkvoid", "hydrocannon", "dragonascent", "steelbeam", "mistyexplosion", "frenzyplant", "headsmash", "gigaimpact", "plasmafists", "clangingscales", "shadowforce"]);
 
+/** Who can set which field hazard (on top of every Ground, Poison and Rock Pokémon, which get their own type's moves anyway). */
+const HAZARD_LEARN: [string, string[]][] = [
+  ["spikes", ["skarmory", "garchomp", "gengar", "swampert", "excadrill", "steelix", "corviknight", "metagross"]],
+  ["toxicspikes", ["glimmora", "toxtricity", "venusaur", "gengar"]],
+  ["stealthrock", ["tyranitar", "onix", "steelix", "aerodactyl", "metagross", "garchomp", "excadrill", "glimmora"]],
+];
+
 export function movePool(id: string): string[] {
   const sp = ROSTER.find((s) => s.id === id);
   if (!sp) return [];
@@ -763,6 +770,7 @@ export function movePool(id: string): string[] {
     for (const k of ["shadowball", "icebeam", "thunderbolt", "flashcannon", "earthquake", "stoneedge", "psychic", "surf", "flamethrower"]) if (MOVES[k]) set.add(k);
     list = [...set];
   }
+  for (const [mid, who] of HAZARD_LEARN) if (who.includes(id) && MOVES[mid] && !list.includes(mid)) list.push(mid);
   const rank = (m: string) => (sp.types.includes(MOVES[m]!.type) ? 0 : MOVES[m]!.type === "Normal" ? 2 : 1);
   return list.map((m, i) => [m, i] as const).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
 }

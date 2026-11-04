@@ -31,7 +31,7 @@ function caltrop(g: G, x: number, y: number, s: number, rot: number, body: strin
   g.restore();
 }
 
-export function drawHazard(g: G, h: Hz, t: number, enemy: boolean) {
+export function drawHazard(g: G, h: Hz, t: number, enemy: boolean, flat = false) {
   const age = h.max - h.life;
   const a = Math.min(1, age / 0.4) * Math.min(1, h.life / 1.6);
   if (a <= 0) return;
@@ -46,7 +46,9 @@ export function drawHazard(g: G, h: Hz, t: number, enemy: boolean) {
   g.strokeStyle = enemy ? "rgba(255,95,80,.55)" : "rgba(120,235,140,.4)"; g.lineWidth = 1.6; g.stroke();
   g.setLineDash([]);
 
-  if (h.kind === "spikes") {
+  if (flat && h.kind !== "toxic") {
+    // the player views: the spikes and rocks stand up out of the floor, and the renderer draws them upright
+  } else if (h.kind === "spikes") {
     const n = 12;
     for (let i = 0; i < n; i++) {
       const ang = hash(sd + i) * 6.28, d = Math.sqrt(hash(sd + i * 3)) * 0.82;
@@ -70,7 +72,7 @@ export function drawHazard(g: G, h: Hz, t: number, enemy: boolean) {
       g.strokeStyle = `rgba(230,170,255,${1 - k})`; g.fillStyle = `rgba(200,120,255,${0.3 * (1 - k)})`; g.lineWidth = 1.4;
       g.beginPath(); g.ellipse(bx, by - k * 6, 2 + k * 6, 2 + k * 5, 0, 0, 6.3); g.fill(); g.stroke();
     }
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < (flat ? 0 : 8); i++) {
       const ang = hash(sd + i * 13) * 6.28, d = 0.25 + hash(sd + i * 17) * 0.6;
       caltrop(g, h.x + Math.cos(ang) * h.r * d, h.y + Math.sin(ang) * h.r * 0.7 * d, 8 + hash(i) * 3, hash(sd + i) * 6.28, "#6a3a8c", "#e08bff", "#2a0f3a");
     }
