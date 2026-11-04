@@ -58,3 +58,15 @@
   .sd-vs { font-size: 2.2rem; }
   .sd-stagebox { min-height: 12rem; }
 }
+
+/* the fight fills the whole screen (also where the browser has no Fullscreen API, e.g. iPhone) */
+body.sd-lock { overflow: hidden; }
+.sd-play.sd-full { position: fixed; inset: 0; z-index: 9999; max-width: none; margin: 0; border-radius: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+.sd-play.sd-full canvas { width: min(100vw, calc(100dvh * 1200 / 560)); max-height: none; margin: 0; }
+.sd-full .sd-bar { top: calc(env(safe-area-inset-top, 0px) + 4.4rem); right: calc(env(safe-area-inset-right, 0px) + .3rem); }
+.sd-hint { display: none; position: absolute; top: calc(env(safe-area-inset-top, 0px) + 3.2rem); left: 0; right: 0; text-align: center; font: 600 .75rem var(--font-sans, inherit); color: rgba(255,255,255,.7); z-index: 3; pointer-events: none; }
+@media (orientation: portrait) {
+  .sd-full .sd-bar { top: calc(env(safe-area-inset-top, 0px) + .4rem); }
+  .sd-full .sd-pad { bottom: calc(env(safe-area-inset-bottom, 0px) + 1.4rem); }
+  .sd-hint { display: block; }
+}

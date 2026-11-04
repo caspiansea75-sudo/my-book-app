@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Maximize2, Volume2, VolumeX } from "lucide-react";
+import { Copy, Maximize2, RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { useT } from "@/components/pokemon/ui";
 import { ROSTER } from "@/lib/pokemon/arena-data";
@@ -26,6 +26,22 @@ const shot = (id: string, k: "dex" | "ani") => `/api/sprite?k=${k}&id=${encodeUR
 const MAP_SOLO: Record<string, keyof Input> = { KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r", KeyW: "u", ArrowUp: "u", KeyS: "d", ArrowDown: "d", KeyJ: "a", KeyZ: "a", KeyK: "b", KeyX: "b", KeyL: "c", KeyC: "c", Space: "s", KeyV: "s", KeyI: "s" };
 const MAP_P1: Record<string, keyof Input> = { KeyA: "l", KeyD: "r", KeyW: "u", KeyS: "d", KeyF: "a", KeyG: "b", KeyH: "c", KeyT: "s" };
 const MAP_P2: Record<string, keyof Input> = { ArrowLeft: "l", ArrowRight: "r", ArrowUp: "u", ArrowDown: "d", KeyJ: "a", KeyK: "b", KeyL: "c", KeyI: "s" };
+/* full screen: the real Fullscreen API where the browser has it (it needs a tap or key press, which "Fight!" is) */
+type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
+type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
+const fsOn = () => { const d = document as FsDoc; return !!(d.fullscreenElement ?? d.webkitFullscreenElement); };
+const quiet = (p: unknown) => { if (p && typeof (p as Promise<void>).catch === "function") (p as Promise<void>).catch(() => {}); };
+function enterFs(el: HTMLElement | null) {
+  if (!el || fsOn()) return;
+  try { quiet(el.requestFullscreen ? el.requestFullscreen({ navigationUI: "hide" }) : (el as FsEl).webkitRequestFullscreen?.()); } catch { /* not allowed here: the page-filling layout still applies */ }
+}
+function exitFs() {
+  if (!fsOn()) return;
+  try { quiet(document.exitFullscreen ? document.exitFullscreen() : (document as FsDoc).webkitExitFullscreen?.()); } catch { /* ignore */ }
+}
+type Orient = { lock?: (o: string) => Promise<void> };
+const orientation = () => (typeof screen === "undefined" ? undefined : (screen as unknown as { orientation?: Orient }).orientation);
+
 const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
 
 function TBtn({ id, label, cls, touch, latch }: { id: keyof Input; label: string; cls?: string; touch: Input; latch: (k: keyof Input) => void }) {
@@ -50,7 +66,7 @@ function TBtn({ id, label, cls, touch, latch }: { id: keyof Input; label: string
 
 type Summary = { match: 0 | 1; rounds: [number, number]; ids: [string, string]; combo: [number, number]; dealt: [number, number]; local: number };
 
-function Match({ cfg, onExit, onAgain }: { cfg: Cfg; onExit: () => void; onAgain: () => void }) {
+function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void; onAgain: () => void; getRoot: () => HTMLElement | null }) {
   const { t, lang } = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -60,6 +76,18 @@ function Match({ cfg, onExit, onAgain }: { cfg: Cfg; onExit: () => void; onAgain
   const [lost, setLost] = useState(false);
   const [muted, setMuted] = useState(sfx.isMuted());
   const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+  // the fight fills the whole screen; if it was started without a tap (a friend's room), the first tap or key brings full screen in
+  useEffect(() => {
+    document.body.classList.add("sd-lock");
+    const again = () => enterFs(getRoot());
+    if (!fsOn()) { window.addEventListener("pointerup", again, { once: true }); window.addEventListener("keydown", again, { once: true }); }
+    return () => {
+      document.body.classList.remove("sd-lock");
+      window.removeEventListener("pointerup", again);
+      window.removeEventListener("keydown", again);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const latch = useCallback((k: keyof Input) => { if (k === "a" || k === "b" || k === "c" || k === "s" || k === "u") pulse[k] = true; }, [pulse]);
 
   useEffect(() => {
@@ -179,19 +207,32 @@ function Match({ cfg, onExit, onAgain }: { cfg: Cfg; onExit: () => void; onAgain
   }, []);
 
   const toggleMute = () => { sfx.setMuted(!muted); setMuted(!muted); };
-  const full = () => { const el = wrapRef.current; if (el?.requestFullscreen) void el.requestFullscreen().catch(() => {}); };
+  const toggleFs = () => { if (fsOn()) exitFs(); else enterFs(getRoot()); };
+  const canRotate = coarse && !!orientation()?.lock;
+  const rotate = () => {
+    enterFs(getRoot());
+    const wide = window.innerWidth > window.innerHeight;
+    quiet(orientation()?.lock?.(wide ? "portrait" : "landscape"));
+  };
+  const leave = () => {
+    if (!over && !lost && cfg.net && !window.confirm(t("লড়াই ছেড়ে যাবেন?", "Leave the fight?"))) return;
+    onExit();
+  };
   const win = over ? (over.match === 1 ? 1 : 0) : 0;
   const winName = over ? fighterOf(over.ids[win]!).name : "";
   const youWon = over && over.local >= 0 ? over.match === over.local : null;
   const phrases = [t("মাঠ কাঁপিয়ে জিতল!", "WALKS TO VICTORY!"), t("মুকুট ছিনিয়ে নিল!", "TAKES THE CROWN!"), t("ঝড় তুলল অ্যারেনায়!", "STORMS THE ARENA!")];
 
   return (
-    <div className="sd-play" ref={wrapRef}>
+    <div className="sd-play sd-full" ref={wrapRef}>
       <canvas ref={canvasRef} />
       <div className="sd-bar">
         <button type="button" className="sd-ico" onClick={toggleMute} aria-label={t("শব্দ", "Sound")}>{muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}</button>
-        <button type="button" className="sd-ico" onClick={full} aria-label={t("ফুলস্ক্রিন", "Fullscreen")}><Maximize2 className="size-4" /></button>
+        <button type="button" className="sd-ico" onClick={toggleFs} aria-label={t("ফুলস্ক্রিন", "Fullscreen")}><Maximize2 className="size-4" /></button>
+        {canRotate ? <button type="button" className="sd-ico" onClick={rotate} aria-label={t("ঘোরান", "Rotate")}><RotateCw className="size-4" /></button> : null}
+        <button type="button" className="sd-ico" onClick={leave} aria-label={t("বেরিয়ে যান", "Leave")}><X className="size-4" /></button>
       </div>
+      {coarse && !over ? <div className="sd-hint">{t("ফোন আড়াআড়ি ধরলে আরও বড় দেখাবে", "Turn your phone sideways for a bigger view")}</div> : null}
       {coarse && cfg.role !== "local" && !over ? (
         <div className="sd-pad">
           <div className="sd-dpad">
@@ -266,6 +307,7 @@ export function ShowdownGame() {
   const live = useRef({ mine, stage, myName });
   live.current = { mine, stage, myName };
   const lobbyRef = useRef<(d: Wire) => void>(() => {});
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const stopRoom = useCallback(() => {
     window.clearInterval(helloRef.current);
@@ -273,7 +315,7 @@ export function ShowdownGame() {
     netRef.current = null;
     setRole(null); setCode(""); setFriend(null); setLinked(false); setNote("");
   }, []);
-  useEffect(() => () => { window.clearInterval(helloRef.current); netRef.current?.close(); }, []);
+  useEffect(() => () => { window.clearInterval(helloRef.current); netRef.current?.close(); exitFs(); }, []);
 
   const attach = useCallback((net: SdNet, as: "host" | "guest") => {
     lobbyRef.current = (d: Wire) => {
@@ -323,12 +365,14 @@ export function ShowdownGame() {
   const seed = () => 1 + Math.floor(Math.random() * 2_000_000_000);
   const startSolo = () => {
     sfx.unlock();
+    enterFs(rootRef.current);
     setCfg({ role: mode === "cpu" ? "cpu" : "local", a: pickOf(mine), b: pickOf(foe), stage, level, seed: seed(), na: myName, nb: mode === "cpu" ? "CPU" : "P2", net: null, key: Date.now() });
   };
   const startHost = useCallback((a?: string, b?: string) => {
     const net = netRef.current;
     if (!net || !friend) return;
     sfx.unlock();
+    enterFs(rootRef.current);
     const A = a ?? pickOf(mine), B = b ?? pickOf(friend.pick), s = seed();
     net.send({ k: "start", a: A, b: B, stage, seed: s, na: myName, nb: friend.name });
     setCfg({ role: "host", a: A, b: B, stage, level: "normal", seed: s, na: myName, nb: friend.name, net, key: Date.now() });
@@ -339,9 +383,9 @@ export function ShowdownGame() {
     if (cfg.role === "host") startHost(cfg.a, cfg.b);
     else if (cfg.role === "cpu" || cfg.role === "local") setCfg({ ...cfg, seed: seed(), key: Date.now() });
   };
-  const exitMatch = () => setCfg(null);
+  const exitMatch = () => { exitFs(); setCfg(null); };
 
-  if (cfg) return <div className="sd-wrap"><Match key={cfg.key} cfg={cfg} onExit={exitMatch} onAgain={again} /></div>;
+  if (cfg) return <div className="sd-wrap" ref={rootRef}><Match key={cfg.key} cfg={cfg} onExit={exitMatch} onAgain={again} getRoot={() => rootRef.current} /></div>;
 
   const pickId = aim === "me" || mode === "online" ? mine : foe;
   const setPick = (id: string) => { if (aim === "me" || mode === "online") setMine(id); else setFoe(id); };
@@ -364,7 +408,7 @@ export function ShowdownGame() {
   const canFight = mode !== "online" || (role === "host" && linked);
 
   return (
-    <div className="sd-wrap">
+    <div className="sd-wrap" ref={rootRef}>
       <div className="sd-stagebox">
         <div className="sd-side sd-left">{big(mine)}{card(mine, mode === "local" ? "P1" : t("তুমি", "YOU"))}</div>
         <div className="sd-vs">VS</div>

@@ -5,12 +5,12 @@
 
 export type TexKind = "lava" | "fire" | "water" | "grass" | "rock" | "sand" | "ice" | "metal" | "venom" | "cloud" | "plasma" | "shade" | "aura";
 
-type Def = { pal: string[]; vein?: string; vs?: number; ax?: number; ay?: number; warp?: number };
+type Def = { pal: string[]; vein?: string; vs?: number; ax?: number; ay?: number; warp?: number; /** a second web of lines (light caustics on water) and bright glints */ vein2?: string; vs2?: number; glint?: string };
 
 const DEF: Record<TexKind, Def> = {
   lava: { pal: ["#9c1e08", "#d83e0e", "#ff7f1e", "#ffc548"], vein: "#fff3b0", vs: 0.88, warp: 0.85 },
   fire: { pal: ["#d03a0c", "#ff761a", "#ffb838", "#ffe58a"], vein: "#fffbe0", vs: 0.88, warp: 0.85 },
-  water: { pal: ["#14498f", "#1f6fc0", "#3d9be8", "#8fd3ff"], vein: "#ffffff", vs: 0.9, warp: 0.7 },
+  water: { pal: ["#06285c", "#0c4390", "#1465b8", "#1f8fdc", "#3fb8f2", "#8fe0ff"], vein: "#e6fbff", vs: 0.86, warp: 1.0, vein2: "#7fdcff", vs2: 0.8, glint: "#ffffff" },
   grass: { pal: ["#2f6a2c", "#3f8a38", "#5fb04a", "#8fd870"], ay: 6 },
   rock: { pal: ["#3a352f", "#5b544b", "#837a6d", "#aaa090"], vein: "#17120e", vs: 0.9 },
   sand: { pal: ["#a88a5c", "#c2a574", "#dcc592", "#efe0b8"] },
@@ -75,6 +75,18 @@ function build(kind: TexKind): HTMLCanvasElement {
         const ridge = 1 - Math.abs(f * 2 - 1);
         const k = Math.max(0, (ridge - (d.vs ?? 0.9)) / (1 - (d.vs ?? 0.9)));
         if (k > 0) { const m = Math.min(1, k * 1.6); r += (vein[0] - r) * m; gg += (vein[1] - gg) * m; b += (vein[2] - b) * m; }
+      }
+      if (d.vein2) {
+        // a second, different web of light lines crossing the first: the bright net that sunlight makes on water
+        const f2 = (warpN(u * 1.7 + 0.31, v * 1.7 + 0.12) * 0.55 + octs[1]!(v + 0.4, u + 0.2) * 0.45);
+        const rd = 1 - Math.abs(f2 * 2 - 1);
+        const k2 = Math.max(0, (rd - (d.vs2 ?? 0.85)) / (1 - (d.vs2 ?? 0.85)));
+        if (k2 > 0) { const v2 = parse(d.vein2); const m2 = Math.min(1, k2 * 1.4) * 0.8; r += (v2[0] - r) * m2; gg += (v2[1] - gg) * m2; b += (v2[2] - b) * m2; }
+      }
+      if (d.glint) {
+        // little glints of sun where the ripples crest
+        const gl = octs[3]!(u * 5.3 + 0.7, v * 5.3 + 0.2);
+        if (gl > 0.86 && f > 0.5) { const m3 = Math.min(1, (gl - 0.86) * 9); const gc = parse(d.glint); r += (gc[0] - r) * m3; gg += (gc[1] - gg) * m3; b += (gc[2] - b) * m3; }
       }
       const grain = 0.94 + octs[3]!(u * 3.1, v * 3.1) * 0.12;
       const o = (y * SIZE + x) * 4;

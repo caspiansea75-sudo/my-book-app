@@ -227,27 +227,39 @@ export function ArenaBrawl() {
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
 
-  // turn the phone sideways and the game fills the screen; turn it back and it goes back
+  // going into a battle fills the screen at once, on every device; on a phone it also turns the screen to landscape.
+  // Browsers only allow real full screen right after a tap: the tap that started the battle usually still counts,
+  // and if it does not, the first touch or key press inside the battle upgrades it.
   useEffect(() => {
     if (!inGame) {
       if (fsAuto.current) exitFs();
       setPortraitHint(false);
       return;
     }
+    void enterFs(true);
+    const upgrade = () => {
+      if (!document.fullscreenElement) void enterFs(true);
+    };
+    window.addEventListener("pointerdown", upgrade, { once: true });
+    window.addEventListener("keydown", upgrade, { once: true });
     const land = window.matchMedia("(orientation: landscape)");
     const check = () => {
       if (!coarse()) return;
       if (land.matches) {
         setPortraitHint(false);
-        if (!fs) void enterFs(true);
+        if (!document.fullscreenElement) void enterFs(true);
       } else {
+        // the screen stays filled; where the phone cannot be turned for us the hint asks the player to do it
         setPortraitHint(true);
-        if (fsAuto.current) exitFs();
       }
     };
     check();
     land.addEventListener("change", check);
-    return () => land.removeEventListener("change", check);
+    return () => {
+      land.removeEventListener("change", check);
+      window.removeEventListener("pointerdown", upgrade);
+      window.removeEventListener("keydown", upgrade);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inGame]);
 
@@ -1087,7 +1099,7 @@ export function ArenaBrawl() {
         ) : null}
       </div>
 
-      {portraitHint && !fs ? <div className="ab-tip">{t("ফোন আড়াআড়ি ঘোরালে ফুল স্ক্রিনে খেলা যাবে ↻", "Turn your phone sideways to play full screen ↻")}</div> : null}
+      {portraitHint ? <div className="ab-tip">{t("ফোন আড়াআড়ি ঘোরান — সেরা ভিউ পাবেন ↻", "Turn your phone sideways for the best view ↻")}</div> : null}
       <div className="ab-help">
         {rt.current.mode === "quick" ? t("বদল: Z X C · ", "Swap: Z X C · ") : ""}{t("চাল: ১–৪ · গড়ান: Space · জিমিক: Q · জুম: + − বা মাউস হুইল / দুই আঙুল · ফুল স্ক্রিন: F", "Moves 1–4 · Roll: Space · Gimmick: Q · Zoom: + − or mouse wheel / two fingers · Full screen: F")}
       </div>

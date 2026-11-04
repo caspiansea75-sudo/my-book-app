@@ -202,6 +202,8 @@ export class ArenaRenderer {
   /** damage that stays on the floor for the whole match */
   private scars = new Scars();
   private scarKey: unknown = null;
+  /** when each blast-made pillar was first seen (for its rise and the puff of dust) */
+  private pilBorn = new Map<number, number>();
   private scarStage: string = "";
   private recentScars: { x: number; y: number; t: number }[] = [];
   /** lay a lasting crater, unless one was just made on the same spot by another layer of the same impact */
@@ -1507,6 +1509,10 @@ export class ArenaRenderer {
     if (this.scarKey !== S || this.scarStage !== S.stage) { this.scarKey = S; this.scarStage = S.stage; this.scars.reset(S.stage); this.recentScars = []; }
     const scv = this.scars.canvas;
     if (scv) G.drawImage(scv, 0, 0, ARENA.W, ARENA.H);
+    // the longer the fight, the more worn and muddy the whole pitch looks
+    const wear = Math.min(0.22, this.scars.count * 0.0009);
+    if (wear > 0.01 && S.stage === "grass") { G.fillStyle = `rgba(96,78,46,${wear})`; G.fillRect(0, 0, ARENA.W, ARENA.H); }
+    this.drawSandSwirls(G, S, dt);
     // blast marks: a dark patch with a glowing rim that cools
     for (const sc of this.scorch) if (!(sc as { b?: boolean }).b) { (sc as { b?: boolean }).b = true; this.scar(sc.x, sc.y, Math.max(12, sc.r * 0.85), sc.type); }
     for (const sc of this.scorch) {
@@ -1595,7 +1601,7 @@ export class ArenaRenderer {
     const things: { y: number; draw: () => void }[] = [];
     // back to front: by height on the page from above, by distance from the camera in the player views
     const dk = (x: number, y: number) => (this.v3 ? -((x - this.c3.px) * this.c3.fx + (y - this.c3.py) * this.c3.fy) : y);
-    for (const o of S.obs) if (o.hp > 0) things.push({ y: dk(o.x, o.y), draw: () => this.at(g, o.x, o.y, "bb", () => drawObstacle(g, o, this.t), "o") });
+    for (const o of S.obs) if (o.hp > 0) things.push({ y: dk(o.x, o.y), draw: () => this.at(g, o.x, o.y, "bb", () => (o.until !== undefined ? this.blastPillar(g, o) : drawObstacle(g, o, this.t)), "o") });
     for (const f of S.fighters) if ((f.alive || f.koT < 0.01) && !(this.view === "first" && f === you && !this.photo)) things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => this.drawFighter(g, f, S, f === you), "f") });
     for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     // standing things (spikes, rocks, whirls) take their place among the fighters
@@ -3910,13 +3916,113 @@ export class ArenaRenderer {
   }
 
   /** The burst when something lands, shaped by its element. */
-  /** a heavy beam cuts a dark channel into the ground along its length (and a lighter one scuffs it) */
+  /** a pillar the engine raised: it climbs out of the floor in a puff of dust, then stands */
+  private blastPillar(g: CanvasRenderingContext2D, o: State["obs"][number]) {
+    let born = this.pilBorn.get(o.id);
+    if (born === undefined) {
+      born = this.t;
+      this.pilBorn.set(o.id, born);
+      if (this.pilBorn.size > 200) this.pilBorn.clear();
+      for (let j = 0; j < 5; j++) this.parts.push({ kind: "smoke", x: o.x + rnd(-8, 8), y: o.y + rnd(-3, 5), vx: rnd(-40, 40), vy: rnd(-50, -10), g: 0, life: rnd(0.5, 0.9), max: 0.9, size: rnd(7, 12), grow: 22, color: "#bfb29a" });
+    }
+    this.drawPillar(g, { x: o.x, y: o.y, h: o.ph ?? 50, w: o.pw ?? 14, t: this.t - born, max: 1e9, seed: o.id * 1.7 });
+  }
+
+  /** A hexagonal stone pillar rising out of the floor, mossy green on grass, with its shadow, chipped top and cracks. */
+  private drawPillar(g: CanvasRenderingContext2D, q: { x: number; y: number; h: number; w: number; t: number; max: number; seed: number }) {
+    if (q.t < 0) return;
+    const rise = Math.min(1, q.t / 0.22);
+    const sink = q.t > q.max ? Math.min(1, (q.t - q.max) / 0.6) : 0;
+    const h = q.h * (1 - Math.pow(1 - rise, 3)) * (1 - sink);
+    if (h < 1) return;
+    const grass = this.scars.stageName === "grass";
+    const top = grass ? "#4f8a5c" : "#8d929c", side = grass ? "#2b5a3a" : "#5d626c", dark = grass ? "#173824" : "#3a3e47";
+    const w = q.w, ry = w * 0.42;
+    g.save();
+    g.translate(q.x, q.y);
+    g.globalAlpha = 1 - sink * 0.5;
+    // shadow on the floor
+    g.fillStyle = "rgba(0,0,0,.34)";
+    g.beginPath(); g.ellipse(w * 0.5, 2, w * 1.25, ry * 1.1, 0, 0, Math.PI * 2); g.fill();
+    // the shaft
+    const sh = g.createLinearGradient(-w, 0, w, 0);
+    sh.addColorStop(0, side); sh.addColorStop(0.55, top); sh.addColorStop(1, dark);
+    g.fillStyle = sh;
+    g.beginPath();
+    g.moveTo(-w, 0); g.lineTo(-w, -h); g.lineTo(w, -h); g.lineTo(w, 0);
+    g.ellipse(0, 0, w, ry, 0, 0, Math.PI);
+    g.closePath(); g.fill();
+    g.strokeStyle = "rgba(0,0,0,.5)"; g.lineWidth = 1;
+    g.stroke();
+    // a few cracks and notches along it
+    g.strokeStyle = "rgba(0,0,0,.4)";
+    for (let i = 0; i < 3; i++) {
+      const yy = -h * (0.2 + ((q.seed * (i + 3)) % 0.6));
+      g.beginPath(); g.moveTo(-w, yy); g.lineTo(-w * 0.3, yy + 3); g.lineTo(w * 0.2, yy - 2); g.lineTo(w * 0.7, yy + 2); g.stroke();
+    }
+    // the top
+    g.fillStyle = grass ? "#7fbf88" : "#c4c8d0";
+    g.beginPath(); g.ellipse(0, -h, w, ry, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "rgba(0,0,0,.45)"; g.stroke();
+    g.fillStyle = "rgba(255,255,255,.18)";
+    g.beginPath(); g.ellipse(-w * 0.25, -h - 1, w * 0.45, ry * 0.4, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  }
+
+  /** Sandstorm: a few slowly drifting dust whirls on the floor, each a pale ring around darker ground with spokes that turn. */
+  private sandA = 0;
+  private drawSandSwirls(G: CanvasRenderingContext2D, S: State, dt: number) {
+    this.sandA = Math.max(0, Math.min(1, this.sandA + (S.field === "sand" ? dt * 0.8 : -dt * 1.2)));
+    if (this.sandA <= 0.01) return;
+    const spots = [[0.27, 0.36, 1], [0.6, 0.64, 1.15], [0.8, 0.3, 0.9], [0.42, 0.82, 0.8]];
+    spots.forEach(([fx, fy, sc], i) => {
+      const cx = ARENA.W * fx! + Math.sin(this.t * 0.25 + i * 2) * 40, cy = ARENA.H * fy! + Math.cos(this.t * 0.21 + i * 3) * 28;
+      const r = 120 * sc!;
+      G.save();
+      G.translate(cx, cy);
+      G.globalAlpha = this.sandA;
+      const gr = G.createRadialGradient(0, 0, 0, 0, 0, r);
+      gr.addColorStop(0, "rgba(120,92,52,.18)"); gr.addColorStop(0.8, "rgba(90,68,38,.34)"); gr.addColorStop(1, "rgba(90,68,38,.12)");
+      G.fillStyle = gr;
+      G.beginPath(); G.arc(0, 0, r, 0, Math.PI * 2); G.fill();
+      G.strokeStyle = "rgba(236,214,164,.62)"; G.lineWidth = 3; G.beginPath(); G.arc(0, 0, r, 0, Math.PI * 2); G.stroke();
+      G.strokeStyle = "rgba(236,214,164,.3)"; G.lineWidth = 1.5; G.beginPath(); G.arc(0, 0, r * 0.84, 0, Math.PI * 2); G.stroke();
+      G.strokeStyle = "rgba(246,228,186,.42)"; G.lineWidth = 1;
+      for (let k = 0; k < 28; k++) {
+        const a = (k / 28) * Math.PI * 2 + this.t * (0.5 + (k % 3) * 0.12) * (i % 2 ? -1 : 1);
+        const a0 = r * (0.18 + (k % 4) * 0.08), a1 = r * (0.62 + ((k * 7) % 5) * 0.06);
+        G.beginPath(); G.moveTo(Math.cos(a) * a0, Math.sin(a) * a0); G.lineTo(Math.cos(a + 0.18) * a1, Math.sin(a + 0.18) * a1); G.stroke();
+      }
+      G.restore();
+    });
+  }
+
+  /** A beam or bolt marks the ground along its length in the look of its type (a wet channel, a charred seam, frost, a torn furrow...)
+   *  and throws that type's own particles along it. */
   private beamTrench(e: { mv: string; dir: number; x: number; y: number; type: string; kind: string }) {
     const md = MOVES[e.mv];
-    if (!md || md.kind !== "beam" || (md.range ?? 0) < 300 || this.scars.count > 260) return;
+    if (!md || (md.kind !== "beam" && md.kind !== "bolt")) return;
     const L = Math.min(md.range ?? 260, 520) * 0.85;
-    const x2 = e.x + Math.cos(e.dir) * L, y2 = e.y + Math.sin(e.dir) * L;
-    this.scars.trench(e.x + Math.cos(e.dir) * 30, e.y + Math.sin(e.dir) * 30, x2, y2, e.type, 14);
+    const ux = Math.cos(e.dir), uy = Math.sin(e.dir);
+    const x2 = e.x + ux * L, y2 = e.y + uy * L;
+    if (this.scars.count < 300) this.scars.trench(e.x + ux * 30, e.y + uy * 30, x2, y2, e.type, md.kind === "bolt" ? 16 : 22);
+    const n = Math.round(L / 14);
+    for (let i = 0; i < n; i++) {
+      const k = 0.1 + (i / n) * 0.9, px = e.x + ux * L * k + rnd(-10, 10), py = e.y + uy * L * k + rnd(-8, 8);
+      const P = (o: Partial<Parti> & { kind: Parti["kind"]; color: string }) => this.parts.push({ x: px, y: py, vx: 0, vy: 0, g: 0, life: 0.8, max: 0.8, size: 3, grow: 0, ...o });
+      switch (e.type) {
+        case "Water": if (i % 2) P({ kind: "bubble", vx: rnd(-30, 30), vy: rnd(-70, -20), g: -20, life: rnd(0.6, 1.1), max: 1.1, size: rnd(2.5, 5), color: "#bfe6ff" }); else P({ kind: "dot", vx: rnd(-60, 60), vy: rnd(-200, -80), g: 520, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.6, 3), color: "#8fd3ff" }); break;
+        case "Fire": P({ kind: i % 3 ? "spark" : "flame", vx: rnd(-30, 30), vy: rnd(-110, -30), g: -30, life: rnd(0.5, 1.1), max: 1.1, size: i % 3 ? rnd(1.5, 3) : rnd(5, 9), color: i % 2 ? "#ff8a2a" : "#ffd24d" }); break;
+        case "Electric": P({ kind: "spark", vx: rnd(-160, 160), vy: rnd(-160, 160), g: 0, life: rnd(0.2, 0.5), max: 0.5, size: rnd(1.5, 3), color: i % 2 ? "#ffe14d" : "#ffffff" }); break;
+        case "Ice": P({ kind: "flake", vx: rnd(-25, 25), vy: rnd(10, 50), g: 0, life: rnd(0.8, 1.4), max: 1.4, size: rnd(2.5, 5), color: i % 2 ? "#e6f7ff" : "#bfe6ff" }); break;
+        case "Grass": case "Bug": P({ kind: "leaf", vx: rnd(-90, 90), vy: rnd(-120, -30), g: 160, life: rnd(0.6, 1.1), max: 1.1, size: rnd(3.5, 6), rot: rnd(0, 6), vr: rnd(-12, 12), color: i % 2 ? "#6fcf4a" : "#c6f27a" }); break;
+        case "Poison": P({ kind: "bubble", vx: rnd(-25, 25), vy: rnd(-60, -15), g: -15, life: rnd(0.7, 1.2), max: 1.2, size: rnd(2.5, 5), color: i % 2 ? "#b060d8" : "#7bd04a" }); break;
+        case "Rock": case "Ground": case "Fighting": P({ kind: "plank", vx: rnd(-120, 120), vy: rnd(-220, -80), g: 800, life: rnd(0.5, 0.9), max: 0.9, size: rnd(2.5, 4.5), rot: rnd(0, 6), vr: rnd(-14, 14), color: i % 2 ? "#6b5b4a" : "#8c7b66" }); break;
+        case "Psychic": case "Fairy": P({ kind: "star", vx: rnd(-40, 40), vy: rnd(-90, -30), g: 0, life: rnd(0.6, 1.1), max: 1.1, size: rnd(3, 6), color: i % 2 ? "#ffd1f4" : "#c9a0ff" }); break;
+        case "Ghost": case "Dark": case "Dragon": P({ kind: "smoke", vx: rnd(-20, 20), vy: rnd(-40, -10), g: 0, life: rnd(0.6, 1.1), max: 1.1, size: rnd(6, 11), grow: 16, color: i % 2 ? "#5a3a86" : "#2a1646" }); break;
+        default: P({ kind: "dot", vx: rnd(-50, 50), vy: rnd(-80, -20), g: 200, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.6, 3), color: "#e8e8f0" });
+      }
+    }
   }
 
   /** A shockwave along the floor, a ring of dust and a few pebbles: for anything that lands hard. */

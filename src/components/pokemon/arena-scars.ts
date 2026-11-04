@@ -4,6 +4,7 @@
  * once into a canvas the size of the pitch, which is laid on the floor under everything that moves.
  */
 import { ARENA, type StageKind } from "@/lib/pokemon/arena-engine";
+import { texPat, typeTex } from "./arena-tex";
 
 const SC = 1.5; // canvas pixels per world unit
 const TAU = Math.PI * 2;
@@ -25,10 +26,15 @@ const TONES: Partial<Record<StageKind, Tone>> = {
 };
 /** types whose blasts burn the ground rather than dig it */
 const BURNS = new Set(["Fire", "Electric", "Dragon", "Dark", "Ghost", "Psychic", "Poison"]);
-/** a trench's colour: Dragon / Ghost / Poison / Psychic / Dark all cut dark purple, like the beam in the reference */
-const TRENCH: Record<string, [string, string]> = {
-  Dragon: ["#2a0f4a", "#8a3fd0"], Ghost: ["#241040", "#7a46c8"], Poison: ["#2e0f3a", "#a448c0"], Psychic: ["#38103f", "#d058b8"], Dark: ["#1a0f26", "#5a3a86"],
-  Fire: ["#2a0e08", "#e0662a"], Electric: ["#1d1a08", "#d8c43a"], Ice: ["#16324a", "#9ad8f2"], Water: ["#0e2a3c", "#4a9ad0"], Grass: ["#102a12", "#5a9a3a"], Ground: ["#2a1a0e", "#a47a46"], Rock: ["#26231e", "#8a8678"],
+/** How a beam of each type marks the ground: the colours of the cut and its lit lip, and what kind of mark it is */
+type Fx = "wet" | "char" | "arc" | "frost" | "furrow" | "sludge" | "ditch" | "scour" | "glitter" | "shade";
+const TRENCH: Record<string, [string, string, Fx]> = {
+  Water: ["#0a2c52", "#5fb8f0", "wet"], Fire: ["#1c0a05", "#ff7a1a", "char"], Electric: ["#14120a", "#ffe14d", "arc"], Ice: ["#2a5a80", "#d8f4ff", "frost"],
+  Grass: ["#26180c", "#6fbf4a", "furrow"], Bug: ["#1f220c", "#b4d03a", "furrow"], Poison: ["#2a0f3a", "#b25ad8", "sludge"],
+  Rock: ["#221f1a", "#9a9484", "ditch"], Ground: ["#2a190c", "#b08450", "ditch"], Fighting: ["#2a140e", "#c06a48", "ditch"],
+  Steel: ["#272b33", "#c2cad6", "scour"], Normal: ["#2a2824", "#cfc8b8", "scour"], Flying: ["#2a3040", "#dfe8f8", "scour"],
+  Fairy: ["#3a1a38", "#ffa8e0", "glitter"], Psychic: ["#38103f", "#e060c0", "glitter"],
+  Dragon: ["#220d44", "#8a3fd0", "shade"], Ghost: ["#1c0e34", "#7a46c8", "shade"], Dark: ["#120a1e", "#5a3a86", "shade"],
 };
 
 export class Scars {
@@ -36,6 +42,7 @@ export class Scars {
   private g: CanvasRenderingContext2D | null = null;
   private stage: StageKind = "grass";
   private n = 0;
+  get stageName() { return this.stage; }
   /** how many marks there are: the renderer uses it to know when to redraw the cache */
   get count() { return this.n; }
 
@@ -96,6 +103,17 @@ export class Scars {
     r *= 1.25;
     this.with((g) => {
       g.translate(x, y);
+      // churned, muddy ground around it: soft brown that builds up where the fighting is
+      const mud = g.createRadialGradient(0, 0, r * 0.4, 0, 0, r * 2.8);
+      mud.addColorStop(0, burn ? "rgba(18,12,9,.2)" : "rgba(84,60,34,.2)");
+      mud.addColorStop(1, "rgba(84,60,34,0)");
+      g.fillStyle = mud;
+      g.beginPath(); g.ellipse(0, 0, r * 2.8, r * 2.3, 0, 0, TAU); g.fill();
+      for (let i = 0; i < 9; i++) {
+        const a = R() * TAU, d = r * (1.2 + R() * 1.5);
+        g.fillStyle = `rgba(${60 + R() * 30},${42 + R() * 20},${24 + R() * 12},${0.25 + R() * 0.25})`;
+        g.beginPath(); g.ellipse(Math.cos(a) * d, Math.sin(a) * d * 0.8, 1 + R() * 2.2, 0.8 + R() * 1.6, R() * 3, 0, TAU); g.fill();
+      }
       // the stain around it
       g.fillStyle = burn ? "rgba(8,6,6,.34)" : t.dust;
       this.splat(g, r * 1.35, R, 6 + Math.floor(R() * 3), 1);
@@ -233,10 +251,11 @@ export class Scars {
     });
   }
 
-  /** a long, wide cut through the ground: a dark channel with a ragged lighter edge, coloured by the move's type */
-  trench(x1: number, y1: number, x2: number, y2: number, type: string, w = 16, seed = Math.random() * 999) {
+  /** a long, wide mark on the ground left by a beam, in the look of its type: a wet channel, a charred seam, a fused line, frost, a torn furrow... */
+  trench(x1: number, y1: number, x2: number, y2: number, type: string, w = 14, seed = Math.random() * 999) {
     const R = rng(seed);
-    const [dark, edge] = TRENCH[type] ?? TRENCH.Dragon!;
+    const [dark, edge, fx] = TRENCH[type] ?? TRENCH.Dragon!;
+    const tex = typeTex(type);
     const len = Math.hypot(x2 - x1, y2 - y1);
     if (len < 20) return;
     const nx = -(y2 - y1) / len, ny = (x2 - x1) / len;
@@ -246,15 +265,21 @@ export class Scars {
       const k = i / steps;
       mid.push([x1 + (x2 - x1) * k + nx * (R() - 0.5) * 8, y1 + (y2 - y1) * k + ny * (R() - 0.5) * 8]);
     }
-    const band = (wd: number, col: string, jit: number) => {
+    // each band is one ragged strip along the line; the same outline is reused so the layers sit exactly on each other
+    const outline = (wd: number, jit: number) => {
+      const jits = mid.map(() => 1 + (R() - 0.5) * jit);
+      return (sgn: number) => mid.map((p, i) => {
+        const taper = Math.sin((i / steps) * Math.PI) * 0.4 + 0.6;
+        return [p[0] + nx * sgn * wd * taper * jits[i]!, p[1] + ny * sgn * wd * taper * jits[i]!] as [number, number];
+      });
+    };
+    const band = (wd: number, fill: string | ((g: CanvasRenderingContext2D) => string | CanvasPattern), jit: number, alpha = 1, op: GlobalCompositeOperation = "source-over") => {
+      const side = outline(wd, jit);
       this.with((g) => {
-        g.fillStyle = col;
+        g.globalAlpha = alpha;
+        g.globalCompositeOperation = op;
+        g.fillStyle = typeof fill === "string" ? fill : fill(g);
         g.beginPath();
-        const side = (sgn: number) => mid.map((p, i) => {
-          const taper = Math.sin((i / steps) * Math.PI) * 0.4 + 0.6;
-          const j = 1 + (R() - 0.5) * jit;
-          return [p[0] + nx * sgn * wd * taper * j, p[1] + ny * sgn * wd * taper * j] as [number, number];
-        });
         const A = side(1), B = side(-1).reverse();
         A.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
         B.forEach((p) => g.lineTo(p[0], p[1]));
@@ -262,15 +287,65 @@ export class Scars {
         g.fill();
       });
     };
-    band(w * 1.25, "rgba(0,0,0,.28)", 0.5); // the scuffed ground around it
-    band(w * 0.95, edge + "99", 0.55); // its lit lip
-    band(w * 0.78, dark, 0.35); // the cut
-    band(w * 0.36, "rgba(0,0,0,.55)", 0.3); // the bottom of it
-    // rubble along the edge
-    for (let i = 0; i < Math.round(len / 40); i++) {
-      const p = mid[Math.floor(R() * mid.length)]!;
-      this.rubble(p[0] + nx * (R() - 0.5) * w * 2, p[1] + ny * (R() - 0.5) * w * 2, 14, 2, seed + i);
+    const pat = (sc: number) => (g: CanvasRenderingContext2D) => texPat(g, tex, mid[0]![0], mid[0]![1], sc);
+    const at = (k: number): [number, number] => mid[Math.min(steps, Math.max(0, Math.round(k * steps)))]!;
+    band(w * 1.3, fx === "frost" ? "rgba(210,240,255,.22)" : fx === "wet" ? "rgba(10,40,80,.3)" : "rgba(0,0,0,.26)", 0.5); // what the beam scuffed or soaked around it
+    band(w * 0.98, edge + "aa", 0.55); // the lit lip
+    band(w * 0.8, dark, 0.35); // the cut
+    band(w * 0.8, pat(fx === "wet" ? 0.9 : 0.7), 0.35, fx === "wet" ? 0.7 : fx === "char" || fx === "arc" ? 0.4 : 0.55, "source-over"); // the type's own surface
+    band(w * 0.36, "rgba(0,0,0,.5)", 0.3); // the bottom of it
+    const dab = (px: number, py: number, rx: number, ry: number, fill: string, rot = 0) => this.with((g) => { g.fillStyle = fill; g.beginPath(); g.ellipse(px, py, rx, ry, rot, 0, TAU); g.fill(); });
+    const line = (pts: [number, number][], col: string, wd: number) => this.with((g) => { g.strokeStyle = col; g.lineWidth = wd; g.lineCap = "round"; g.lineJoin = "round"; g.beginPath(); pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); g.stroke(); });
+    const along = (off: number) => mid.map((p) => [p[0] + nx * off, p[1] + ny * off] as [number, number]);
+    const nDot = Math.round(len / 14);
+    if (fx === "wet") {
+      line(along(-w * 0.18), "rgba(190,235,255,.5)", 1.6); // a gloss line down the water
+      line(along(w * 0.22), "rgba(255,255,255,.22)", 1);
+      for (let i = 0; i < nDot; i++) { const p = at(R()); dab(p[0] + nx * (R() - 0.5) * w * 2.2, p[1] + ny * (R() - 0.5) * w * 2.2, 1.5 + R() * 2.6, 1 + R() * 1.6, "rgba(170,225,255,.55)"); } // droplets and puddles
+      for (let i = 0; i < 3; i++) { const p = at(0.15 + R() * 0.7); this.with((g) => { g.strokeStyle = "rgba(220,245,255,.45)"; g.lineWidth = 1.2; g.beginPath(); g.ellipse(p[0], p[1], w * (0.7 + R() * 0.6), w * 0.4, Math.atan2(y2 - y1, x2 - x1), 0, TAU); g.stroke(); }); }
+    } else if (fx === "char") {
+      line(along(0), "rgba(255,110,20,.55)", 5); line(along(0), "rgba(255,170,60,.8)", 2.4); line(along(0), "rgba(255,235,160,.9)", 1); // a glowing seam
+      for (let i = 0; i < nDot * 1.5; i++) { const p = at(R()); dab(p[0] + nx * (R() - 0.5) * w * 2, p[1] + ny * (R() - 0.5) * w * 2, 1 + R() * 1.6, 1 + R() * 1.2, R() < 0.5 ? "rgba(255,150,40,.9)" : "rgba(30,20,16,.8)"); } // embers and soot
+      for (let i = 0; i < 4; i++) { const p = at(R()); this.crack(p[0], p[1], p[0] + nx * (R() - 0.5) * w * 3, p[1] + ny * (R() - 0.5) * w * 3, seed + i, 1, 0); }
+    } else if (fx === "arc") {
+      for (let i = 0; i < 3; i++) {
+        const pts = mid.map((p, j) => [p[0] + nx * (R() - 0.5) * w * 0.9, p[1] + ny * (R() - 0.5) * w * 0.9 + (j % 2 ? 1.5 : -1.5)] as [number, number]);
+        line(pts, i ? "rgba(255,244,170,.85)" : "rgba(255,225,70,.6)", i ? 1 : 2.4);
+      }
+      for (let i = 0; i < nDot; i++) { const p = at(R()); dab(p[0] + nx * (R() - 0.5) * w * 2.4, p[1] + ny * (R() - 0.5) * w * 2.4, 1 + R() * 1.4, 1 + R() * 1.4, R() < 0.5 ? "rgba(255,240,150,.9)" : "rgba(12,10,8,.8)"); } // sparks and fused specks
+    } else if (fx === "frost") {
+      for (let i = 0; i < nDot * 1.2; i++) { // ice shards and frost dust
+        const p = at(R()), sx = p[0] + nx * (R() - 0.5) * w * 2, sy = p[1] + ny * (R() - 0.5) * w * 2, sz = 2 + R() * 4, a = R() * TAU;
+        this.with((g) => { g.fillStyle = R() < 0.5 ? "rgba(235,250,255,.85)" : "rgba(160,215,245,.8)"; g.beginPath(); g.moveTo(sx + Math.cos(a) * sz, sy + Math.sin(a) * sz); g.lineTo(sx + Math.cos(a + 2.4) * sz * 0.5, sy + Math.sin(a + 2.4) * sz * 0.5); g.lineTo(sx + Math.cos(a + 3.9) * sz * 0.5, sy + Math.sin(a + 3.9) * sz * 0.5); g.closePath(); g.fill(); });
+      }
+      for (let i = 0; i < 4; i++) { const p = at(R()); this.crack(p[0], p[1], p[0] + nx * (R() - 0.5) * w * 3.4, p[1] + ny * (R() - 0.5) * w * 3.4, seed + i, 1, 1); }
+    } else if (fx === "furrow") {
+      for (let i = 0; i < nDot * 1.4; i++) { // torn blades and leaves thrown to the sides
+        const p = at(R()), sx = p[0] + nx * (R() < 0.5 ? -1 : 1) * w * (0.8 + R() * 0.9), sy = p[1] + ny * (R() < 0.5 ? -1 : 1) * w * (0.8 + R() * 0.9);
+        dab(sx, sy, 2 + R() * 3, 1 + R() * 1.4, R() < 0.5 ? "#4f9a3a" : "#8acb5a", R() * TAU);
+      }
+      for (let i = 0; i < nDot; i++) { const p = at(R()); dab(p[0] + nx * (R() - 0.5) * w * 1.6, p[1] + ny * (R() - 0.5) * w * 1.6, 1.5 + R() * 2, 1 + R() * 1.4, "rgba(70,48,26,.8)"); }
+    } else if (fx === "sludge") {
+      for (let i = 0; i < nDot; i++) { // bubbles with a glint
+        const p = at(R()), bx = p[0] + nx * (R() - 0.5) * w * 1.6, by = p[1] + ny * (R() - 0.5) * w * 1.6, rr = 1.6 + R() * 3.4;
+        this.with((g) => { g.fillStyle = "rgba(150,70,200,.55)"; g.strokeStyle = "rgba(220,150,250,.8)"; g.lineWidth = 1; g.beginPath(); g.arc(bx, by, rr, 0, TAU); g.fill(); g.stroke(); g.fillStyle = "rgba(255,255,255,.7)"; g.beginPath(); g.arc(bx - rr * 0.35, by - rr * 0.35, rr * 0.25, 0, TAU); g.fill(); });
+      }
+      line(along(w * 0.1), "rgba(120,200,70,.35)", 1.6);
+    } else if (fx === "ditch") {
+      for (let i = 0; i < Math.round(len / 40); i++) { const p = at(R()); this.rubble(p[0] + nx * (R() - 0.5) * w * 2, p[1] + ny * (R() - 0.5) * w * 2, 14, 3, seed + i); }
+      this.crack(mid[0]![0], mid[0]![1], mid[steps]![0], mid[steps]![1], seed + 9, 1.2, 1);
+    } else if (fx === "scour") {
+      for (let k = -2; k <= 2; k++) line(along(k * w * 0.2), "rgba(235,240,250,.4)", 0.9); // long scratches
+      for (let i = 0; i < nDot * 0.6; i++) { const p = at(R()); this.rubble(p[0] + nx * (R() - 0.5) * w * 2, p[1] + ny * (R() - 0.5) * w * 2, 8, 1, seed + i); }
+    } else if (fx === "glitter") {
+      for (let i = 0; i < nDot * 1.2; i++) {
+        const p = at(R()), sx = p[0] + nx * (R() - 0.5) * w * 2.2, sy = p[1] + ny * (R() - 0.5) * w * 2.2, sz = 1.5 + R() * 3;
+        this.with((g) => { g.strokeStyle = R() < 0.5 ? "rgba(255,230,250,.9)" : "rgba(255,160,225,.85)"; g.lineWidth = 1; g.beginPath(); g.moveTo(sx - sz, sy); g.lineTo(sx + sz, sy); g.moveTo(sx, sy - sz); g.lineTo(sx, sy + sz); g.stroke(); });
+      }
+    } else {
+      line(along(0), edge + "88", 1.6);
+      for (let i = 0; i < nDot; i++) { const p = at(R()); dab(p[0] + nx * (R() - 0.5) * w * 2.2, p[1] + ny * (R() - 0.5) * w * 2.2, 1.4 + R() * 2, 1.1 + R() * 1.4, edge + "66"); }
+      this.crack(mid[0]![0], mid[0]![1], mid[steps]![0], mid[steps]![1], seed + 9, 1.2, 1);
     }
-    this.crack(mid[0]![0], mid[0]![1], mid[steps]![0], mid[steps]![1], seed + 9, 1.2, 1);
   }
 }

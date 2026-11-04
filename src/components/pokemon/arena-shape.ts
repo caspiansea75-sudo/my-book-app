@@ -77,9 +77,20 @@ export function pond(g: G, p: Patch, t: number) {
   const gr = g.createRadialGradient(p.x, p.y, 6, p.x, p.y, p.rx);
   gr.addColorStop(0, "#164f86"); gr.addColorStop(0.55, "#2a78bd"); gr.addColorStop(1, "#58b4dc");
   g.fillStyle = gr; g.fillRect(p.x - p.rx, p.y - p.ry, p.rx * 2, p.ry * 2);
-  g.globalAlpha = 0.28; g.globalCompositeOperation = "overlay";
+  // rich, layered water like the lava: the texture at full strength, a second copy sliding the other way at another size
+  // (so the light nets crawl across each other), dark depth in the middle and a bright shallows near the shore
+  g.globalAlpha = 0.7; g.globalCompositeOperation = "overlay";
   g.fillStyle = texPat(g, "water", t * 14, t * 6, 1.1); g.fillRect(p.x - p.rx, p.y - p.ry, p.rx * 2, p.ry * 2);
-  g.globalCompositeOperation = "source-over"; g.globalAlpha = 1;
+  g.globalAlpha = 0.42; g.globalCompositeOperation = "soft-light";
+  g.fillStyle = texPat(g, "water", -t * 9 + 40, t * 11, 0.62, 0.6); g.fillRect(p.x - p.rx, p.y - p.ry, p.rx * 2, p.ry * 2);
+  g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  const dep = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.rx);
+  dep.addColorStop(0, "rgba(2,22,64,.42)"); dep.addColorStop(0.6, "rgba(4,40,100,.1)"); dep.addColorStop(0.9, "rgba(140,225,255,.18)"); dep.addColorStop(1, "rgba(190,245,255,.34)");
+  g.fillStyle = dep; g.fillRect(p.x - p.rx, p.y - p.ry, p.rx * 2, p.ry * 2);
+  const hotW = g.createRadialGradient(p.x - p.rx * 0.25, p.y - p.ry * 0.3, 0, p.x - p.rx * 0.25, p.y - p.ry * 0.3, p.rx * 0.8);
+  hotW.addColorStop(0, "rgba(200,240,255,.26)"); hotW.addColorStop(1, "rgba(200,240,255,0)");
+  g.globalCompositeOperation = "lighter"; g.fillStyle = hotW; g.fillRect(p.x - p.rx, p.y - p.ry, p.rx * 2, p.ry * 2);
+  g.globalCompositeOperation = "source-over";
   // caustic light: bright wavy threads
   g.globalCompositeOperation = "lighter";
   g.lineWidth = 1.4;

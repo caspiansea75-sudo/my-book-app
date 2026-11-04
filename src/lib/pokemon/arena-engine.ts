@@ -20,7 +20,7 @@ export type Level = "easy" | "normal" | "hard";
 export type StageKind = "grass" | "stone" | "dirt" | "crystal" | "ice" | "lava" | "coast";
 export type ObsKind = "crate" | "pillar" | "crystal" | "rock" | "tree" | "pine" | "iceboulder" | "basalt" | "palm" | "cactus";
 /** Something standing in the arena: crates break, the rest do not. */
-export type Obstacle = { id: number; kind: ObsKind; x: number; y: number; r: number; hp: number; hit: number };
+export type Obstacle = { id: number; kind: ObsKind; x: number; y: number; r: number; hp: number; hit: number; /** a pillar thrown up by a blast: when it crumbles (game time), and its height and width */ until?: number; ph?: number; pw?: number };
 /** An oval patch of the floor: a bottomless pit or a pool of water. */
 export type Patch = { id: number; x: number; y: number; rx: number; ry: number; base?: number };
 
@@ -376,6 +376,27 @@ function boom(S: State, x: number, y: number, r: number, type: string, fx?: stri
         S.events.push({ t: "crate", x: o.x, y: o.y, kind: o.kind });
       }
     }
+  }
+  if (r >= 70 && (type === "Ground" || type === "Rock")) raisePillars(S, x, y, r);
+}
+
+/** Heavy earth and rock blasts push up stone pillars: they block everyone like any pillar, wear down under big blasts, and crumble after a while. */
+function raisePillars(S: State, x: number, y: number, r: number) {
+  let live = S.obs.filter((o) => o.until !== undefined && o.hp > 0).length;
+  const n = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n && live < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = Math.min(r, 150) * (0.35 + Math.random() * 0.75);
+    const px = clamp(x + Math.cos(a) * d, MARGIN + 40, W - MARGIN - 40);
+    const py = clamp(y + Math.sin(a) * d * 0.8, MARGIN + 40, H - MARGIN - 40);
+    const w = 11 + Math.random() * 9;
+    const pr = w * 1.1;
+    // never on somebody, on another obstacle, or in a pit or pool
+    if (S.fighters.some((f) => f.alive && len(f.x - px, f.y - py) < f.r + pr + 10)) continue;
+    if (S.obs.some((o) => o.hp > 0 && len(o.x - px, o.y - py) < o.r + pr + 12)) continue;
+    if (S.holes.some((h) => inPatch(h, px, py, pr + 6)) || S.pools.some((h) => inPatch(h, px, py, pr + 6))) continue;
+    S.obs.push({ id: S.nextId++, kind: "pillar", x: px, y: py, r: pr, hp: 99, hit: 0, until: S.time + 7 + Math.random() * 4, ph: 36 + Math.random() * 48, pw: w });
+    live++;
   }
 }
 
@@ -2187,6 +2208,14 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     if (S.introT <= 0) S.phase = "fight";
     for (const f of S.fighters) if (f.alive) f.flash = Math.max(0, f.flash - dt);
     return;
+  }
+
+  // pillars thrown up by blasts crumble when their time is up
+  for (const o of S.obs) {
+    if (o.until !== undefined && o.hp > 0 && S.time > o.until) {
+      o.hp = 0;
+      S.events.push({ t: "crate", x: o.x, y: o.y, kind: o.kind });
+    }
   }
 
   // ---- the people (one in a normal run, 2-5 in a multiplayer royale)
