@@ -68,6 +68,16 @@ export class Scars {
   private with(fn: (g: CanvasRenderingContext2D) => void) {
     const g = this.g;
     if (!g || this.stage === "ocean") return; // nothing marks open water
+    // a long fight never runs out of room: when the floor is crowded with marks the old ones fade a little, so new ones always show
+    if (this.n >= 240 && this.cv) {
+      g.save();
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = "destination-out";
+      g.globalAlpha = 0.35;
+      g.fillRect(0, 0, this.cv.width, this.cv.height);
+      g.restore();
+      this.n = 150;
+    }
     g.save();
     g.setTransform(SC, 0, 0, SC, 0, 0);
     fn(g);

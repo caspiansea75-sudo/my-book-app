@@ -71,6 +71,20 @@ const ARENA_FIT = SCR.W / ARENA.W;
 /** Where the sun is, as a direction in the arena (an angle): it lights the sprites, throws the shadows and shows in the sky of the player views. */
 const SUN_AZ = -2.3;
 /** The colour of the stone wall round the arena, by stage. */
+/** The look of the stands for each arena: seat colour, the colours people wear, the roof and the floodlights. */
+type StandLook = { seat: [number, number]; hues: number[]; sat: number; roof: string; roofLit: string; light: string; glow: string; skin?: [string, string] };
+const STAND_LOOK: Record<string, StandLook> = {
+  grass: { seat: [140, 14], hues: [0, 50, 210, 120], sat: 46, roof: "#4d5a46", roofLit: "#7d8f72", light: "#fffbe6", glow: "255,246,200" },
+  stone: { seat: [222, 10], hues: [0, 215, 45, 285], sat: 44, roof: "#464b58", roofLit: "#7d8394", light: "#f4f6ff", glow: "226,232,255" },
+  dirt: { seat: [30, 22], hues: [8, 36, 200, 50], sat: 48, roof: "#68472d", roofLit: "#a07448", light: "#ffe7b8", glow: "255,214,150" },
+  crystal: { seat: [268, 26], hues: [270, 300, 190, 330], sat: 52, roof: "#372a66", roofLit: "#7a62c4", light: "#e6d8ff", glow: "190,150,255" },
+  ice: { seat: [205, 26], hues: [200, 185, 350, 220], sat: 40, roof: "#7ea3bf", roofLit: "#cfe7f7", light: "#eaf8ff", glow: "190,235,255" },
+  lava: { seat: [8, 30], hues: [0, 22, 42, 350], sat: 58, roof: "#3a1f1c", roofLit: "#8a4636", light: "#ffcf9a", glow: "255,150,70" },
+  coast: { seat: [196, 20], hues: [190, 32, 0, 55], sat: 46, roof: "#b7a77c", roofLit: "#e8dcb6", light: "#fff3d2", glow: "255,236,180" },
+  meadow: { seat: [112, 16], hues: [52, 330, 205, 100], sat: 46, roof: "#6f8f55", roofLit: "#a5c486", light: "#fffbe0", glow: "255,248,200" },
+  glacier: { seat: [200, 22], hues: [200, 180, 0, 225], sat: 38, roof: "#86aac4", roofLit: "#d6ecfa", light: "#eefaff", glow: "200,238,255" },
+  ocean: { seat: [206, 28], hues: [200, 170, 40, 0], sat: 46, roof: "#2e5876", roofLit: "#6aa0c4", light: "#e8f7ff", glow: "170,225,255" },
+};
 const WALL_COL: Record<string, string> = { grass: "#6a7a58", stone: "#6b707c", dirt: "#8a6a48", crystal: "#5a4a8c", ice: "#9cc0da", lava: "#5a3430", coast: "#9a8a68" };
 function shadeHex(hex: string, m: number) {
   const n = parseInt(hex.slice(1), 16);
@@ -1006,7 +1020,7 @@ export class ArenaRenderer {
         case "explode": {
           const c = col(e.type);
           // every blast marks the ground for good: small ones pit it, big ones dig a crater, throw rubble and crack it
-          if (this.scars.count < 320) {
+          {
             if (e.r < 36) { if (Math.random() < 0.45) this.scar(e.x, e.y + 4, Math.max(6, e.r * 0.3), e.type); }
             else if (e.r >= 100) { this.scars.web(e.x, e.y, e.r * 0.8); this.scars.rubble(e.x, e.y, e.r * 0.9, Math.round(e.r / 8)); }
           }
@@ -1718,6 +1732,13 @@ export class ArenaRenderer {
       // the stands: rings of seating rising away from the pitch, lowest tier at the wall, highest at the back
       {
         const T = this.q > 0.5 ? 6 : 4;
+        const look = STAND_LOOK[S.stage] ?? STAND_LOOK.grass!;
+        // floodlight towers at the four corners and the middle of the long sides, behind the top tier
+        {
+          const o = 440;
+          const spots: [number, number][] = [[INS - o, INS - o], [ARENA.W - INS + o, INS - o], [ARENA.W - INS + o, ARENA.H - INS + o], [INS - o, ARENA.H - INS + o], [ARENA.W / 2, INS - o - 10], [ARENA.W / 2, ARENA.H - INS + o + 10]];
+          for (const [lx, ly] of spots) things.push({ y: dk(lx, ly) - 20, draw: () => this.drawLight(g, lx, ly, look) });
+        }
         const ring = (tier: number) => { const o = 22 + tier * (400 / 6), z = 44 + tier * (300 / 6); return { o, z, c: [[INS - o, INS - o], [ARENA.W - INS + o, INS - o], [ARENA.W - INS + o, ARENA.H - INS + o], [INS - o, ARENA.H - INS + o]] as [number, number][] }; };
         for (let t = 0; t < T; t++) {
           const r0 = ring(t * (6 / T)), r1 = ring((t + 1) * (6 / T));
@@ -1729,7 +1750,20 @@ export class ArenaRenderer {
               const L = (p: [number, number], q: [number, number], u: number, z: number): [number, number, number] => [p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u, z];
               const pts = [L(a0, b0, u0, r0.z), L(a0, b0, u1, r0.z), L(a1, b1, u1, r1.z), L(a1, b1, u0, r1.z)];
               const mx = (pts[0]![0] + pts[2]![0]) / 2, my = (pts[0]![1] + pts[2]![1]) / 2;
-              things.push({ y: dk(mx, my) - 60 - t * 4, draw: () => this.drawStand(g, pts, e * 997 + i * 31 + t * 7, t, T) });
+              if (t === 0 && this.q > 0.35) {
+                // the roof: a slab over the back of the stands, pitched down toward the pitch, with a lit lip at its edge
+                const ro = ring(6.9), ri = ring(5.2);
+                const aa = ro.c[e]!, bb = ro.c[(e + 1) % 4]!, ca = ri.c[e]!, cb = ri.c[(e + 1) % 4]!;
+                const zr0 = 372, zr1 = 322;
+                const rp: [number, number, number][] = [
+                  [aa[0] + (bb[0] - aa[0]) * u0, aa[1] + (bb[1] - aa[1]) * u0, zr0 + 40],
+                  [aa[0] + (bb[0] - aa[0]) * u1, aa[1] + (bb[1] - aa[1]) * u1, zr0 + 40],
+                  [ca[0] + (cb[0] - ca[0]) * u1, ca[1] + (cb[1] - ca[1]) * u1, zr1 + 40],
+                  [ca[0] + (cb[0] - ca[0]) * u0, ca[1] + (cb[1] - ca[1]) * u0, zr1 + 40],
+                ];
+                things.push({ y: dk((rp[0]![0] + rp[2]![0]) / 2, (rp[0]![1] + rp[2]![1]) / 2) - 30, draw: () => this.drawRoof(g, rp, look) });
+              }
+              things.push({ y: dk(mx, my) - 60 - t * 4, draw: () => this.drawStand(g, pts, e * 997 + i * 31 + t * 7, t, T, look) });
             }
           }
         }
@@ -3357,8 +3391,84 @@ export class ArenaRenderer {
     G.restore();
   }
 
+  /** The roof over the back of the stands: a pitched slab (its underside faces the pitch) with a bright lip. `pts`: back edge first, then the front edge. */
+  private drawRoof(g: CanvasRenderingContext2D, pts: [number, number, number][], look: StandLook) {
+    const P: { x: number; y: number; d: number }[] = [];
+    for (const [x, y, z] of pts) {
+      const q = this.proj3(x, y);
+      if (!q) return;
+      P.push({ x: q.x, y: q.y - z * q.sc, d: q.depth });
+    }
+    const near = Math.min(...P.map((p) => p.d));
+    const al = Math.max(0, Math.min(1, (near - 120) / 260));
+    if (al < 0.03) return;
+    const k = this.scale;
+    const rxs = P.map((p) => p.x * k + this.shx * k), rys = P.map((p) => p.y * k + this.shy * k);
+    if (Math.max(...rxs) < -20 || Math.min(...rxs) > g.canvas.width + 20 || Math.max(...rys) < -20 || Math.min(...rys) > g.canvas.height + 20) return;
+    g.save();
+    g.setTransform(k, 0, 0, k, k * this.shx, k * this.shy);
+    g.globalAlpha = al;
+    g.beginPath();
+    g.moveTo(P[0]!.x, P[0]!.y); g.lineTo(P[1]!.x, P[1]!.y); g.lineTo(P[2]!.x, P[2]!.y); g.lineTo(P[3]!.x, P[3]!.y);
+    g.closePath();
+    g.fillStyle = look.roof;
+    g.fill();
+    // the underside is in shadow; it gets lighter toward the lip
+    const gr = g.createLinearGradient(0, (P[0]!.y + P[1]!.y) / 2, 0, (P[2]!.y + P[3]!.y) / 2);
+    gr.addColorStop(0, "rgba(0,0,10,.55)"); gr.addColorStop(1, "rgba(0,0,10,.15)");
+    g.fillStyle = gr;
+    g.fill();
+    // ribs
+    g.strokeStyle = "rgba(0,0,10,.35)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(P[0]!.x, P[0]!.y); g.lineTo(P[3]!.x, P[3]!.y); g.stroke();
+    // the lit lip along the front edge
+    g.strokeStyle = look.roofLit; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(P[3]!.x, P[3]!.y); g.lineTo(P[2]!.x, P[2]!.y); g.stroke();
+    g.restore();
+  }
+
+  /** A floodlight tower: a mast with a bank of lamps and a soft glow (the lamps flicker slightly). */
+  private drawLight(g: CanvasRenderingContext2D, x: number, y: number, look: StandLook) {
+    const qb = this.proj3(x, y);
+    if (!qb) return;
+    const al = Math.max(0, Math.min(1, (qb.depth - 120) / 300));
+    if (al < 0.03) return;
+    const H = 560;
+    const k = this.scale;
+    const bx = qb.x, by = qb.y, tx = qb.x, ty = qb.y - H * qb.sc;
+    const sc = qb.sc;
+    const R0 = 150 * sc * k + 40;
+    const sx0 = tx * k + this.shx * k, sy0 = ty * k + this.shy * k;
+    if (sx0 < -R0 || sx0 > g.canvas.width + R0 || sy0 < -R0 || sy0 > g.canvas.height + R0) return;
+    g.save();
+    g.setTransform(k, 0, 0, k, k * this.shx, k * this.shy);
+    g.globalAlpha = al;
+    g.strokeStyle = "#2a2f3a"; g.lineWidth = Math.max(2, 9 * sc);
+    g.beginPath(); g.moveTo(bx, by); g.lineTo(tx, ty); g.stroke();
+    // the lamp panel
+    const w = 74 * sc, h = 44 * sc;
+    g.fillStyle = "#1c2028";
+    g.fillRect(tx - w / 2, ty - h / 2, w, h);
+    const fl = 0.92 + 0.08 * Math.sin(this.t * 9 + x);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) {
+      g.fillStyle = look.light;
+      g.globalAlpha = al * fl;
+      g.beginPath(); g.arc(tx - w / 2 + (c + 0.5) * (w / 5), ty - h / 2 + (r + 0.5) * (h / 3), Math.max(1.5, 5.2 * sc), 0, Math.PI * 2); g.fill();
+    }
+    // the glow
+    g.globalCompositeOperation = "lighter";
+    const R = 150 * sc;
+    if (this.q < 0.4) { g.restore(); return; }
+    const rg = g.createRadialGradient(tx, ty, 2, tx, ty, R);
+    rg.addColorStop(0, `rgba(${look.glow},${0.75 * fl})`); rg.addColorStop(0.3, `rgba(${look.glow},.24)`); rg.addColorStop(1, `rgba(${look.glow},0)`);
+    g.globalAlpha = al;
+    g.fillStyle = rg;
+    g.fillRect(tx - R, ty - R, R * 2, R * 2);
+    g.restore();
+  }
+
   /** One block of seating: a sloped slab of the stands with rows of people on it. `pts` are its four corners (nearer edge first), as x, y and height. */
-  private drawStand(g: CanvasRenderingContext2D, pts: [number, number, number][], seed: number, tier: number, tiers: number) {
+  private drawStand(g: CanvasRenderingContext2D, pts: [number, number, number][], seed: number, tier: number, tiers: number, look: StandLook) {
     const P: { x: number; y: number; sc: number; d: number }[] = [];
     for (const [x, y, z] of pts) {
       const q = this.proj3(x, y);
@@ -3375,7 +3485,7 @@ export class ArenaRenderer {
     g.setTransform(k, 0, 0, k, k * this.shx, k * this.shy);
     g.globalAlpha = al;
     const lum = 24 - tier * 1.6;
-    g.fillStyle = `hsl(226 16% ${lum}%)`;
+    g.fillStyle = `hsl(${look.seat[0]} ${look.seat[1]}% ${lum}%)`;
     g.beginPath();
     g.moveTo(P[0]!.x, P[0]!.y); g.lineTo(P[1]!.x, P[1]!.y); g.lineTo(P[2]!.x, P[2]!.y); g.lineTo(P[3]!.x, P[3]!.y);
     g.closePath();
@@ -3395,8 +3505,8 @@ export class ArenaRenderer {
         const sc = (P[0]!.sc + P[2]!.sc) / 2;
         const bob = Math.max(0, Math.sin(t * 4.2 + u * 9 + h0 * 6 + tier)) * 2.4 * sc * (h0 > 0.5 ? 1 : 0.4);
         const x = ax + (bx - ax) * v, y = ay + (by - ay) * v - bob;
-        const hue = Math.floor(h0 * 360 * 7) % 360;
-        g.fillStyle = `hsl(${hue} 42% ${40 + (h0 * 18)}%)`;
+        const hue = (look.hues[Math.floor(h0 * 997) % look.hues.length]! + (h0 * 40 - 20) + 360) % 360;
+        g.fillStyle = `hsl(${hue} ${look.sat}% ${38 + (h0 * 20)}%)`;
         g.beginPath(); g.arc(x, y, 4.6 * sc, 0, Math.PI * 2); g.fill();
         if (this.q > 0.7) { g.fillStyle = h0 > 0.5 ? "#e8c4a0" : "#b98760"; g.beginPath(); g.arc(x, y - 4.2 * sc, 2.5 * sc, 0, Math.PI * 2); g.fill(); }
       }
@@ -4359,7 +4469,7 @@ export class ArenaRenderer {
     const L = Math.min(md.range ?? 260, 520) * 0.85;
     const ux = Math.cos(e.dir), uy = Math.sin(e.dir);
     const x2 = e.x + ux * L, y2 = e.y + uy * L;
-    if (this.scars.count < 300) this.scars.trench(e.x + ux * 30, e.y + uy * 30, x2, y2, e.type, md.kind === "bolt" ? 16 : 22);
+    this.scars.trench(e.x + ux * 30, e.y + uy * 30, x2, y2, e.type, md.kind === "bolt" ? 16 : 22);
     const n = Math.round(L / 14);
     for (let i = 0; i < n; i++) {
       const k = 0.1 + (i / n) * 0.9, px = e.x + ux * L * k + rnd(-10, 10), py = e.y + uy * L * k + rnd(-8, 8);
@@ -5437,7 +5547,7 @@ export class ArenaRenderer {
     const grooved = m.kind === "dig" || (m.kind === "run" && f.air < 6);
     if (grooved) {
       if (!last) this.movLast.set(f.id, { x: f.x, y: f.y });
-      else if (Math.hypot(f.x - last.x, f.y - last.y) > 26 && this.scars.count < 300) {
+      else if (Math.hypot(f.x - last.x, f.y - last.y) > 26) {
         this.scars.trench(last.x, last.y + f.r * 0.3, f.x, f.y + f.r * 0.3, m.type, m.kind === "dig" ? 15 : m.type === "Rock" || m.type === "Steel" ? 14 : 10);
         this.movLast.set(f.id, { x: f.x, y: f.y });
       }
