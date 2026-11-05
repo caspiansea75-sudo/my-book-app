@@ -5,14 +5,18 @@
  */
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { decodeGif, frameAt, type GifFrames } from "@/components/pokemon/gif-frames";
-import { fighterOf, type StageId } from "./sd-data";
-import { ROUND_TIME, STAGE_W, type Ev, type Pl, type Proj, type World } from "./sd-engine";
+import { fighterOf, type Fighter, type StageId } from "./sd-data";
+import { ROUND_TIME, STAGE_W, type Atk, type Ev, type PState, type Pl, type Proj, type World } from "./sd-engine";
 import { GROUND_Y, VH, VW, drawStage } from "./sd-stages";
 
 type G = CanvasRenderingContext2D;
-type Sprite = { gif: GifFrames | null; still: HTMLImageElement | null };
+type Sprite = { gif: GifFrames | null; still: HTMLImageElement | null; done: boolean };
 type Part = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: "dot" | "ring" | "streak" };
 type Pop = { x: number; y: number; t: number; text: string; color: string };
+type Ghost = { x: number; y: number; rot: number; sx: number; sy: number; flip: number; born: number; color: string };
+/** What is only about looks: smooth turning, landing squash, dust, after-images. The fight rules never see it. */
+type Vis = { flip: number; land: number; bounce: number; hover: number; prevY: number; prevSt: PState; dust: number; trail: Ghost[]; trailT: number; star: number; tx: number };
+const newVis = (): Vis => ({ flip: 1, land: 0, bounce: 0, hover: 0, prevY: 0, prevSt: "idle", dust: 0, trail: [], trailT: 0, star: 0, tx: 0 });
 type Banner = { text: string; sub?: string; t: number; max: number; color: string };
 
 const FONT = `"Noto Sans Bengali", ui-sans-serif, system-ui, sans-serif`;
@@ -52,6 +56,8 @@ export class SdRenderer {
   private last = 0;
   private tmp: HTMLCanvasElement | null = null;
   private broken = false;
+  private vis: [Vis, Vis] = [newVis(), newVis()];
+  private clock = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.g = canvas.getContext("2d")!;
@@ -69,6 +75,8 @@ export class SdRenderer {
     this.last = 0;
     this.cam = STAGE_W / 2;
     this.zoom = 1;
+    this.vis = [newVis(), newVis()];
+    this.clock = 0;
   }
 
   /** Fetch the pictures ahead of time so the fight starts with everyone drawn. */
@@ -82,17 +90,35 @@ export class SdRenderer {
   private sprite(id: string): Sprite {
     let s = this.sprites.get(id);
     if (s) return s;
-    const sp: Sprite = { gif: null, still: null };
+    const sp: Sprite = { gif: null, still: null, done: false };
     this.sprites.set(id, sp);
     const still = new Image();
     still.onload = () => { sp.still = still; };
     still.src = `/api/sprite?k=dex&id=${encodeURIComponent(id)}`;
     fetch(`/api/sprite?k=ani&id=${encodeURIComponent(id)}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))))
-      .then((b) => { sp.gif = decodeGif(b); })
-      .catch(() => { /* the still picture stays */ });
+      .then((b) => { sp.gif = decodeGif(b); sp.done = true; })
+      .catch(() => { sp.done = true; /* the still picture stays */ });
     s = sp;
     return s;
+  }
+
+  /** True once every picture has arrived (or failed), so nobody changes size or pose in the middle of the fight. */
+  ready(ids: string[]): boolean {
+    return ids.map((id) => this.sprite(id)).every((sp) => sp.done);
+  }
+
+  /** What is shown while the pictures are still on their way. */
+  loading(now: number) {
+    const g = this.g;
+    this.resize();
+    g.setTransform(this.k, 0, 0, this.k, 0, 0);
+    g.clearRect(0, 0, VW, VH);
+    drawStage(g, this.stage, STAGE_W / 2, GROUND_Y, now / 1000);
+    g.fillStyle = "rgba(8,6,20,.55)";
+    g.fillRect(0, 0, VW, VH);
+    const dots = ".".repeat(1 + (Math.floor(now / 350) % 3));
+    this.txt(g, (this.lang === "bn" ? "পোকেমন তৈরি হচ্ছে" : "Getting the Pokémon ready") + dots, VW / 2, VH / 2, 34, "#ffffff", { align: "center", stroke: "rgba(0,0,0,.8)" });
   }
 
   private portrait(id: string): HTMLImageElement | null {
@@ -217,7 +243,10 @@ export class SdRenderer {
     this.resize();
     const dt = this.last ? clamp((now - this.last) / 1000, 0, 0.05) : 0.016;
     this.last = now;
-    const t = w.time;
+    // everything that only sways, breathes or flutters runs on this clock: it advances smoothly on every screen refresh
+    // (the fight's own clock moves in 1/60 s steps, which looks uneven on a 120 or 144 Hz screen)
+    this.clock += dt;
+    const t = this.clock;
 
     for (const e of w.evs) if (e.n > this.lastEv) { this.lastEv = e.n; this.onEvent(e, w); }
     if (w.lineN !== this.lastLine) { this.lastLine = w.lineN; if (w.line) { this.lines.push(w.line); if (this.lines.length > 5) this.lines.shift(); this.tickW = 0; } }
@@ -245,8 +274,9 @@ export class SdRenderer {
     if (sb) this.cinema(g, w, sb);
 
     const order = [A, B].sort((p, q) => (p.st === "atk" ? 1 : 0) - (q.st === "atk" ? 1 : 0));
+    this.visStep(w, dt);
     for (const p of order) this.shadow(g, p);
-    for (const p of order) this.fighter(g, w, p, dt);
+    for (const p of order) { this.fighter(g, w, p); this.strike(g, w, p); }
     for (const pr of w.pr) this.proj(g, pr, t);
     this.effects(g, dt);
     g.restore();
@@ -288,78 +318,205 @@ export class SdRenderer {
 
   private shadow(g: G, p: Pl) {
     const f = fighterOf(p.id);
-    const a = 0.34 * (1 - clamp(p.y / 380, 0, 1)) * (p.st === "ko" ? 0.6 : 1);
+    const v = this.vis[p.slot];
+    const lift = clamp(p.y / 380, 0, 1) + clamp(v.hover / 90, 0, 0.4);
+    const a = 0.34 * (1 - lift) * (p.st === "ko" ? 0.6 : 1);
     g.fillStyle = `rgba(0,0,0,${a})`;
     g.beginPath();
-    g.ellipse(this.X(p.x), this.gy + 4, f.bw * 1.5 * this.zoom * (1 - clamp(p.y / 700, 0, 0.4)), 11 * this.zoom, 0, 0, Math.PI * 2);
+    g.ellipse(this.X(p.x), this.gy + 4, f.bw * 1.5 * this.zoom * (1 - clamp(p.y / 700, 0, 0.4)) * (1 - clamp(v.hover / 160, 0, 0.3)), 11 * this.zoom, 0, 0, Math.PI * 2);
     g.fill();
   }
 
-  /** One pose = one transform about the feet: lean, squash, hop and fall. No cuts. */
-  private pose(p: Pl, t: number) {
-    const f = p.face;
+  /** Per frame, looks only: turning round smoothly, landing squash, dust under running feet, stars for the winner. */
+  private visStep(w: World, dt: number) {
+    for (const p of w.p) {
+      const v = this.vis[p.slot];
+      const f = fighterOf(p.id);
+      const target = p.face === 1 ? -1 : 1; // the pictures look left; -1 turns them to the right
+      v.flip += (target - v.flip) * Math.min(1, dt * 16);
+      if (Math.abs(target - v.flip) < 0.02) v.flip = target;
+      // landing: squash on touching the floor again; a hard bounce when knocked down
+      if (v.prevY > 3 && p.y <= 0) {
+        if (p.st === "down" || p.st === "ko") v.bounce = 1;
+        else v.land = Math.min(1, 0.45 + v.prevY / 260);
+      }
+      v.land = Math.max(0, v.land - dt / 0.26);
+      v.bounce = Math.max(0, v.bounce - dt / 0.34);
+      const hoverGoal = p.st === "down" || p.st === "ko" || p.st === "getup" ? 0 : f.loco === "fly" ? 26 : f.loco === "float" ? 17 : 0;
+      v.hover += (hoverGoal - v.hover) * Math.min(1, dt * 9);
+      // dust kicked up by feet that run
+      if (p.y <= 0.5 && p.st === "walk" && f.loco !== "fly" && f.loco !== "float") {
+        v.dust += Math.abs(p.vx) * dt;
+        if (v.dust > 62) {
+          v.dust = 0;
+          for (let i = 0; i < 2; i++) this.parts.push({ x: p.x - Math.sign(p.vx) * (14 + i * 8), y: 5, vx: -Math.sign(p.vx) * (30 + Math.random() * 40), vy: 30 + Math.random() * 40, life: 0.38, max: 0.38, size: 7 + Math.random() * 5, color: "rgba(235,225,205,.55)", kind: "dot" });
+        }
+      }
+      // the winner throws stars
+      if (p.st === "win") {
+        v.star -= dt;
+        if (v.star <= 0) {
+          v.star = 0.1;
+          this.parts.push({ x: p.x + (Math.random() - 0.5) * f.bw * 2.4, y: p.y + f.h * (0.5 + Math.random() * 0.6), vx: (Math.random() - 0.5) * 160, vy: 160 + Math.random() * 120, life: 0.7, max: 0.7, size: 6, color: "#ffe27a", kind: "dot" });
+        }
+      }
+      v.prevY = p.y;
+      v.prevSt = p.st;
+    }
+  }
+
+  /** One pose = one transform about the feet: lean, squash, stretch, hop, fall, spring. No cuts. */
+  private pose(w: World, p: Pl, f: Fighter, v: Vis) {
+    const t = this.clock, fc = p.face;
+    const slot = p.slot;
     let rot = 0, sx = 1, sy = 1, dx = 0, dy = 0, alpha = 1;
-    const breathe = Math.sin(t * 3.1 + p.slot * 1.7);
-    sy += breathe * 0.016; sx -= breathe * 0.009;
+    const loco = f.loco;
+    const mv = clamp(Math.abs(p.vx) / f.walk, 0, 1.6);
+    const br = Math.sin(t * 3.1 + slot * 1.7);
+    // resting stance: breathing and a little sway; each kind of mover has its own
+    sy += br * 0.016; sx -= br * 0.009;
+    rot += Math.sin(t * 1.9 + slot) * 0.012;
+    if (loco === "fly") { sx += Math.sin(t * 19 + slot) * 0.02; rot += Math.sin(t * 2.6 + slot) * 0.03; }
+    else if (loco === "float") { rot += Math.sin(t * 1.5 + slot) * 0.05; sy += Math.sin(t * 2.2 + slot) * 0.02; }
+    else if (loco === "slither" || loco === "surf") { rot += Math.sin(t * 3.4 + slot) * 0.04; dx += Math.sin(t * 2.6 + slot) * 2.5; }
+    // the entrance: a small hop as the round starts
+    if (w.phase === "intro" && w.pt < 0.9) dy -= Math.abs(Math.sin(w.pt * Math.PI * 2.4)) * 16 * (1 - w.pt / 0.9);
+    const jitter = p.hitstop > 0 ? Math.sin(t * 90) * 3.5 : 0;
+    const ease = (x: number) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+    const back = (x: number) => { const c = 1.9, q = clamp(x, 0, 1); return 1 + (c + 1) * Math.pow(q - 1, 3) + c * Math.pow(q - 1, 2); };
+
     switch (p.st) {
       case "walk": {
-        const ph = t * 13 + p.slot;
-        dy = -Math.abs(Math.sin(ph)) * 8;
-        rot = f * (p.vx * f > 0 ? 0.07 : -0.04) + Math.sin(ph) * 0.04;
+        const fwd = p.vx * fc >= 0;
+        const lean = (fwd ? 1 : -0.55) * mv;
+        if (loco === "run") {
+          const ph = t * 19 + slot;
+          dy -= Math.abs(Math.sin(ph)) * 13 * mv; sy += Math.cos(ph * 2) * 0.045 * mv; sx += 0.05 * mv;
+          rot += fc * 0.13 * lean + Math.sin(ph) * 0.03;
+        } else if (loco === "fly") {
+          sx += Math.sin(t * 24) * 0.035; rot += fc * 0.15 * lean; dy -= Math.sin(t * 5) * 4;
+        } else if (loco === "float") {
+          rot += fc * 0.11 * lean; sy += Math.sin(t * 3) * 0.03; dy -= Math.sin(t * 2.4) * 3;
+        } else if (loco === "slither" || loco === "surf") {
+          const ph = t * 9 + slot;
+          rot += Math.sin(ph) * 0.1 * mv + fc * 0.05 * lean; dx += Math.sin(ph + 1) * 5 * mv; sy += Math.sin(ph * 2) * 0.045 * mv; dy -= Math.abs(Math.sin(ph * 0.5)) * 3;
+        } else {
+          const ph = t * 13 + slot;
+          dy -= Math.abs(Math.sin(ph)) * 10 * mv; sy += Math.cos(ph * 2) * 0.04 * mv; sx -= Math.cos(ph * 2) * 0.02 * mv;
+          rot += fc * 0.075 * lean + Math.sin(ph) * 0.05 * mv;
+        }
         break;
       }
-      case "jump":
-        sy = 1 + clamp(p.vy / 5200, -0.06, 0.12); sx = 1 - clamp(p.vy / 9000, -0.05, 0.07);
-        rot = clamp(p.vx / 1800, -0.14, 0.14);
+      case "jump": {
+        const air = clamp(p.vy / 4200, -0.1, 0.16);
+        sy += air; sx -= air * 0.55;
+        rot += clamp(p.vx / 1700, -0.15, 0.15);
+        if (loco === "fly") sx += Math.sin(t * 26) * 0.04;
         break;
-      case "block": sy = 0.88; sx = 1.06; rot = -f * 0.06; break;
+      }
+      case "block": sy = 0.86; sx = 1.07; rot = -fc * 0.08; dx = -fc * 4 + jitter; break;
       case "hurt": {
-        const k = clamp(1 - p.t / 0.28, 0, 1);
-        rot = -f * 0.3 * k; dx = Math.sin(p.t * 80) * 4 * k; sy = 1 - 0.05 * k;
+        const k = clamp(1 - p.t / 0.3, 0, 1);
+        rot = -fc * 0.36 * k; dx = -fc * 11 * k + jitter; sx = 1 - 0.09 * k; sy = 1 + 0.07 * k;
         break;
       }
       case "down": {
-        const k = clamp(p.t / 0.16, 0, 1);
-        rot = -f * (0.2 + 1.25 * k); sy = 0.96;
+        const spin = back(p.t / 0.32);
+        rot = -fc * 1.45 * spin;
+        sy = 0.96 - v.bounce * 0.06; sx = 1 + v.bounce * 0.05;
+        dy -= Math.sin((1 - v.bounce) * Math.PI) * 18 * v.bounce;
         break;
       }
       case "ko": {
-        const k = clamp(p.t / 0.2, 0, 1);
-        rot = -f * (0.2 + 1.27 * k); sy = 0.96; alpha = 1 - clamp((p.t - 1.2) / 1.5, 0, 0.35);
+        rot = -fc * 1.45 * back(p.t / 0.4);
+        sy = 0.96; alpha = 1 - clamp((p.t - 1.2) / 1.5, 0, 0.35);
+        dy -= Math.sin((1 - v.bounce) * Math.PI) * 18 * v.bounce;
         break;
       }
-      case "getup": rot = -f * 1.45 * (1 - clamp(p.t / 0.28, 0, 1)); break;
-      case "win": dy = -Math.abs(Math.sin(t * 7 + p.slot)) * 22; rot = Math.sin(t * 7) * 0.09; break;
+      case "getup": {
+        const k = clamp(p.t / 0.28, 0, 1);
+        rot = -fc * 1.45 * (1 - back(k));
+        sy = 0.84 + 0.22 * Math.sin(k * Math.PI * 0.9); sx = 1.08 - 0.08 * k;
+        dy -= Math.sin(k * Math.PI) * 10;
+        break;
+      }
+      case "win": {
+        const ph = t * 6 + slot;
+        dy -= Math.abs(Math.sin(ph)) * 30; sy += Math.cos(ph * 2) * 0.07; sx -= Math.cos(ph * 2) * 0.04;
+        rot += Math.sin(ph) * 0.12;
+        break;
+      }
       case "atk": {
         const a = p.atk;
         if (!a) break;
-        if (a.kind === "jab") { const q = a.t < 0.06 ? a.t / 0.06 : 1; rot = f * (a.t < 0.06 ? -0.14 * q : 0.22 * clamp(1 - (a.t - 0.06) / 0.2, 0, 1)); dx = f * 16 * (a.t >= 0.06 ? 1 : 0); }
-        else if (a.kind === "kick") { rot = a.t < 0.14 ? -f * 0.2 * (a.t / 0.14) : f * 0.42 * clamp(1 - (a.t - 0.14) / 0.32, 0, 1); dy = a.t >= 0.14 ? -12 : 0; dx = f * (a.t >= 0.14 ? 22 : 0); }
-        else if (a.kind === "spec") { rot = a.t < 0.16 ? -f * 0.12 : f * 0.14; sy = a.t < 0.16 ? 0.93 : 1.06; sx = a.t < 0.16 ? 1.04 : 0.97; }
-        else { rot = f * 0.1 * Math.sin(t * 30); sy = 1.08; sx = 1.08; dy = -6; }
+        if (a.kind === "jab") {
+          // wind-up, snap forward, ease back
+          const q = clamp(a.t / 0.06, 0, 1), s2 = clamp((a.t - 0.06) / 0.07, 0, 1), r2 = clamp((a.t - 0.13) / 0.12, 0, 1);
+          const out = a.t < 0.06 ? -q * 0.6 : a.t < 0.13 ? -0.6 + 1.6 * ease(s2) : 1 - ease(r2);
+          dx = fc * 26 * out; rot = fc * (a.t < 0.06 ? -0.16 * q : 0.26 * (1 - r2)); sx = 1 + 0.1 * Math.max(0, out); sy = 1 - 0.05 * Math.max(0, out) - 0.03 * q * (a.t < 0.06 ? 1 : 0);
+        } else if (a.kind === "kick") {
+          const q = clamp(a.t / 0.14, 0, 1), s2 = clamp((a.t - 0.14) / 0.09, 0, 1), r2 = clamp((a.t - 0.23) / 0.26, 0, 1);
+          if (a.t < 0.14) { rot = -fc * 0.24 * q; sy = 1 - 0.09 * q; sx = 1 + 0.05 * q; dx = -fc * 10 * q; }
+          else { const o = a.t < 0.23 ? ease(s2) : 1 - ease(r2); rot = fc * 0.5 * o; dx = fc * 44 * o; dy -= 15 * o; sx = 1 + 0.12 * o; sy = 1 - 0.06 * o; }
+        } else if (a.kind === "spec") {
+          const q = clamp(a.t / 0.16, 0, 1), r2 = clamp((a.t - 0.16) / 0.26, 0, 1);
+          if (a.t < 0.16) { rot = -fc * 0.17 * q; sy = 1 - 0.08 * q; sx = 1 + 0.05 * q; dx = Math.sin(t * 70) * 1.6 * q; }
+          else { rot = fc * 0.15 * (1 - r2); dx = -fc * 12 * (1 - r2); sx = 0.96 + 0.04 * r2; sy = 1.06 - 0.06 * r2; }
+        } else {
+          if (w.freeze > 0 && w.superBy === slot) { dx = Math.sin(t * 90) * 3; sy = 1.06 + Math.sin(t * 24) * 0.03; sx = 1.04; rot = Math.sin(t * 50) * 0.03; }
+          else if (a.rush > 0) { rot = fc * 0.36; sx = 1.2; sy = 0.9; dy -= 4; }
+          else { sy = 1.04; sx = 1.04; rot = fc * 0.06 * Math.sin(t * 30); }
+        }
         break;
       }
       default: break;
     }
+    // squash on landing, and the sprite rides the hover
+    sy *= 1 - 0.2 * v.land; sx *= 1 + 0.16 * v.land;
+    dy -= v.hover + (loco === "fly" || loco === "float" ? Math.sin(t * (loco === "fly" ? 4 : 2.2) + slot) * (loco === "fly" ? 6 : 7) * clamp(v.hover / 20, 0, 1) : 0);
     return { rot, sx, sy, dx, dy, alpha };
   }
 
-  private fighter(g: G, w: World, p: Pl, _dt: number) {
+  private fighter(g: G, w: World, p: Pl) {
     const f = fighterOf(p.id);
+    const v = this.vis[p.slot];
     const sp = this.sprite(p.id);
     let el: CanvasImageSource | null = null, w0 = 0, h0 = 0;
-    if (sp.gif) { el = frameAt(sp.gif, w.time * 1000).el; w0 = sp.gif.w; h0 = sp.gif.h; }
+    if (sp.gif) { el = frameAt(sp.gif, this.clock * 1000).el; w0 = sp.gif.w; h0 = sp.gif.h; }
     else if (sp.still && sp.still.naturalWidth) { el = sp.still; w0 = sp.still.naturalWidth; h0 = sp.still.naturalHeight; }
-    const po = this.pose(p, w.time);
+    const po = this.pose(w, p, f, v);
     const sc = (f.h / (h0 || 96)) * this.zoom;
     const px = this.X(p.x) + po.dx * this.zoom, py = this.Y(p.y) + po.dy * this.zoom;
+
+    // after-images behind quick moves: a kick, a rush, being sent flying
+    const a = p.atk;
+    const fast = (p.st === "atk" && a && ((a.kind === "kick" && a.t >= 0.12 && a.t < 0.34) || (a.kind === "super" && a.rush > 0))) || ((p.st === "down" || p.st === "hurt") && Math.abs(p.vx) > 320);
+    if (fast && this.clock - v.trailT > (a?.kind === "super" ? 0.02 : 0.035)) {
+      v.trailT = this.clock;
+      v.trail.push({ x: p.x + po.dx, y: p.y - po.dy, rot: po.rot, sx: po.sx, sy: po.sy, flip: v.flip, born: this.clock, color: f.color });
+      if (v.trail.length > 7) v.trail.shift();
+    }
+    v.trail = v.trail.filter((gh) => this.clock - gh.born < 0.26);
+    if (el) {
+      for (const gh of v.trail) {
+        const age = (this.clock - gh.born) / 0.26;
+        g.save();
+        g.globalAlpha = 0.34 * (1 - age);
+        g.translate(this.X(gh.x), this.Y(gh.y));
+        g.rotate(gh.rot);
+        g.scale(gh.sx, gh.sy);
+        g.scale(gh.flip, 1);
+        this.tint(g, el, w0, h0, w0 * sc, h0 * sc, gh.color, 1);
+        g.restore();
+      }
+    }
 
     // glow while a super move is being done or the power bar is full
     if ((p.st === "atk" && p.atk?.kind === "super") || p.meter >= 100) {
       const r = f.h * 0.85 * this.zoom, cy = py - f.h * 0.45 * this.zoom;
       const gr = g.createRadialGradient(px, cy, 4, px, cy, r);
-      const a = p.meter >= 100 && p.st !== "atk" ? 0.28 + 0.12 * Math.sin(w.time * 8) : 0.7;
-      gr.addColorStop(0, hexA(f.color, a)); gr.addColorStop(1, hexA(f.color, 0));
+      const al = p.meter >= 100 && p.st !== "atk" ? 0.28 + 0.12 * Math.sin(w.time * 8) : 0.7;
+      gr.addColorStop(0, hexA(f.color, al)); gr.addColorStop(1, hexA(f.color, 0));
       g.fillStyle = gr;
       g.fillRect(px - r, cy - r, r * 2, r * 2);
     }
@@ -369,19 +526,19 @@ export class SdRenderer {
     g.translate(px, py);
     g.rotate(po.rot);
     g.scale(po.sx, po.sy);
-    // Showdown's front pictures look to the left; mirror them to face right
-    g.scale(p.face === 1 ? -1 : 1, 1);
+    // the pictures look to the left; the flip eases through the middle so a turn is a quick turn-round, not a jump
+    g.scale(v.flip, 1);
     if (el) {
       const dw = w0 * sc, dh = h0 * sc;
       g.imageSmoothingEnabled = true;
       g.drawImage(el, -dw / 2, -dh, dw, dh);
-      if (p.flash > 0) this.whiten(g, el, w0, h0, dw, dh, clamp(p.flash / 0.14, 0, 1));
+      if (p.flash > 0) this.tint(g, el, w0, h0, dw, dh, "#ffffff", clamp(p.flash / 0.14, 0, 1) * 0.85);
     } else {
       // while the picture is still on its way: a coloured blob with the first letter
       const r = f.h * 0.3 * this.zoom;
       g.fillStyle = f.color;
       g.beginPath(); g.arc(0, -r * 1.2, r, 0, Math.PI * 2); g.fill();
-      g.scale(p.face === 1 ? -1 : 1, 1);
+      g.scale(v.flip < 0 ? -1 : 1, 1);
       this.txt(g, f.name.slice(0, 1), 0, -r * 1.2, r, "#fff", { align: "center" });
     }
     g.restore();
@@ -397,7 +554,65 @@ export class SdRenderer {
     }
   }
 
-  private whiten(g: G, el: CanvasImageSource, w0: number, h0: number, dw: number, dh: number, a: number) {
+  /** The swing of a punch or kick, the orb gathering for a special, the energy pulled in for a super move. */
+  private strike(g: G, w: World, p: Pl) {
+    const a: Atk | null = p.atk;
+    const f = fighterOf(p.id);
+    const z = this.zoom;
+    const v = this.vis[p.slot];
+    const px = this.X(p.x), py = this.Y(p.y) - v.hover * z;
+    const dir = p.face;
+    if (p.st === "atk" && a && (a.kind === "jab" || a.kind === "kick")) {
+      const t0 = a.kind === "jab" ? 0.05 : 0.13, len = a.kind === "jab" ? 0.16 : 0.2;
+      const k = (a.t - t0) / len;
+      if (k >= 0 && k <= 1) {
+        const r = (f.bw + (a.kind === "jab" ? 40 : 66)) * z;
+        const cy = py - f.h * (a.kind === "jab" ? 0.55 : 0.3) * z;
+        const cx = px + dir * f.bw * 0.2 * z;
+        const sweep = a.kind === "jab" ? 0.95 : 1.25;
+        const head = -sweep + 2 * sweep * k; // the swing travels from high to low in front of it
+        g.save();
+        g.translate(cx, cy);
+        g.scale(dir, 1);
+        g.lineCap = "round";
+        g.strokeStyle = a.kind === "jab" ? `rgba(255,255,255,${0.85 * (1 - k)})` : hexA(f.color, 0.9 * (1 - k));
+        g.lineWidth = (a.kind === "jab" ? 9 : 14) * (1 - k * 0.7) * z;
+        g.beginPath();
+        g.arc(0, 0, r, head - 1.0, head);
+        g.stroke();
+        g.restore();
+      }
+    }
+    if (p.st === "atk" && a && a.kind === "spec" && a.t < 0.2) {
+      const q = clamp(a.t / 0.16, 0, 1);
+      const ox = px + dir * (f.bw + 14) * z, oy = py - f.h * 0.45 * z, r = (5 + 24 * q) * z;
+      const gr = g.createRadialGradient(ox, oy, 1, ox, oy, r * 1.8);
+      gr.addColorStop(0, "rgba(255,255,255,.95)"); gr.addColorStop(0.35, hexA(f.special.color, 0.85)); gr.addColorStop(1, hexA(f.special.color, 0));
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(ox, oy, r * 1.8, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = hexA(f.special.color, 0.7 * (1 - q * 0.4)); g.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const ang = (i / 6) * Math.PI * 2 + w.time * 8, rr = r * (2.6 - q * 1.4);
+        g.beginPath(); g.moveTo(ox + Math.cos(ang) * rr, oy + Math.sin(ang) * rr); g.lineTo(ox + Math.cos(ang) * rr * 0.7, oy + Math.sin(ang) * rr * 0.7); g.stroke();
+      }
+    }
+    // super: energy streams into the Pokémon while the screen is frozen, and a ring runs outward from its feet
+    if (w.freeze > 0 && w.superBy === p.slot) {
+      const k = clamp(1 - w.freeze / 0.62, 0, 1);
+      const cx = px, cy = py - f.h * 0.5 * z;
+      g.save();
+      g.strokeStyle = hexA(f.color, 0.85); g.lineWidth = 3 * z;
+      for (let i = 0; i < 16; i++) {
+        const ang = (i / 16) * Math.PI * 2 + i * 0.7, r1 = (150 + ((i * 37) % 80)) * z * (1 - k * 0.8), r0 = r1 + 38 * z;
+        g.beginPath(); g.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0); g.lineTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1); g.stroke();
+      }
+      g.lineWidth = 5 * z; g.strokeStyle = hexA("#ffffff", 0.6 * (1 - k));
+      g.beginPath(); g.ellipse(px, py + 4, (40 + k * 240) * z, (10 + k * 40) * z, 0, 0, Math.PI * 2); g.stroke();
+      g.restore();
+    }
+  }
+
+  private tint(g: G, el: CanvasImageSource, w0: number, h0: number, dw: number, dh: number, color: string, a: number) {
     if (!this.tmp) this.tmp = document.createElement("canvas");
     const c = this.tmp;
     if (c.width !== w0 || c.height !== h0) { c.width = w0; c.height = h0; }
@@ -406,10 +621,12 @@ export class SdRenderer {
     tg.clearRect(0, 0, w0, h0);
     tg.drawImage(el, 0, 0, w0, h0);
     tg.globalCompositeOperation = "source-atop";
-    tg.fillStyle = "#ffffff";
+    tg.fillStyle = color;
     tg.fillRect(0, 0, w0, h0);
-    g.globalAlpha *= a * 0.85;
+    const old = g.globalAlpha;
+    g.globalAlpha = old * a;
     g.drawImage(c, -dw / 2, -dh, dw, dh);
+    g.globalAlpha = old;
   }
 
   private proj(g: G, pr: Proj, t: number) {

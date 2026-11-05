@@ -9,6 +9,7 @@ import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { arenaCreate, arenaJoin, arenaLeave, arenaLobby, arenaNextRound, arenaPickSet, arenaRematch, arenaReport, arenaRoomGet, arenaSeatSet, arenaStart, type ArenaLobby, type ArenaMode, type ArenaPick, type ArenaRoomView, type ArenaSeat } from "@/lib/arena-room-api";
 import { PERK_BN } from "@/components/pokemon/arena-brawl";
+import { mobilityOf } from "@/lib/pokemon/arena-mobility";
 import { GIMMICKS, MEGAS, gimInfo, isOriginSpecies, MOVES, PERKS, ROSTER, TERA_TYPES, gimmicksFor, speciesOf, type GimmickKind } from "@/lib/pokemon/arena-data";
 import type { QuickPick } from "@/lib/pokemon/arena-engine";
 import { ARENA, applyPerk, begin, moveOf, newMpGame, newMpQuick, nextWave, noInput, predictMove, squadView, step, type Ev, type Fighter, type Input, type State } from "@/lib/pokemon/arena-engine";
@@ -440,7 +441,7 @@ function Standings({ live, done, final }: { live: ArenaRoomView; done: boolean; 
   );
 }
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; gimmick: GimmickKind; origin?: string | false; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; phase: State["phase"]; perks: string[]; wave: number; score: number; foes: number; name: string; hp: number; ghost: number; max: number; moves: { id: string; name: string; type: string }[]; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; mov: number; movLeft: number; movName: string; movIcon: string; movType: string; movDesc: string; movOn: boolean; movAlt: { icon: string; name: string; type: string } | null; ult: number; gimmick: GimmickKind; origin?: string | false; gimmickT: number; alive: number; total: number; storm: boolean; squad?: { sp: string; name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number };
 type Row = { id: number; member: number; name: string; species: string; place: number; kos: number; you: boolean; team?: number };
 
 type Wire = { k: string };
@@ -548,7 +549,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
-  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, ult: false, fin: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null, yaw: null as number | null, mfx: -1, tx: new Map<number, number>() });
+  const ctl = useRef({ keys: new Set<string>(), joy: { x: 0, y: 0 }, aim: null as { x: number; y: number } | null, queue: [false, false, false, false] as [boolean, boolean, boolean, boolean], held: [false, false, false, false] as [boolean, boolean, boolean, boolean], dodge: false, mov: false, movSel: 0, ult: false, fin: false, swapQ: -1, specId: null as number | null, specStep: 0, mouse: false, zoom: 1, R: null as ArenaRenderer | null, pickPerk: null as ((id: string) => void) | null, touchAim: null as { x: number; y: number } | null, touchUntil: 0, preview: null as { slot: number; x: number; y: number } | null, me: undefined as Fighter | undefined, drag: null as { id: number; sx: number; sy: number; moved: boolean } | null, yaw: null as number | null, mfx: -1, tx: new Map<number, number>() });
   const seats = useRef(init.seats);
   const myName = me?.displayName ?? "Player";
 
@@ -584,6 +585,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " ", "tab"].includes(k)) e.preventDefault();
       if (e.repeat) return;
       if (k === " " || k === "shift") c.dodge = true;
+      else if (k === "r") c.mov = true;
+      else if (k === "g") c.movSel = 1 - c.movSel;
       else if (k === "q") c.ult = true;
       else if (k === "e") c.fin = true;
       else if (k === "z" || k === "x" || k === "c") c.swapQ = "zxc".indexOf(k);
@@ -727,7 +730,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     // instead of a network round trip later, and is eased back toward the host's position if the two drift apart.
     const pred = { x: 0, y: 0, mvx: 0, mvy: 0, ok: false };
     const predictOwn = (me: Fighter, auth: { tx: number; ty: number } | undefined, inp: Input, dt: number, S: State) => {
-      const hostBusy = !me.alive || S.phase !== "fight" || me.dodge.t > 0 || !!me.dash || me.stun > 0 || me.status.frz > 0 || me.status.slp > 0 || (me.grabT ?? 0) > 0 || (me.flyT ?? 0) > 0 || Math.hypot(me.kx, me.ky) > 30;
+      const hostBusy = !me.alive || S.phase !== "fight" || me.dodge.t > 0 || !!me.dash || !!me.mov || me.stun > 0 || me.status.frz > 0 || me.status.slp > 0 || (me.grabT ?? 0) > 0 || (me.flyT ?? 0) > 0 || Math.hypot(me.kx, me.ky) > 30;
       if (!auth || hostBusy) {
         // follow the host exactly while it is doing something special with us
         if (auth) { const k = 1 - Math.exp(-dt * 28); me.x += (auth.tx - me.x) * k; me.y += (auth.ty - me.y) * k; }
@@ -768,10 +771,11 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
         my = Math.sin(yaw) * fwd + Math.cos(yaw) * str;
       }
       const cast: [boolean, boolean, boolean, boolean] = [c.queue[0] || c.held[0] || c.mouse, c.queue[1] || c.held[1], c.queue[2] || c.held[2], c.queue[3] || c.held[3]];
-      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, ult: c.ult, fin: c.fin, swap: c.swapQ >= 0 ? c.swapQ : undefined };
+      const inp: Input = { mx, my, aim: currentAim(c, c.aim), cast, dodge: c.dodge, mov: c.mov, movSel: Math.min(c.movSel, Math.max(0, (c.me?.types.length ?? 1) - 1)), ult: c.ult, fin: c.fin, swap: c.swapQ >= 0 ? c.swapQ : undefined };
       c.swapQ = -1;
       c.queue = [false, false, false, false];
       c.dodge = false;
+      c.mov = false;
       c.ult = false;
       c.fin = false;
       return inp;
@@ -989,6 +993,14 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             cdLeft: ids.map((_, i) => mine.cd[i]!),
             dodge: Math.max(0, mine.dodge.cd / (1.15 * mine.dodgeMul)),
             dodgeLeft: mine.dodge.cd,
+            mov: Math.max(0, mine.movCd / mobilityOf(mine.types, ctl.current.movSel).cd),
+            movLeft: mine.movCd,
+            movName: mobilityOf(mine.types, ctl.current.movSel).name,
+            movIcon: mobilityOf(mine.types, ctl.current.movSel).icon,
+            movType: mobilityOf(mine.types, ctl.current.movSel).type,
+            movDesc: mobilityOf(mine.types, ctl.current.movSel).desc,
+            movOn: !!mine.mov,
+            movAlt: mine.types.length > 1 ? (({ icon, name, type }) => ({ icon, name, type }))(mobilityOf(mine.types, 1 - ctl.current.movSel)) : null,
             ult: mine.ult,
             fin: mine.combo.ready,
             gimmick: mine.gimmick,
@@ -1215,6 +1227,32 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
                   <span className="pb-ky">Space</span>
                   {hud.dodge > 0 ? <span className="pb-cd">{hud.dodgeLeft.toFixed(1)}</span> : null}
                 </button>
+              {hud.movAlt ? (
+                <button
+                  type="button"
+                  className="ab-pb mobsw"
+                  style={{ ["--c" as string]: TYPE_COLOR[hud.movAlt.type] ?? "#fff" }}
+                  aria-label={hud.movAlt.name}
+                  title={hud.movAlt.name}
+                  onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); ctl.current.movSel = 1 - ctl.current.movSel; }}
+                >
+                  <span className="pb-ic">{hud.movAlt.icon}</span>
+                  <span className="pb-ky">G ⇄</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={`ab-pb mob ${(hud.mov ?? 0) <= 0 && !hud.movOn ? "ready" : ""} ${hud.movOn ? "on" : ""}`}
+                style={{ ["--c" as string]: TYPE_COLOR[hud.movType] ?? "#bfe", ["--f" as string]: hud.movOn ? 0 : Math.min(1, hud.mov ?? 0) }}
+                aria-label={hud.movName}
+                title={hud.movDesc}
+                onPointerDown={(e) => { e.preventDefault(); ctl.current.mov = true; }}
+              >
+                <span className="pb-ic">{hud.movIcon}</span>
+                <span className="pb-nm">{hud.movName}</span>
+                <span className="pb-ky">R</span>
+                {(hud.mov ?? 0) > 0 && !hud.movOn ? <span className="pb-cd">{(hud.movLeft ?? 0).toFixed(1)}</span> : null}
+              </button>
                 <button type="button" className={`ab-pb fin ${hud.fin > 0 ? "show" : ""}`} style={{ ["--c" as string]: "#ffd54a" }} aria-label="Combo finisher" onPointerDown={(e) => { e.preventDefault(); ctl.current.fin = true; }}>
                   <span className="pb-ic">💥</span>
                   <span className="pb-nm">FINISH</span>

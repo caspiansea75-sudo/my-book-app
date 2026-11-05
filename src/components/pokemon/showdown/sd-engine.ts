@@ -397,17 +397,18 @@ function stepPl(w: World, me: Pl, foe: Pl, inp: Input, dt: number) {
       if (a.t >= d.start + (f.sup.kind === "rush" ? 0.5 : 0.25) + d.rec) { me.atk = null; me.st = me.y > 0 ? "jump" : "idle"; me.t = 0; }
     }
   } else if (canAct) {
-    // free movement: walk, jump, block
-    me.face = foe.x >= me.x ? 1 : -1;
+    // free movement: walk, jump, block (it only turns round once the other is clearly on the other side)
+    if (Math.abs(foe.x - me.x) > 16) me.face = foe.x >= me.x ? 1 : -1;
     const grounded = me.y <= 0;
     if (grounded && inp.d) {
-      me.st = "block"; me.vx = 0;
+      me.st = "block"; me.vx *= Math.pow(0.0004, dt);
     } else {
       if (me.st === "block") { me.st = "idle"; me.t = 0; }
       const dir = (inp.r ? 1 : 0) - (inp.l ? 1 : 0);
       if (grounded) {
         const back = dir !== 0 && dir !== me.face;
-        me.vx = dir * f.walk * (back ? 0.8 : 1);
+        const target = dir * f.walk * (back ? 0.8 : 1);
+        me.vx += (target - me.vx) * Math.min(1, dt * 15);
         const next: PState = dir !== 0 ? "walk" : "idle";
         if (me.st !== next) { me.st = next; me.t = 0; }
         if (press.u) { me.vy = JUMP_V; me.y = 0.01; me.st = "jump"; me.t = 0; me.vx = dir * f.walk * 0.9; emit(w, { k: "jump", x: me.x, y: 0 }); }
@@ -417,7 +418,7 @@ function stepPl(w: World, me: Pl, foe: Pl, inp: Input, dt: number) {
       }
     }
   } else if (!fighting && !busy(me)) {
-    me.face = foe.x >= me.x ? 1 : -1;
+    if (Math.abs(foe.x - me.x) > 16) me.face = foe.x >= me.x ? 1 : -1;
     me.vx = 0;
     me.st = me.y > 0 ? "jump" : "idle";
   }

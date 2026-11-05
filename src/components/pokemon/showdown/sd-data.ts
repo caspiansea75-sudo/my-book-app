@@ -2,7 +2,7 @@
  * Fight Showdown: who can fight and what they can do. Plain data, no DOM.
  * Everything is worked out from the Arena roster (types, base stats, size, role) so every Pokémon there can fight here too.
  */
-import { MOVES, ROSTER, Z_MOVES, Z_SIGNATURE, type Species } from "@/lib/pokemon/arena-data";
+import { MOVES, ROSTER, Z_MOVES, Z_SIGNATURE, locoOf, type Loco, type Species } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 
 export type SuperKind = "rush" | "beam" | "blast";
@@ -25,6 +25,8 @@ export type Fighter = {
   special: { name: string; type: string; speed: number; color: string };
   sup: { name: string; bn: string; type: string; kind: SuperKind };
   role: Species["role"];
+  /** how it gets about: decides how it is animated (hovering, slithering, running…) */
+  loco: Loco;
 };
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
@@ -61,6 +63,7 @@ function build(sp: Species): Fighter {
     },
     sup: { name: z.name, bn: z.bn, type: sig?.type ?? t0, kind },
     role: sp.role,
+    loco: locoOf(sp),
   };
 }
 

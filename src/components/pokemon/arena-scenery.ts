@@ -61,7 +61,7 @@ const nearCentre = (x: number, y: number, r = 90) => Math.hypot(x - W / 2, y - H
 
 export function dressBackground(kind: StageKind, c: HTMLCanvasElement) {
   const g = c.getContext("2d")!;
-  const r = rng({ grass: 101, stone: 202, dirt: 303, crystal: 404, ice: 505, lava: 606, coast: 707 }[kind]);
+  const r = rng({ grass: 101, stone: 202, dirt: 303, crystal: 404, ice: 505, lava: 606, coast: 707, meadow: 808, glacier: 909, ocean: 1010 }[kind]);
   switch (kind) {
     case "grass": return forest(g, r);
     case "stone": return ruins(g, r);
@@ -70,7 +70,70 @@ export function dressBackground(kind: StageKind, c: HTMLCanvasElement) {
     case "ice": return snow(g, r);
     case "lava": return crater(g, r);
     case "coast": return beach(g, r);
+    case "meadow": return meadow(g, r);
+    case "glacier": return glacier(g, r);
+    case "ocean": return openSea(g, r);
   }
+}
+
+/** The edge of a floor with nothing standing on it: a low rim all round, so the playing area has a clear boundary. */
+function rim(g: G, spacing: number, draw: (x: number, y: number, side: number, i: number) => void) {
+  let i = 0;
+  for (let x = M * 0.55; x < W - M * 0.4; x += spacing) { draw(x, M * 0.5, 0, i++); draw(x, H - M * 0.5, 1, i++); }
+  for (let y = M * 0.55 + spacing; y < H - M * 0.4 - spacing * 0.5; y += spacing) { draw(M * 0.5, y, 2, i++); draw(W - M * 0.5, y, 3, i++); }
+}
+
+function meadow(g: G, r: R) {
+  // a low wooden fence, and wildflowers and clover scattered over the open grass
+  g.strokeStyle = "#6a4a2a"; g.lineWidth = 3;
+  g.strokeRect(M * 0.5, M * 0.5, W - M, H - M);
+  rim(g, 54, (x, y) => { ell(g, x + 2, y + 5, 5, 2, "rgba(0,0,0,.3)"); g.fillStyle = "#8a6238"; g.fillRect(x - 3, y - 8, 6, 14); g.fillStyle = "#b98a52"; g.fillRect(x - 3, y - 8, 6, 3); });
+  for (let i = 0; i < 160; i++) {
+    const x = M + r() * (W - 2 * M), y = M + r() * (H - 2 * M);
+    if (nearCentre(x, y, 40)) continue;
+    const c = ["#ffffff", "#ffe05a", "#ff8ac8", "#9ad0ff", "#ffb04d"][Math.floor(r() * 5)]!;
+    for (let k = 0; k < 5; k++) { const a = (k / 5) * PI2; ell(g, x + Math.cos(a) * 2.6, y + Math.sin(a) * 2.6, 2, 2, c); }
+    ell(g, x, y, 1.6, 1.6, "#d8a020");
+  }
+  for (let i = 0; i < 120; i++) {
+    const x = M + r() * (W - 2 * M), y = M + r() * (H - 2 * M);
+    g.strokeStyle = r() < 0.5 ? "rgba(30,90,30,.5)" : "rgba(160,220,110,.45)"; g.lineWidth = 1.2;
+    for (let k = -1; k <= 1; k++) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + k * 3, y - 6 - r() * 4); g.stroke(); }
+  }
+}
+
+function glacier(g: G, r: R) {
+  // a rim of ice blocks, and fine frost cracks across the sheet
+  rim(g, 40, (x, y, side, i) => {
+    const s = 11 + ((i * 7) % 5);
+    ell(g, x + 2, y + 5, s * 0.9, s * 0.35, "rgba(0,20,50,.35)");
+    g.fillStyle = "#cfeaf8"; g.strokeStyle = "#7fb8dc"; g.lineWidth = 1.4;
+    g.beginPath(); g.roundRect(x - s / 2, y - s * 0.55, s, s * 0.9, 3); g.fill(); g.stroke();
+    g.fillStyle = "rgba(255,255,255,.7)"; g.fillRect(x - s / 2 + 2, y - s * 0.55 + 2, s * 0.5, 2);
+  });
+  g.lineWidth = 1;
+  for (let i = 0; i < 26; i++) {
+    let x = M + r() * (W - 2 * M), y = M + r() * (H - 2 * M), a = r() * PI2;
+    if (nearCentre(x, y, 60)) continue;
+    g.strokeStyle = "rgba(255,255,255,.4)";
+    g.beginPath(); g.moveTo(x, y);
+    for (let k = 0; k < 6; k++) { a += (r() - 0.5) * 1.2; x += Math.cos(a) * 22; y += Math.sin(a) * 18; g.lineTo(x, y); }
+    g.stroke();
+  }
+}
+
+function openSea(g: G, r: R) {
+  // a ring of buoys on a rope marks the edge of the water
+  g.strokeStyle = "rgba(240,230,200,.7)"; g.lineWidth = 2;
+  g.setLineDash([6, 5]); g.strokeRect(M * 0.5, M * 0.5, W - M, H - M); g.setLineDash([]);
+  rim(g, 70, (x, y, side, i) => {
+    ell(g, x + 2, y + 4, 8, 3, "rgba(0,20,60,.35)");
+    ell(g, x, y, 7, 7, i % 2 ? "#ffffff" : "#e23b3b");
+    g.fillStyle = i % 2 ? "#e23b3b" : "#ffffff"; g.fillRect(x - 7, y - 1.5, 14, 3);
+    g.strokeStyle = "rgba(0,0,0,.45)"; g.lineWidth = 1; g.beginPath(); g.arc(x, y, 7, 0, PI2); g.stroke();
+    ell(g, x - 2, y - 2.5, 2, 1.4, "rgba(255,255,255,.7)");
+  });
+  void r;
 }
 
 function treeCrown(g: G, x: number, y: number, rad: number, dark: string, mid: string, light: string, r: R) {
@@ -462,7 +525,8 @@ export function drawAmbient(g: G, S: State, t: number) {
   lights(g, S, t);
   g.save();
   switch (S.stage) {
-    case "ice": {
+    case "ice":
+    case "glacier": {
       g.fillStyle = "#ffffff";
       for (let i = 0; i < 90; i++) {
         const x = ((i * 97 + Math.sin(t * 0.7 + i) * 24 + t * 14) % (W + 40)) - 20;
@@ -598,7 +662,7 @@ function lights(g: G, S: State, t: number) {
     soft(g, v.x, v.y, hot ? 80 : 46, "rgba(255,120,30,.8)", hot ? 0.9 : 0.35 + 0.15 * Math.sin(t * 4 + v.x));
     for (let i = 0; i < (hot ? 7 : 3); i++) { const ph = (t * 1.3 + i * 0.31 + v.x) % 1; g.globalAlpha = (1 - ph) * 0.9; glow(g, v.x + Math.sin(ph * 9 + i) * 8, v.y - ph * (hot ? 80 : 44), 3 + (hot ? 2 : 0), "rgba(255,200,90,1)"); }
   }
-  for (const p of S.pools) if (S.stage === "coast" || S.stage === "grass") {
+  for (const p of S.pools) if (!p.flood && (S.stage === "coast" || S.stage === "grass")) {
     // caustics: light webs wobbling over the water and sparkles riding on it
     g.save();
     g.beginPath(); g.ellipse(p.x, p.y, p.rx, p.ry, 0, 0, PI2); g.clip();
@@ -608,7 +672,8 @@ function lights(g: G, S: State, t: number) {
     g.restore();
   }
   switch (S.stage) {
-    case "grass": {
+    case "grass":
+    case "meadow": {
       // sunbeams through the leaves, and soft patches of light sliding over the ground
       for (let i = 0; i < 4; i++) {
         const x0 = 150 + i * 220 + Math.sin(t * 0.35 + i) * 24;
@@ -619,7 +684,8 @@ function lights(g: G, S: State, t: number) {
       for (let i = 0; i < 9; i++) soft(g, (i * 211 + t * 9) % W, M + ((i * 137 + Math.sin(t * 0.3 + i) * 40 + 600) % (H - 2 * M)), 50, "rgba(255,255,170,.7)", 0.1);
       break;
     }
-    case "ice": {
+    case "ice":
+    case "glacier": {
       // an aurora curtain above the peaks
       for (let b = 0; b < 3; b++) {
         const col = ["rgba(90,255,190,", "rgba(110,200,255,", "rgba(190,130,255,"][b]!;

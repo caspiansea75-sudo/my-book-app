@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Copy, Maximize2, RotateCw, Volume2, VolumeX, X } from "lucide-react";
+import { Copy, Gamepad2, Maximize2, RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { useT } from "@/components/pokemon/ui";
 import { ROSTER } from "@/lib/pokemon/arena-data";
@@ -44,7 +44,7 @@ const orientation = () => (typeof screen === "undefined" ? undefined : (screen a
 
 const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
 
-function TBtn({ id, label, cls, touch, latch }: { id: keyof Input; label: string; cls?: string; touch: Input; latch: (k: keyof Input) => void }) {
+function TBtn({ id, label, cls, touch, latch, hint }: { id: keyof Input; label: string; cls?: string; touch: Input; latch: (k: keyof Input) => void; hint?: string }) {
   const [on, setOn] = useState(false);
   const off = () => { touch[id] = false; setOn(false); };
   return (
@@ -58,7 +58,53 @@ function TBtn({ id, label, cls, touch, latch }: { id: keyof Input; label: string
       onContextMenu={(e) => e.preventDefault()}
     >
       {label}
+      {hint ? <em className="sd-key">{hint}</em> : null}
     </button>
+  );
+}
+
+/** A round touch pad: slide the thumb left or right to walk, up to jump, down to block. Works with a finger or the mouse. */
+function StickPad({ touch, latch, keys }: { touch: Input; latch: (k: keyof Input) => void; keys: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const grab = useRef<number | null>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const R = 52;
+  const move = (cx: number, cy: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const b = el.getBoundingClientRect();
+    let dx = cx - (b.left + b.width / 2), dy = cy - (b.top + b.height / 2);
+    const len = Math.hypot(dx, dy);
+    if (len > R) { dx = (dx * R) / len; dy = (dy * R) / len; }
+    setKnob({ x: dx, y: dy });
+    const dead = 14;
+    const up = dy < -R * 0.55;
+    if (up && !touch.u) latch("u");
+    touch.l = dx < -dead;
+    touch.r = dx > dead;
+    touch.d = dy > dead * 1.4;
+    touch.u = up;
+  };
+  const end = () => {
+    grab.current = null;
+    setKnob({ x: 0, y: 0 });
+    touch.l = touch.r = touch.u = touch.d = false;
+  };
+  return (
+    <div
+      ref={ref}
+      className="sd-stick"
+      onPointerDown={(e) => { e.preventDefault(); grab.current = e.pointerId; try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* fine */ } move(e.clientX, e.clientY); }}
+      onPointerMove={(e) => { if (grab.current === e.pointerId) move(e.clientX, e.clientY); }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onLostPointerCapture={end}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <span className="sd-arr u">▲</span><span className="sd-arr d">▼</span><span className="sd-arr l">◀</span><span className="sd-arr r">▶</span>
+      {keys ? <><i className="sd-k u">W</i><i className="sd-k l">A</i><i className="sd-k d">S</i><i className="sd-k r">D</i></> : null}
+      <div className="sd-knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+    </div>
   );
 }
 
@@ -75,6 +121,8 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
   const [over, setOver] = useState<Summary | null>(null);
   const [lost, setLost] = useState(false);
   const [muted, setMuted] = useState(sfx.isMuted());
+  const [showPad, setShowPad] = useState(() => { try { return localStorage.getItem("sd-pad") !== "0"; } catch { return true; } });
+  const togglePad = () => setShowPad((v) => { try { localStorage.setItem("sd-pad", v ? "0" : "1"); } catch { /* fine */ } return !v; });
   const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
   // the fight fills the whole screen; if it was started without a tap (a friend's room), the first tap or key brings full screen in
   useEffect(() => {
@@ -104,6 +152,11 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
     sfx.unlock();
 
     const world: World = newWorld(cfg.a, cfg.b, cfg.seed);
+    // where everyone was one step ago: drawing between the two keeps motion smooth on any screen refresh rate
+    const prevOf = (x: World) => ({ p: [{ x: x.p[0].x, y: x.p[0].y }, { x: x.p[1].x, y: x.p[1].y }], pr: x.pr.map((q) => ({ id: q.id, x: q.x })) }) as unknown as World;
+    let before: World = prevOf(world);
+    const ready0 = performance.now();
+    let started = false;
     const brain = role === "cpu" ? newBrain(cfg.level) : null;
     const down = new Set<string>();
     const snaps: { t: number; w: World }[] = [];
@@ -141,7 +194,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
     window.addEventListener("blur", blur);
 
     const view = (now: number): World => {
-      if (role !== "guest") return world;
+      if (role !== "guest") return blend(before, world, Math.max(0, Math.min(1, acc * 60)));
       if (snaps.length === 0) return world;
       const rt = now - 100;
       for (let i = snaps.length - 2; i >= 0; i--) {
@@ -154,6 +207,11 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
     const frame = (now: number) => {
       if (stopped) return;
       raf = requestAnimationFrame(frame);
+      // nobody starts until every picture is in (or a few seconds have passed): no size changes mid-fight
+      if (!started) {
+        if (rend.ready([cfg.a, cfg.b]) || now - ready0 > 8000) { started = true; last = now; }
+        else { rend.loading(now); return; }
+      }
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       if (role === "guest") {
@@ -179,6 +237,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
             // a pulse from the touch pad: make sure a quick tap still lands as one press
             for (const k of ["a", "b", "c", "s", "u"] as const) if (pulse[k]) { ia[k] = true; pulse[k] = false; }
           }
+          before = prevOf(world);
           step(world, ia, ib, 1 / 60);
           if (role === "host" && ticks % 2 === 0 && net) net.cast({ k: "w", w: snapshot(world) });
         }
@@ -227,28 +286,28 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
     <div className="sd-play sd-full" ref={wrapRef}>
       <canvas ref={canvasRef} />
       <div className="sd-bar">
+        <button type="button" className="sd-ico" onClick={togglePad} aria-label={t("কন্ট্রোল", "Controls")}><Gamepad2 className="size-4" /></button>
         <button type="button" className="sd-ico" onClick={toggleMute} aria-label={t("শব্দ", "Sound")}>{muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}</button>
         <button type="button" className="sd-ico" onClick={toggleFs} aria-label={t("ফুলস্ক্রিন", "Fullscreen")}><Maximize2 className="size-4" /></button>
         {canRotate ? <button type="button" className="sd-ico" onClick={rotate} aria-label={t("ঘোরান", "Rotate")}><RotateCw className="size-4" /></button> : null}
         <button type="button" className="sd-ico" onClick={leave} aria-label={t("বেরিয়ে যান", "Leave")}><X className="size-4" /></button>
       </div>
       {coarse && !over ? <div className="sd-hint">{t("ফোন আড়াআড়ি ধরলে আরও বড় দেখাবে", "Turn your phone sideways for a bigger view")}</div> : null}
-      {coarse && cfg.role !== "local" && !over ? (
+      {showPad && !over && cfg.role !== "local" ? (
         <div className="sd-pad">
-          <div className="sd-dpad">
-            <span />
-            <TBtn id="u" label="▲" touch={touch} latch={latch} />
-            <span />
-            <TBtn id="l" label="◀" touch={touch} latch={latch} />
-            <TBtn id="d" label="▼" touch={touch} latch={latch} />
-            <TBtn id="r" label="▶" touch={touch} latch={latch} />
-          </div>
+          <StickPad touch={touch} latch={latch} keys={!coarse} />
           <div className="sd-acts">
-            <TBtn id="a" label={t("ঘুষি", "Jab")} touch={touch} latch={latch} />
-            <TBtn id="b" label={t("লাথি", "Kick")} touch={touch} latch={latch} />
-            <TBtn id="c" label={t("স্পেশাল", "Special")} touch={touch} latch={latch} />
-            <TBtn id="s" label={t("সুপার", "Super")} cls="sup" touch={touch} latch={latch} />
+            <TBtn id="a" label={t("ঘুষি", "Jab")} hint={coarse ? undefined : "J"} touch={touch} latch={latch} />
+            <TBtn id="b" label={t("লাথি", "Kick")} hint={coarse ? undefined : "K"} touch={touch} latch={latch} />
+            <TBtn id="c" label={t("স্পেশাল", "Special")} hint={coarse ? undefined : "L"} touch={touch} latch={latch} />
+            <TBtn id="s" label={t("সুপার", "Super")} cls="sup" hint={coarse ? undefined : "Space"} touch={touch} latch={latch} />
           </div>
+        </div>
+      ) : null}
+      {showPad && !over && cfg.role === "local" ? (
+        <div className="sd-pad">
+          <div className="sd-legend"><b>P1</b><span>A D {t("চলা", "move")} · W {t("লাফ", "jump")} · S {t("ব্লক", "block")}</span><span>F {t("ঘুষি", "jab")} · G {t("লাথি", "kick")} · H {t("স্পেশাল", "special")} · T {t("সুপার", "super")}</span></div>
+          <div className="sd-legend r"><b>P2</b><span>← → {t("চলা", "move")} · ↑ {t("লাফ", "jump")} · ↓ {t("ব্লক", "block")}</span><span>J {t("ঘুষি", "jab")} · K {t("লাথি", "kick")} · L {t("স্পেশাল", "special")} · I {t("সুপার", "super")}</span></div>
         </div>
       ) : null}
       {over ? (

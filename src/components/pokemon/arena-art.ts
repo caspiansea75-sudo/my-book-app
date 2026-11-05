@@ -169,11 +169,46 @@ function buildCoast(): HTMLCanvasElement {
   return c;
 }
 
+function buildMeadow(): HTMLCanvasElement {
+  const c = canvas();
+  const g = c.getContext("2d")!;
+  const r = rng(113);
+  stands(g, r, false);
+  paintFloor(g, "meadow", 30, 30, W - 60, H - 60);
+  // mown stripes, as on a well-kept field
+  for (let x = 30, i = 0; x < W - 30; x += 96, i++) {
+    g.fillStyle = i % 2 ? "rgba(255,255,255,.045)" : "rgba(0,20,0,.05)";
+    g.fillRect(x, 30, Math.min(96, W - 30 - x), H - 60);
+  }
+  vignette(g, 0.34);
+  return c;
+}
+
+function buildGlacier(): HTMLCanvasElement {
+  const c = canvas();
+  const g = c.getContext("2d")!;
+  const r = rng(127);
+  stands(g, r, false);
+  paintFloor(g, "glacier", 30, 30, W - 60, H - 60);
+  vignette(g, 0.36);
+  return c;
+}
+
+function buildOcean(): HTMLCanvasElement {
+  const c = canvas();
+  const g = c.getContext("2d")!;
+  const r = rng(139);
+  stands(g, r, false);
+  paintFloor(g, "ocean", 30, 30, W - 60, H - 60);
+  vignette(g, 0.3);
+  return c;
+}
+
 const bgCache = new Map<StageKind, HTMLCanvasElement>();
 export function stageBackground(kind: StageKind): HTMLCanvasElement {
   let c = bgCache.get(kind);
   if (!c) {
-    c = { grass: buildGrass, stone: buildStone, dirt: buildDirt, crystal: buildCrystal, ice: buildIce, lava: buildLava, coast: buildCoast }[kind]();
+    c = { grass: buildGrass, stone: buildStone, dirt: buildDirt, crystal: buildCrystal, ice: buildIce, lava: buildLava, coast: buildCoast, meadow: buildMeadow, glacier: buildGlacier, ocean: buildOcean }[kind]();
     dressBackground(kind, c);
     bgCache.set(kind, c);
   }

@@ -9,6 +9,7 @@ import { TrainPanel, type TrainHud } from "@/components/pokemon/arena-train";
 import { PhotoMode } from "@/components/pokemon/arena-photo";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
+import { mobilityOf } from "@/lib/pokemon/arena-mobility";
 import { FIELDS, GIMMICKS, GMAX, gimInfo, isOriginSpecies, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, gimmicksFor, isSwimmer, locoOf, speciesOf, type FieldKind, type GimmickKind, type Loco } from "@/lib/pokemon/arena-data";
 import { ARENAS, ARENA, begin, choosePerk, gimmickActive, moveOf, newGame, newQuickGame, playerOf, step, swapTo, type Ev, type Input, type Level, type Mode, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
@@ -55,9 +56,9 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: TrainHud };
-const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"] };
-const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water" };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; mov: number; movLeft: number; movName: string; movIcon: string; movType: string; movDesc: string; movOn: boolean; movAlt: { icon: string; name: string; type: string } | null; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: TrainHud };
+const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"], meadow: ["খোলা তৃণভূমি", "Open Meadow"], glacier: ["বরফের চাদর", "Glacier Sheet"], ocean: ["খোলা সাগর", "Open Ocean"] };
+const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water", meadow: "All grass, nothing in the way", glacier: "All ice — slippery, nothing in the way", ocean: "All water — ice moves freeze it over" };
 const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
 const KEYS = ["1", "2", "3", "4"];
 
@@ -70,6 +71,8 @@ type Runtime = {
   queue: [boolean, boolean, boolean, boolean];
   held: [boolean, boolean, boolean, boolean];
   dodge: boolean;
+  mov: boolean;
+  movSel: number;
   ult: boolean;
   fin: boolean;
   mouse: boolean;
@@ -126,7 +129,7 @@ export function ArenaBrawl() {
   const joyEl = useRef<HTMLDivElement>(null);
   const fsAuto = useRef(false);
   const fsNative = useRef(false);
-  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: ZOOM0, pointers: new Map(), mfx: -1, yaw: null, pinch: 0, drawFailed: false, photo: { on: false, speed: 0, step: 0 }, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
+  const rt = useRef<Runtime>({ S: null, R: null, keys: new Set(), joy: { x: 0, y: 0 }, aim: null, queue: [false, false, false, false], held: [false, false, false, false], dodge: false, mov: false, movSel: 0, ult: false, fin: false, mouse: false, paused: false, last: 0, raf: 0, hudAt: 0, endT: 0, swapQ: -1, mode: "survival", zoom: ZOOM0, pointers: new Map(), mfx: -1, yaw: null, pinch: 0, drawFailed: false, photo: { on: false, speed: 0, step: 0 }, touchAim: null, touchUntil: 0, preview: null, me: undefined, drag: null });
 
   useEffect(() => {
     setSave(loadSave());
@@ -415,9 +418,10 @@ export function ArenaBrawl() {
         my = Math.sin(yaw) * fwd + Math.cos(yaw) * str;
       }
       const cast: [boolean, boolean, boolean, boolean] = [r.queue[0] || r.held[0] || r.mouse, r.queue[1] || r.held[1], r.queue[2] || r.held[2], r.queue[3] || r.held[3]];
-      const inp: Input = { mx, my, aim: currentAim(r, r.aim), cast, dodge: r.dodge, ult: r.ult, fin: r.fin };
+      const inp: Input = { mx, my, aim: currentAim(r, r.aim), cast, dodge: r.dodge, mov: r.mov, movSel: Math.min(r.movSel, Math.max(0, (r.S?.fighters[0]?.types.length ?? 1) - 1)), ult: r.ult, fin: r.fin };
       r.queue = [false, false, false, false];
       r.dodge = false;
+      r.mov = false;
       r.ult = false;
       r.fin = false;
       return inp;
@@ -495,6 +499,14 @@ export function ArenaBrawl() {
           cdLeft: ids.map((_, i) => p.cd[i]!),
           dodge: Math.max(0, p.dodge.cd / (1.15 * p.dodgeMul)),
           dodgeLeft: p.dodge.cd,
+          mov: Math.max(0, p.movCd / mobilityOf(p.types, rt.current.movSel).cd),
+          movLeft: p.movCd,
+          movName: mobilityOf(p.types, rt.current.movSel).name,
+          movIcon: mobilityOf(p.types, rt.current.movSel).icon,
+          movType: mobilityOf(p.types, rt.current.movSel).type,
+          movDesc: mobilityOf(p.types, rt.current.movSel).desc,
+          movOn: !!p.mov,
+          movAlt: p.types.length > 1 ? (({ icon, name, type }) => ({ icon, name, type }))(mobilityOf(p.types, 1 - rt.current.movSel)) : null,
           ult: p.ult,
           awaken: p.awaken,
           combo: p.combo.n,
@@ -592,6 +604,8 @@ export function ArenaBrawl() {
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) e.preventDefault();
       if (e.repeat) return;
       if (k === " " || k === "shift") r.dodge = true;
+      else if (k === "r") r.mov = true;
+      else if (k === "g") r.movSel = 1 - r.movSel;
       else if (k === "q") r.ult = true;
       else if (k === "e") r.fin = true;
       else if (r.mode === "quick" && (k === "z" || k === "x" || k === "c")) r.swapQ = "zxc".indexOf(k);
@@ -889,7 +903,7 @@ export function ArenaBrawl() {
           </div>
 
           <div className="ab-help">
-            <kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> {t("চলুন", "move")} · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> {t("চাল", "moves")} · <kbd>Space</kbd> {t("গড়ান", "dodge roll")} · <kbd>Q</kbd> {t("জিমিক", "gimmick")} · <kbd>+</kbd> <kbd>−</kbd> / {t("মাউস হুইল", "mouse wheel")} {t("জুম", "zoom")} · <kbd>F</kbd> {t("ফুল স্ক্রিন", "full screen")} · <kbd>P</kbd> {t("বিরতি", "pause")}
+            <kbd>W A S D</kbd> / <kbd>↑ ← ↓ →</kbd> {t("চলুন", "move")} · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> {t("চাল", "moves")} · <kbd>Space</kbd> {t("গড়ান", "dodge roll")} · <kbd>R</kbd> {t("বিশেষ চলন (টাইপ অনুযায়ী)", "type move (hop, dig, swim, fly…)")} · <kbd>Q</kbd> {t("জিমিক", "gimmick")} · <kbd>+</kbd> <kbd>−</kbd> / {t("মাউস হুইল", "mouse wheel")} {t("জুম", "zoom")} · <kbd>F</kbd> {t("ফুল স্ক্রিন", "full screen")} · <kbd>P</kbd> {t("বিরতি", "pause")}
             <br />
             {t("ফোনে: ফোন আড়াআড়ি ঘোরালে নিজে থেকে ফুল স্ক্রিন হয়। বাঁ দিকে জয়স্টিক, ডান দিকে চালের বোতাম, দুই আঙুলে জুম।", "On a phone: turn it sideways and it goes full screen by itself. Joystick on the left, move buttons on the right, pinch with two fingers to zoom.")}
             <br />
@@ -1014,6 +1028,32 @@ export function ArenaBrawl() {
                 <span className="pb-nm">{t("গড়ান", "Roll")}</span>
                 <span className="pb-ky">Space</span>
                 {hud.dodge > 0 ? <span className="pb-cd">{hud.dodgeLeft.toFixed(1)}</span> : null}
+              </button>
+              {hud.movAlt ? (
+                <button
+                  type="button"
+                  className="ab-pb mobsw"
+                  style={{ ["--c" as string]: TYPE_COLOR[hud.movAlt.type] ?? "#fff" }}
+                  aria-label={hud.movAlt.name}
+                  title={hud.movAlt.name}
+                  onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); rt.current.movSel = 1 - rt.current.movSel; }}
+                >
+                  <span className="pb-ic">{hud.movAlt.icon}</span>
+                  <span className="pb-ky">G ⇄</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={`ab-pb mob ${(hud.mov ?? 0) <= 0 && !hud.movOn ? "ready" : ""} ${hud.movOn ? "on" : ""}`}
+                style={{ ["--c" as string]: TYPE_COLOR[hud.movType] ?? "#bfe", ["--f" as string]: hud.movOn ? 0 : Math.min(1, hud.mov ?? 0) }}
+                aria-label={hud.movName}
+                title={hud.movDesc}
+                onPointerDown={(e) => { e.preventDefault(); rt.current.mov = true; }}
+              >
+                <span className="pb-ic">{hud.movIcon}</span>
+                <span className="pb-nm">{hud.movName}</span>
+                <span className="pb-ky">R</span>
+                {(hud.mov ?? 0) > 0 && !hud.movOn ? <span className="pb-cd">{(hud.movLeft ?? 0).toFixed(1)}</span> : null}
               </button>
               <button
                 type="button"

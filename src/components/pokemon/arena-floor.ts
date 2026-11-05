@@ -203,9 +203,22 @@ const coast: Surface = (x, y) => {
   return { rgb, h: ripple * 1.6 + n * 1.2 + grit * 0.4, gloss: wet * 0.3 };
 };
 
-const SURF: Record<StageKind, Surface> = { grass, stone, dirt, crystal, ice, lava, coast };
+/** Open sea: deep blue with swells, sunlit crests and flecks of foam. */
+const ocean: Surface = (x, y) => {
+  const n = fbm(x / 170, y / 120, 4, 81);
+  const w1 = Math.sin(x * 0.021 + n * 6 + y * 0.012) * 0.5 + 0.5;
+  const w2 = Math.sin(y * 0.034 + n * 5 - x * 0.008) * 0.5 + 0.5;
+  const swell = clamp01(0.25 + n * 0.5 + (w1 - 0.5) * 0.25 + (w2 - 0.5) * 0.15);
+  let rgb: RGB = ramp(["#06285c", "#0b4690", "#1368bc", "#2a92de", "#5cc0f2"].map(hex), swell);
+  const crest = Math.max(0, w1 * w2 - 0.8) / 0.2;
+  rgb = mix(rgb, hex("#d8f6ff"), crest * 0.5);
+  if (vn(x / 3, y / 3, 82) > 0.965 && n > 0.6) rgb = mix(rgb, hex("#ffffff"), 0.7);
+  return { rgb, h: swell * 1.4 + crest * 0.4, gloss: 0.6 };
+};
+
+const SURF: Record<StageKind, Surface> = { grass, stone, dirt, crystal, ice, lava, coast, meadow: grass, glacier: ice, ocean };
 /** Light from the upper left; higher values lean the shading harder. */
-const RELIEF: Record<StageKind, number> = { grass: 0.9, stone: 1.5, dirt: 1.3, crystal: 1.7, ice: 0.8, lava: 1.4, coast: 1.1 };
+const RELIEF: Record<StageKind, number> = { grass: 0.9, stone: 1.5, dirt: 1.3, crystal: 1.7, ice: 0.8, lava: 1.4, coast: 1.1, meadow: 0.9, glacier: 0.8, ocean: 0.7 };
 
 const mkCanvas = (w: number, h: number) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
 

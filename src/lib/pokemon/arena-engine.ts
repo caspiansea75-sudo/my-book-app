@@ -5,6 +5,7 @@
  */
 import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, movePool, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
+import { MOBILITY, mobilityOf, type Mobility } from "@/lib/pokemon/arena-mobility";
 
 /** The arena is this many times the size the first one was (960 x 600): more room to run, circle and dodge. */
 const K = 1.5;
@@ -17,12 +18,14 @@ const CY = H / 2;
 export type Mode = "survival" | "royale" | "quick" | "training";
 export type Level = "easy" | "normal" | "hard";
 
-export type StageKind = "grass" | "stone" | "dirt" | "crystal" | "ice" | "lava" | "coast";
+export type StageKind = "grass" | "stone" | "dirt" | "crystal" | "ice" | "lava" | "coast" | "meadow" | "glacier" | "ocean";
 export type ObsKind = "crate" | "pillar" | "crystal" | "rock" | "tree" | "pine" | "iceboulder" | "basalt" | "palm" | "cactus";
 /** Something standing in the arena: crates break, the rest do not. */
 export type Obstacle = { id: number; kind: ObsKind; x: number; y: number; r: number; hp: number; hit: number; /** a pillar thrown up by a blast: when it crumbles (game time), and its height and width */ until?: number; ph?: number; pw?: number };
 /** An oval patch of the floor: a bottomless pit or a pool of water. */
-export type Patch = { id: number; x: number; y: number; rx: number; ry: number; base?: number };
+export type Patch = { id: number; x: number; y: number; rx: number; ry: number; base?: number; /** the whole floor is this water (the Ocean arena) */ flood?: boolean };
+/** A round sheet of ice lying on water: it is dry, slippery ground. Ice moves make them, fire melts them. */
+export type Frozen = { id: number; x: number; y: number; r: number };
 
 export type Fighter = {
   id: number;
@@ -65,6 +68,11 @@ export type Fighter = {
   channel: { slot: number; t: number; tick: number; dx: number; dy: number } | null;
   dash: { t: number; total: number; dx: number; dy: number; dist: number; mv: MoveDef; hit: Set<number>; under?: boolean } | null;
   dodge: { t: number; cd: number; dx: number; dy: number; perfected: boolean };
+  /** The special movement in progress (hop, dig, run, fly, blink…), and the wait before it can be used again. */
+  mov: Mov | null;
+  movCd: number;
+  /** Which of its types the special movement uses: 0 = first, 1 = second. */
+  movIdx: number;
   invuln: number;
   shield: number;
   buffT: number;
@@ -202,6 +210,7 @@ export type Ev =
   | { t: "dig"; x: number; y: number; id: number; phase: "down" | "up"; type: string }
   | { t: "stage"; kind: StageKind }
   | { t: "dodge"; x: number; y: number }
+  | { t: "mov"; id: number; type: string; phase: "start" | "end"; x: number; y: number; x2: number; y2: number }
   | { t: "perfect"; x: number; y: number }
   | { t: "ko"; x: number; y: number; id: number; id2: string; type: string; byPlayer: boolean; player: boolean; boss: boolean }
   | { t: "combo"; n: number; finish: boolean }
@@ -229,7 +238,7 @@ export type Ev =
   | { t: "field"; kind: FieldKind }
   | { t: "hazard"; x: number; y: number }
   | { t: "swap"; team: number; x: number; y: number; name: string; faint: boolean }
-  | { t: "arena"; kind: "gust" | "vent" | "tide" | "spot" | "spotget"; x: number; y: number; dx?: number; dy?: number; team?: number }
+  | { t: "arena"; kind: "gust" | "vent" | "tide" | "spot" | "spotget" | "freeze" | "thaw"; x: number; y: number; dx?: number; dy?: number; team?: number }
   | { t: "clash"; x: number; y: number }
   | { t: "over"; win: boolean };
 
@@ -240,6 +249,10 @@ export type Input = {
   aim: { x: number; y: number } | null;
   cast: [boolean, boolean, boolean, boolean];
   dodge: boolean;
+  /** The special movement of the Pokémon's type. */
+  mov?: boolean;
+  /** Which type's movement the button uses (0 or 1). */
+  movSel?: number;
   /** Awaken (the special burst), once the gauge is full. */
   ult?: boolean;
   /** Fire the combo finisher (once four different moves were chained). */
@@ -248,6 +261,9 @@ export type Input = {
   swap?: number;
 };
 export const noInput = (): Input => ({ mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false });
+
+/** A special movement under way. `id` is the type whose movement it is; `ox,oy` is where it began, `tx,ty` where it ends. */
+export type Mov = { id: string; t: number; total: number; dx: number; dy: number; ox: number; oy: number; tx: number; ty: number; hit: number[]; tick: number; seed: number };
 
 export type Hazard = { id: number; owner: number; team: number; kind: "spikes" | "toxic" | "rocks"; x: number; y: number; r: number; life: number; max: number; hit: Record<number, number> };
 
@@ -306,6 +322,8 @@ export type State = {
   obs: Obstacle[];
   holes: Patch[];
   pools: Patch[];
+  /** ice on the water */
+  frozen: Frozen[];
   items: { id: number; x: number; y: number; kind: ItemKind; life: number }[];
   itemT: number;
   hazardT: number;
@@ -378,6 +396,8 @@ function boom(S: State, x: number, y: number, r: number, type: string, fx?: stri
     }
   }
   if (r >= 70 && (type === "Ground" || type === "Rock")) raisePillars(S, x, y, r);
+  if (type === "Ice" && S.pools.length) freezeWater(S, x, y, Math.max(46, r * 0.9));
+  else if (type === "Fire" && S.frozen.length) meltIce(S, x, y, r);
 }
 
 /** Heavy earth and rock blasts push up stone pillars: they block everyone like any pillar, wear down under big blasts, and crumble after a while. */
@@ -411,6 +431,34 @@ function breakCrate(S: State, o: Obstacle) {
 }
 
 const inPatch = (p: Patch, x: number, y: number, pad = 0) => ((x - p.x) / (p.rx + pad)) ** 2 + ((y - p.y) / (p.ry + pad)) ** 2 < 1;
+/** Is this spot on a sheet of ice that lies on the water? */
+const iced = (S: State, x: number, y: number) => S.frozen.some((f) => (x - f.x) ** 2 + (y - f.y) ** 2 < f.r * f.r);
+/** Water you actually stand in: a pool, unless it has frozen over there. */
+const wetAt = (S: State, x: number, y: number) => S.pools.some((p) => inPatch(p, x, y)) && !iced(S, x, y);
+
+/** An ice move lands on water: it freezes over around the spot (more hits widen the same sheet). */
+function freezeWater(S: State, x: number, y: number, r: number) {
+  if (!S.pools.some((p) => inPatch(p, x, y, r * 0.3))) return;
+  const near = S.frozen.find((f) => len(f.x - x, f.y - y) < Math.max(f.r, r) * 0.6);
+  if (near) {
+    near.r = Math.min(150, near.r + r * 0.22);
+    near.x += (x - near.x) * 0.15;
+    near.y += (y - near.y) * 0.15;
+    return;
+  }
+  if (S.frozen.length >= 36) S.frozen.shift();
+  S.frozen.push({ id: S.nextId++, x, y, r: Math.max(34, Math.min(r, 120)) });
+  S.events.push({ t: "arena", kind: "freeze", x, y });
+}
+/** Fire melts ice back to water. */
+function meltIce(S: State, x: number, y: number, r: number) {
+  for (const f of [...S.frozen]) {
+    if (len(f.x - x, f.y - y) > f.r + r * 0.5) continue;
+    f.r -= Math.max(18, r * 0.45);
+    if (f.r < 16) S.frozen.splice(S.frozen.indexOf(f), 1);
+    S.events.push({ t: "arena", kind: "thaw", x: f.x, y: f.y });
+  }
+}
 
 /** Lays out crates, pillars, crystals, a pond or a pit — each stage has its own. */
 export function buildStage(S: State, kind: StageKind) {
@@ -418,6 +466,7 @@ export function buildStage(S: State, kind: StageKind) {
   S.obs = [];
   S.holes = [];
   S.pools = [];
+  S.frozen = [];
   S.vents = undefined;
   S.gust = null;
   S.spot = null;
@@ -477,6 +526,14 @@ export function buildStage(S: State, kind: StageKind) {
       scatter("basalt", 5);
       scatter("rock", 2);
       scatter("crate", 3);
+      break;
+    case "meadow":
+    case "glacier":
+      // wide open floors: nothing to stand behind
+      break;
+    case "ocean":
+      // the whole floor is water
+      S.pools.push({ id: S.nextId++, x: CX, y: CY, rx: W * 0.8, ry: H * 0.8, flood: true });
       break;
     case "coast": {
       const a = rnd(150, 190) * K, b = rnd(80, 100) * K;
@@ -556,6 +613,9 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     channel: null,
     dash: null,
     dodge: { t: 0, cd: 0, dx: 0, dy: 0, perfected: false },
+    mov: null,
+    movCd: 0,
+    movIdx: 0,
     invuln: 0,
     shield: 0,
     buffT: 0,
@@ -648,6 +708,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
     stage: "stone",
     obs: [],
     holes: [],
+    frozen: [],
     pools: [],
     items: [],
     itemT: 7,
@@ -1243,6 +1304,8 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   if (dst.status.slp > 0 && dmg > 0) dst.status.slp = Math.max(0, dst.status.slp - 1.1); // a hit shakes them awake
   if (o.status && Math.random() < o.status.chance) applyStatus(S, dst, o.status.kind);
   S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy, mv: o.mv });
+  if (type === "Ice" && S.pools.length) freezeWater(S, dst.x, dst.y, 46);
+  else if (type === "Fire" && S.frozen.length) meltIce(S, dst.x, dst.y, 40);
   if (src.isPlayer) S.score += Math.round(dmg * 0.5);
   // a strong Psychic blow lifts the target off the ground and holds it there for a moment (it cannot move or act), then lets go
   if (type === "Psychic" && dmg > 0 && dst.hp > 0 && dst.levT <= 0 && dst.levCd <= 0 && dst.slamT <= 0 && dst.grabT <= 0 && dst.flyT <= 0 && (!o.mv || (MOVES[o.mv]?.power ?? 1) >= 0.9)) {
@@ -1330,6 +1393,11 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
   const mv = moveOf(f, slot);
   f.face = Math.atan2(dy, dx);
   S.events.push({ t: "cast", id: f.id, dir: f.face, mv: mv.id, tx, ty, x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
+  // an icy beam laid across water freezes a path along its whole length
+  if (mv.type === "Ice" && S.pools.length && (mv.kind === "beam" || mv.kind === "bolt")) {
+    const L = Math.min(mv.range ?? 260, 520) * 0.85;
+    for (let d = 50; d <= L; d += 46) freezeWater(S, f.x + Math.cos(f.face) * d, f.y + Math.sin(f.face) * d, 48);
+  }
   // Dynamax: moves become Max Moves that change the weather, and Gigantamax adds a blast where you aim
   if (f.dyna > 0) {
     const w: Record<string, FieldKind> = { Fire: "sun", Water: "rain", Ice: "hail", Rock: "sand" };
@@ -1499,7 +1567,7 @@ function updateHazards(S: State, dt: number) {
     for (const f of S.fighters) {
       if (!f.alive || f.team === h.team || f.invuln > 0 || f.dash?.under || f.boss) continue;
       if (len(f.x - h.x, f.y - h.y) > h.r + f.r * 0.3) continue;
-      const grounded = !f.canFly && f.loco !== "float" && f.air < 8 && f.flyT <= 0;
+      const grounded = !f.canFly && !movDef(f)?.cross && f.loco !== "float" && f.air < 8 && f.flyT <= 0;
       const ready = S.time >= (h.hit[f.id] ?? 0);
       if (!ready) continue;
       if (h.kind === "spikes" && grounded) {
@@ -1658,7 +1726,7 @@ function updateGrabs(S: State, dt: number) {
 /** Start using a move. Returns false if it is not possible right now. */
 export function tryCast(S: State, f: Fighter, slot: number, input: Input | null = null): boolean {
   if (!f.alive || f.stun > 0 || f.status.frz > 0 || f.status.slp > 0) return false;
-  if (f.cd[slot]! > 0 || f.cast || f.channel || f.dash) return false;
+  if (f.cd[slot]! > 0 || f.cast || f.channel || f.dash || hiddenMov(f)) return false;
   // paralysed: sometimes the body will not obey; confused: sometimes they hit themselves instead
   if (f.status.par > 0 && Math.random() < 0.25) {
     f.cd[slot] = 0.5;
@@ -1709,6 +1777,134 @@ export function tryCast(S: State, f: Fighter, slot: number, input: Input | null 
     f.face = Math.atan2(a.dy, a.dx);
   } else fire(S, f, slot, a.dx, a.dy, a.tx, a.ty);
   return true;
+}
+
+/* ------------------------------------------------------- special movement */
+
+const movDef = (f: Fighter): Mobility | null => (f.mov ? MOBILITY[f.mov.id] ?? null : null);
+/** Underground or out of this world: cannot be hit, cannot cast, walks through everything. */
+const hiddenMov = (f: Fighter) => !!f.mov && (f.mov.id === "Ground" || f.mov.id === "Ghost") && (MOBILITY[f.mov.id]?.kind === "dig" || MOBILITY[f.mov.id]?.kind === "vanish");
+
+/** Start the special movement of this fighter's type. `aim` is where it is pointing, `dir` the way the sticks say (or null). */
+export function startMov(S: State, f: Fighter, aim: { dx: number; dy: number; tx: number; ty: number }, dir: [number, number] | null): boolean {
+  const m = mobilityOf(f.types, f.movIdx);
+  if (!f.alive || f.mov || f.movCd > 0 || f.dash || f.dodge.t > 0 || f.status.frz > 0 || f.status.slp > 0 || f.stun > 0 || f.zLock || f.grabT > 0 || f.slamT > 0 || f.flyT > 0 || f.levT > 0) return false;
+  let [dx, dy] = dir && len(dir[0], dir[1]) > 0.2 ? norm(dir[0], dir[1]) : norm(aim.dx, aim.dy);
+  let tx = f.x, ty = f.y;
+  const range = m.range ?? 300;
+  if (m.kind === "blink" || m.kind === "vanish") {
+    const d = len(aim.tx - f.x, aim.ty - f.y);
+    const k = d > range ? range / d : 1;
+    tx = f.x + (aim.tx - f.x) * k;
+    ty = f.y + (aim.ty - f.y) * k;
+    if (d < 40) { tx = f.x + dx * range * 0.7; ty = f.y + dy * range * 0.7; }
+    [dx, dy] = norm(tx - f.x, ty - f.y);
+  } else if (m.kind === "stalk") {
+    const foe = nearestFoe(S, f);
+    if (foe && len(foe.x - f.x, foe.y - f.y) <= range + 120) {
+      const [ux, uy] = norm(foe.x - f.x, foe.y - f.y);
+      tx = foe.x + ux * (foe.r + f.r + 16);
+      ty = foe.y + uy * (foe.r + f.r + 16);
+      dx = -ux; dy = -uy; // turn round to face it
+    } else {
+      tx = f.x + dx * range * 0.55;
+      ty = f.y + dy * range * 0.55;
+    }
+  } else if (m.kind === "leap" || m.kind === "dig") {
+    tx = f.x + dx * range;
+    ty = f.y + dy * range;
+  }
+  tx = clamp(tx, MARGIN, W - MARGIN);
+  ty = clamp(ty, MARGIN, H - MARGIN);
+  f.mov = { id: m.type, t: 0, total: m.dur, dx, dy, ox: f.x, oy: f.y, tx, ty, hit: [], tick: 0, seed: Math.random() };
+  f.movCd = m.cd * (f.boss ? 1.5 : 1);
+  f.cast = null;
+  f.channel = null;
+  if (m.shield) f.shield = Math.max(f.shield, m.shield);
+  if (m.kind === "blink" || m.kind === "stalk") {
+    f.invuln = Math.max(f.invuln, 0.3);
+    f.x = tx;
+    f.y = ty;
+    f.mvx = f.mvy = 0;
+    f.face = Math.atan2(dy, dx);
+  }
+  if (m.kind === "vanish" || m.kind === "dig") f.invuln = Math.max(f.invuln, m.dur + 0.05);
+  if (m.kind === "leap") f.invuln = Math.max(f.invuln, 0.15);
+  if (m.kind === "fly") {
+    // a rush of wind on take-off shoves the neighbours away
+    if (m.dmg !== undefined && m.type !== "Fairy") for (const o of foesOf(S, f)) {
+      const d = len(o.x - f.x, o.y - f.y);
+      if (d < 130 + o.r) { const [nx, ny] = norm(o.x - f.x, o.y - f.y); o.kx += nx * (m.kb ?? 300); o.ky += ny * (m.kb ?? 300); }
+    }
+  }
+  S.events.push({ t: "mov", id: f.id, type: m.type, phase: "start", x: f.mov.ox, y: f.mov.oy, x2: tx, y2: ty });
+  return true;
+}
+
+/** Everything a special movement does each step: contact damage, trails, healing, and the landing. */
+function stepMov(S: State, f: Fighter, dt: number) {
+  const mv = f.mov;
+  if (!mv) return;
+  const m = MOBILITY[mv.id];
+  if (!m || !f.alive) { f.mov = null; return; }
+  mv.t += dt;
+  const k = Math.min(1, mv.t / mv.total);
+  if (f.status.frz > 0 || f.status.slp > 0) { // frozen solid: it stops, whatever it was doing
+    if (m.kind === "dig" || m.kind === "vanish") { /* still has to come out */ } else { f.mov = null; f.air = 0; return; }
+  }
+  const hit = (o: Fighter, mult: number, kb: number, st = m.status) => strike(S, f, o, 20 * mult * (f.power / 90) * f.dmgMul, m.type, { kx: o.x - f.x, ky: o.y - f.y, kb, status: st, mv: undefined });
+  const dmg = m.dmg ?? 0;
+  if (m.kind === "leap") {
+    f.air = Math.sin(Math.PI * k) * 96;
+    f.invuln = Math.max(f.invuln, k < 0.9 ? 0.06 : 0);
+  } else if (m.kind === "fly") {
+    f.air = Math.min(1, mv.t / 0.25) * Math.min(1, (mv.total - mv.t) / 0.25 + 0.001) * 46;
+  }
+  if (m.heal) f.hp = Math.min(f.maxHp, f.hp + f.maxHp * m.heal * (dt / mv.total));
+  if (m.kind === "run" || m.kind === "fly") {
+    if (dmg > 0) for (const o of foesOf(S, f)) {
+      if (mv.hit.includes(o.id) || len(o.x - f.x, o.y - f.y) > f.r + o.r + 10) continue;
+      mv.hit.push(o.id);
+      hit(o, dmg, m.kb ?? 200);
+    }
+    mv.tick -= dt;
+    if (mv.tick <= 0) {
+      mv.tick = 0.11;
+      if (m.freeze) freezeWater(S, f.x, f.y, 52);
+      if (m.type === "Fire") meltIce(S, f.x, f.y, 40);
+      if (m.puddles) {
+        const mine = S.hazards.filter((h) => h.owner === f.id);
+        if (mine.length < 7 && !S.hazards.some((h) => h.owner === f.id && len(h.x - f.x, h.y - f.y) < 40)) {
+          S.hazards.push({ id: S.nextId++, owner: f.id, team: f.team, kind: "toxic", x: f.x, y: f.y, r: 42, life: 7, max: 7, hit: {} });
+        }
+      }
+    }
+  }
+  if (k >= 1) endMov(S, f, m);
+}
+
+function endMov(S: State, f: Fighter, m: Mobility) {
+  const mv = f.mov!;
+  const type = m.type;
+  if (m.kind === "leap") {
+    f.air = 0;
+    boom(S, f.x, f.y, 78, type, "quake", false);
+    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 80 + o.r) strike(S, f, o, 20 * (m.dmg ?? 0.5) * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: m.kb ?? 260 });
+  } else if (m.kind === "dig") {
+    S.events.push({ t: "dig", x: f.x, y: f.y, id: f.id, phase: "up", type });
+    boom(S, f.x, f.y, 95, type, "earthquake", false);
+    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 95 + o.r) strike(S, f, o, 20 * (m.dmg ?? 1) * (f.power / 90) * f.dmgMul, type, { kx: o.x - f.x, ky: o.y - f.y, kb: m.kb ?? 460 });
+  } else if (m.kind === "vanish") {
+    f.x = mv.tx;
+    f.y = mv.ty;
+    f.mvx = f.mvy = 0;
+    f.face = Math.atan2(mv.dy, mv.dx);
+    f.invuln = Math.max(f.invuln, 0.2);
+    for (const o of foesOf(S, f)) if (len(o.x - f.x, o.y - f.y) <= 140 + o.r && Math.random() < (m.status?.chance ?? 0)) applyStatus(S, o, "cnf");
+  } else if (m.kind === "fly") f.air = 0;
+  if (m.focus) f.focus = Math.max(f.focus, m.focus);
+  S.events.push({ t: "mov", id: f.id, type, phase: "end", x: f.x, y: f.y, x2: mv.ox, y2: mv.oy });
+  f.mov = null;
 }
 
 function startDodge(S: State, f: Fighter, dx: number, dy: number) {
@@ -1986,6 +2182,22 @@ function aiStep(S: State, f: Fighter, dt: number) {
       }
     }
   }
+  // special movement: close the gap on a far foe, or get away when hurt
+  if (!f.boss && !f.mov && f.movCd <= 0 && !f.cast && !f.channel && !f.dash && f.dummy !== "idle") {
+    if (f.types.length > 1) f.movIdx = Math.random() < 0.5 ? 0 : 1;
+    const m = mobilityOf(f.types, f.movIdx);
+    const hurt = f.hp < f.maxHp * 0.3;
+    const lvl = S.mode === "quick" ? { easy: 0.05, normal: 0.12, hard: 0.22 }[S.level ?? "normal"] : 0.1;
+    if (Math.random() < lvl) {
+      const away = hurt && d < 260;
+      const closing = !away && d > (m.kind === "stalk" ? 240 : 230) && d < (m.range ?? 480) + 260;
+      if (away || closing) {
+        const k = away ? -1 : 1;
+        const aim = { dx: ux * k, dy: uy * k, tx: away ? f.x - ux * 400 : foe.x, ty: away ? f.y - uy * 400 : foe.y };
+        if (startMov(S, f, aim, null)) return;
+      }
+    }
+  }
   if (f.cpuGimmick && f.ult >= 100 && !gimmickActive(f) && Math.random() < 0.5) {
     activateGimmick(S, f);
     return;
@@ -2039,11 +2251,25 @@ function aiStep(S: State, f: Fighter, dt: number) {
 const ACCEL: Record<string, number> = { fly: 9, float: 6.5, surf: 9, slither: 9.5, run: 16, walk: 20 };
 
 function moveFighter(S: State, f: Fighter, dt: number) {
-  const under = !!f.dash?.under;
-  f.inWater = S.pools.some((p) => inPatch(p, f.x, f.y));
+  const mob = movDef(f);
+  const under = !!f.dash?.under || (!!mob && (mob.kind === "dig" || mob.kind === "vanish" || (mob.kind === "leap" && f.air > 20)));
+  const flies = f.canFly || !!mob?.cross;
+  f.inWater = wetAt(S, f.x, f.y);
+  // glacier floors and sheets of ice on the water are slippery for everyone who walks on them
+  const slick = !flies && !mob?.sure && f.loco !== "fly" && f.loco !== "float" && (S.stage === "glacier" || iced(S, f.x, f.y));
   let sx = 0;
   let sy = 0;
-  if (f.dodge.t > 0) {
+  if (mob && f.mov && (mob.kind === "leap" || mob.kind === "dig")) {
+    // a jump or a burrow carries straight on to where it was aimed
+    const sp = (mob.range ?? 300) / mob.dur;
+    sx = f.mov.dx * sp;
+    sy = f.mov.dy * sp;
+    f.mvx = sx * 0.5;
+    f.mvy = sy * 0.5;
+  } else if (mob && f.mov && (mob.kind === "vanish" || mob.kind === "blink" || mob.kind === "stalk")) {
+    // nothing moves while it fades; a blink has already happened
+    f.mvx = f.mvy = 0;
+  } else if (f.dodge.t > 0) {
     sx = f.dodge.dx * 560;
     sy = f.dodge.dy * 560;
     f.mvx = sx * 0.5;
@@ -2072,8 +2298,13 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     if (f.status.frz > 0 || f.status.slp > 0 || f.stun > 0) k = 0;
     if (f.channel) k *= 0.35;
     // water: swimmers are quick, flyers do not care, everyone else wades
-    if (f.inWater) k *= f.swimmer ? 1.3 : f.canFly ? 1 : 0.62;
-    const a = 1 - Math.exp(-dt * (ACCEL[f.loco] ?? 15));
+    if (f.inWater) k *= f.swimmer ? 1.3 : flies || mob?.sure ? 1 : 0.62;
+    if (mob && (mob.kind === "run" || mob.kind === "fly")) {
+      k *= mob.speed ?? 1.5;
+      // no stick held: it keeps going the way it was pointing
+      if (len(f.vx, f.vy) < 5 && f.mov) { f.vx = f.mov.dx * f.speed; f.vy = f.mov.dy * f.speed; }
+    }
+    const a = 1 - Math.exp(-dt * (ACCEL[f.loco] ?? 15) * (slick ? 0.3 : 1));
     f.mvx += (f.vx * k - f.mvx) * a;
     f.mvy += (f.vy * k - f.mvy) * a;
     sx = f.mvx;
@@ -2111,7 +2342,7 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     for (const o of S.obs) {
       if (o.hp <= 0) continue;
       // tall things (trees, pines, palms, pillars, crystals, basalt) stop everyone, even fliers; low ones only stop what walks
-      if (!(TALL_OBS.has(o.kind) || !f.canFly)) continue;
+      if (!(TALL_OBS.has(o.kind) || !flies)) continue;
       const min = f.r * 0.85 + o.r;
       const d = len(f.x - o.x, f.y - o.y);
       if (d >= min) continue;
@@ -2135,7 +2366,7 @@ function moveFighter(S: State, f: Fighter, dt: number) {
       }
     }
     // pits: whoever cannot fly or float is stopped at the edge, or falls in if thrown there
-    if (!f.canFly) {
+    if (!flies) {
       for (const h of S.holes) {
         if (!inPatch(h, f.x, f.y)) continue;
         const thrown = !!f.dash || len(f.kx, f.ky) > 220;
@@ -2234,6 +2465,8 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     h.vx = mx * h.speed;
     h.vy = my * h.speed;
     if (inp.dodge) startDodge(S, h, len(mx, my) > 0.1 ? mx : Math.cos(h.face), len(mx, my) > 0.1 ? my : Math.sin(h.face));
+    if (inp.movSel !== undefined && !h.mov) h.movIdx = Math.max(0, Math.min(1, inp.movSel | 0));
+    if (inp.mov) startMov(S, h, aimOf(S, h, inp), len(mx, my) > 0.2 ? [mx, my] : null);
     for (let i = 0; i < 4; i++) if (inp.cast[i]) tryCast(S, h, i, inp);
     if (inp.ult) activateGimmick(S, h);
     if (inp.fin) fireFinisher(S, h);
@@ -2305,6 +2538,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       }
     }
     f.dodge.cd = Math.max(0, f.dodge.cd - dt);
+    f.movCd = Math.max(0, f.movCd - dt);
     if (f.dodge.t > 0) f.dodge.t = Math.max(0, f.dodge.t - dt);
     f.status.frzImmune = Math.max(0, f.status.frzImmune - dt);
     if (f.isPlayer && f.combo.ready > 0) f.combo.ready = Math.max(0, f.combo.ready - dt);
@@ -2371,6 +2605,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       }
       if (f.channel.t <= 0 || f.status.frz > 0 || f.status.slp > 0) f.channel = null;
     }
+    stepMov(S, f, dt);
     // a rush (or a burrow)
     if (f.dash) {
       f.dash.t += dt;
@@ -2720,7 +2955,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
 /* ------------------------------------------------------------- Quick Battle (3v3) */
 
 export type QuickPick = { species: string; moves?: string[]; gimmick?: GimmickKind; mega?: string; tera?: string };
-export const ARENAS: StageKind[] = ["grass", "stone", "dirt", "crystal", "ice", "lava", "coast"];
+export const ARENAS: StageKind[] = ["grass", "stone", "dirt", "crystal", "ice", "lava", "coast", "meadow", "glacier", "ocean"];
 const LEVEL_SCALE: Record<Level, { hp: number; dmg: number; cd: number }> = {
   easy: { hp: 0.8, dmg: 0.7, cd: 1.3 },
   normal: { hp: 1, dmg: 0.95, cd: 1 },

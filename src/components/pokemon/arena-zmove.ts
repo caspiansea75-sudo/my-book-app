@@ -173,11 +173,12 @@ const SCENES: Record<string, (Zc: Z, c: string) => void> = {
     const { g, t, p, a, x } = Zc;
     // the meteor: a textured lava sphere crashing in from the upper left, with a long flame tail
     const k = sm(0.08, 0.9, p);
-    const fx = x + (W / 2 - x) * 0.4 - (1 - k) * 380, fy = -140 + (H * 0.52 + 140) * k;
+    const sl = STRAIGHT ? 0 : 1;
+    const fx = x + (W / 2 - x) * 0.4 - (1 - k) * 380 * sl, fy = -140 + (H * 0.52 + 140) * k;
     const r = 60 + k * 110;
     for (let i = 0; i < 26; i++) {
       const tk = i / 26;
-      const tx = fx - 190 * tk * (1 - k * 0.2) - 40 * tk, ty = fy - 300 * tk * (1 - k * 0.2) - 40 * tk;
+      const tx = fx - (190 * tk * (1 - k * 0.2) + 40 * tk) * sl, ty = fy - 300 * tk * (1 - k * 0.2) - 40 * tk;
       glow(g, tx + Math.sin(t * 20 + i) * 8, ty, r * (1 - tk * 0.6), i % 2 ? "#ffb02e" : "#ff5a1a", "#7a1604", a * (0.55 - tk * 0.5));
     }
     texBall(g, fx, fy, r, "lava", t, a, "#ffd36a");
@@ -222,7 +223,7 @@ const SCENES: Record<string, (Zc: Z, c: string) => void> = {
       const age = (t * 9 - s) / 3;
       if (age < 0 || age > 1) continue;
       const sx = hs(s * 7 + 1) * W * 0.9 + W * 0.05;
-      bolt(g, sx + (hs(s) - 0.5) * 120, 20, sx, H * (0.5 + hs(s + 3) * 0.4), s * 13 + 5, "#ffe14d", 3.2, a * (1 - age), 2);
+      bolt(g, sx + (STRAIGHT ? 0 : (hs(s) - 0.5) * 120), 20, sx, H * (0.5 + hs(s + 3) * 0.4), s * 13 + 5, "#ffe14d", 3.2, a * (1 - age), 2);
       glow(g, sx, H * (0.6 + hs(s + 3) * 0.3), 120, "#ffffff", "#ffd21a", a * (1 - age) * 0.7);
     }
     const k = sm(0.1, 1, p);
@@ -299,7 +300,7 @@ const SCENES: Record<string, (Zc: Z, c: string) => void> = {
     const { g, t, p, a, x, y } = Zc;
     // toxic rain, a bubbling venom pool rising from the bottom and drifting gas
     g.save(); g.globalCompositeOperation = "lighter"; g.strokeStyle = "#8dff5a"; g.lineCap = "round";
-    for (let i = 0; i < 80; i++) { const ph = (t * (1.1 + hs(i + 3)) + hs(i)) % 1; g.globalAlpha = a * 0.7 * Math.sin(ph * Math.PI); g.lineWidth = 1.4 + hs(i + 4) * 1.4; const px = hs(i + 1) * W; g.beginPath(); g.moveTo(px - 30 * ph, ph * H * 1.1 - 40); g.lineTo(px - 38 * ph, ph * H * 1.1 + 4); g.stroke(); }
+    for (let i = 0; i < 80; i++) { const ph = (t * (1.1 + hs(i + 3)) + hs(i)) % 1; g.globalAlpha = a * 0.7 * Math.sin(ph * Math.PI); g.lineWidth = 1.4 + hs(i + 4) * 1.4; const px = hs(i + 1) * W; const sl = STRAIGHT ? 0 : 1; g.beginPath(); g.moveTo(px - 30 * ph * sl, ph * H * 1.1 - 40); g.lineTo(px - 38 * ph * sl, ph * H * 1.1 + 4); g.stroke(); }
     g.restore();
     const k = sm(0.05, 0.9, p);
     const pts: [number, number][] = [];
@@ -386,9 +387,10 @@ const SCENES: Record<string, (Zc: Z, c: string) => void> = {
     // boulders crash down on a slant, trailing flame, with dust blooming where they land
     for (let i = 0; i < 18; i++) {
       const start = hs(i) * 0.5, k = sm(start, start + 0.5, p);
-      const bx = hs(i + 1) * W * 1.1 - 100 + (1 - k) * 360, by = -80 + (H * (0.35 + hs(i + 2) * 0.55) + 80) * k, r = 22 + hs(i + 3) * 34;
+      const sl = STRAIGHT ? 0 : 1;
+      const bx = hs(i + 1) * W * 1.1 - 100 + (1 - k) * 360 * sl, by = -80 + (H * (0.35 + hs(i + 2) * 0.55) + 80) * k, r = 22 + hs(i + 3) * 34;
       if (k <= 0) continue;
-      for (let j = 0; j < 8; j++) glow(g, bx - j * 18, by - j * 30, r * (1 - j * 0.08), "#ffb02e", "#7a2a0a", a * 0.35 * (1 - j / 8));
+      for (let j = 0; j < 8; j++) glow(g, bx - j * 18 * sl, by - j * 30, r * (1 - j * 0.08), "#ffb02e", "#7a2a0a", a * 0.35 * (1 - j / 8));
       g.save(); g.translate(bx, by); g.rotate(t * 3 + i);
       g.globalAlpha = a; g.beginPath(); for (let s = 0; s < 8; s++) { const rr = r * (0.75 + 0.35 * hs(i * 9 + s)); g.lineTo(Math.cos((s / 8) * TAU) * rr, Math.sin((s / 8) * TAU) * rr); } g.closePath();
       g.fillStyle = texPat(g, "rock", i * 17, 0, r / 40, 0); g.fill(); g.strokeStyle = "#ffb02e"; g.lineWidth = 2; g.stroke(); g.restore();
@@ -497,6 +499,12 @@ export const Z_TINT: Record<string, string> = {
  * Draw the type's show over the darkened backdrop. `t` is seconds since the cinematic began, `p` its 0..1 progress and `a` the
  * fade envelope. Never throws and always leaves the canvas state as it found it. Returns false for an unknown type.
  */
+/** In the player views whatever falls in a finishing move comes straight down from the sky, not in on a slant from the side. */
+let STRAIGHT = false;
+export function setZSky(on: boolean) {
+  STRAIGHT = on;
+}
+
 export function drawZScene(g: CanvasRenderingContext2D, type: string, t: number, p: number, a: number, at: { x: number; y: number }): boolean {
   const fn = SCENES[type];
   if (!fn) return false;

@@ -245,9 +245,22 @@ export function specCast(id: string, e: { x: number; y: number; dir: number; tx:
 
 /* ------------------------------------------------------------------ pools, gardens and cages that stay on the floor */
 
-export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: number; y: number; r: number; id: number }, t: number, age: number, grow: number, fade: number, c: SpecCtx) {
+export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: number; y: number; r: number; id: number }, t: number, age: number, grow: number, fade: number, c: SpecCtx, stand?: (x: number, y: number, draw: (g: CanvasRenderingContext2D) => void) => void) {
   const R = z.r;
   const add = (p: SP) => c.add(p);
+  // What stands up out of the floor (fountains, jets, flowers, tendrils, bubbles) is drawn by `stand` when the player views give one: upright, at its own spot.
+  const U = (x: number, y: number, fn: (g: CanvasRenderingContext2D) => void, glow = false) => {
+    if (!stand) return fn(g);
+    stand(x, y, (gg) => {
+      gg.save();
+      gg.globalAlpha = fade;
+      if (glow) gg.globalCompositeOperation = "lighter";
+      gg.lineCap = "round";
+      gg.lineJoin = "round";
+      fn(gg);
+      gg.restore();
+    });
+  };
   g.save();
   g.globalAlpha = fade;
   if (id === "magmastorm") {
@@ -266,18 +279,20 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
       const bx = z.x + Math.cos(a) * d, by = z.y + Math.sin(a) * d * 0.9;
       const h = Math.sin(ph * Math.PI) * (46 + hash(k + z.id) * 40) * grow;
       const w = 7 + hash(k + 3) * 5;
+      U(bx, by, (g) => {
       const gr = g.createLinearGradient(0, by, 0, by - h);
       gr.addColorStop(0, "rgba(255,230,120,.95)"); gr.addColorStop(0.6, "rgba(255,120,30,.8)"); gr.addColorStop(1, "rgba(220,40,10,0)");
       g.fillStyle = gr;
       g.beginPath(); g.moveTo(bx - w, by); g.quadraticCurveTo(bx - w * 0.4, by - h * 0.6, bx, by - h); g.quadraticCurveTo(bx + w * 0.4, by - h * 0.6, bx + w, by); g.closePath(); g.fill();
       ball(g, bx, by - h, w * 1.1, "rgba(255,240,170,.9)", "rgba(255,120,30,0)");
+      }, true);
       if (ph > 0.3 && ph < 0.55 && Math.random() < 0.5) add({ kind: "dot", x: bx, y: by - h, vx: rnd(-90, 90), vy: rnd(-200, -60), g: 760, life: 0.8, size: rnd(3, 6), color: pick(["#ff5a1a", "#ffb02e", "#ffe27a"]) });
     }
     // embers circling
     for (let k = 0; k < 14; k++) {
       const a = t * (1.2 + (k % 3) * 0.3) + (k / 14) * TAU;
       const hh = ((t * 0.6 + k * 0.17) % 1) * 70;
-      ball(g, z.x + Math.cos(a) * R * 0.95, z.y + Math.sin(a) * R * 0.95 - hh, 3.2, "rgba(255,230,120,.95)", "rgba(255,100,20,0)");
+      { const ex = z.x + Math.cos(a) * R * 0.95, ey = z.y + Math.sin(a) * R * 0.95; U(ex, ey, (g) => ball(g, ex, ey - hh, 3.2, "rgba(255,230,120,.95)", "rgba(255,100,20,0)"), true); }
     }
     g.globalCompositeOperation = "source-over";
     g.strokeStyle = "rgba(255,120,30,.9)"; g.lineWidth = 3;
@@ -307,11 +322,13 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
       const a = (k / N) * TAU + t * 0.8;
       const bx = z.x + Math.cos(a) * R, by = z.y + Math.sin(a) * R;
       const h = (34 + Math.sin(t * 6 + k * 1.7) * 7) * grow;
+      U(bx, by, (g) => {
       const gr = g.createLinearGradient(0, by, 0, by - h);
       gr.addColorStop(0, "rgba(120,200,255,.75)"); gr.addColorStop(1, "rgba(220,245,255,0)");
       g.strokeStyle = gr; g.lineWidth = 6;
       g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + Math.sin(t * 5 + k) * 2, by - h); g.stroke();
       ball(g, bx, by - h, 3.2, "rgba(255,255,255,.9)", "rgba(255,255,255,0)");
+      });
     }
     g.strokeStyle = "rgba(190,235,255,.95)"; g.lineWidth = 3;
     smooth(g, organic(z.x, z.y, R, R, z.id, 0.16, t * 0.6, 34)); g.stroke();
@@ -319,8 +336,10 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
     for (let k = 0; k < 6; k++) {
       const a = -t * 2.2 + k * 1.05, d = R * (0.25 + 0.55 * hash(k + z.id));
       const bx = z.x + Math.cos(a) * d, by = z.y + Math.sin(a) * d - 8 - Math.sin(t * 3 + k) * 5;
+      U(bx, by, (g) => {
       g.strokeStyle = "rgba(255,255,255,.9)"; g.lineWidth = 1.6; g.fillStyle = "rgba(190,235,255,.3)";
       g.beginPath(); g.arc(bx, by, 5 + (k % 3) * 2, 0, TAU); g.fill(); g.stroke();
+      });
     }
     if (Math.random() < 0.3) add({ kind: "bubble", x: z.x + rnd(-R, R) * 0.8, y: z.y + rnd(-R, R) * 0.6, vx: 0, vy: rnd(-70, -30), g: -10, life: 0.9, size: rnd(2.5, 5), color: "#bfe6ff" });
   } else if (id === "sporegarden") {
@@ -340,6 +359,8 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
       const up = ease((age - hash(it.k + 7) * 0.4) / 0.35);
       if (up <= 0) continue;
       const h = (16 + hash(it.k + 11) * 18) * up, sway = Math.sin(t * 2 + it.k) * 2;
+      const hx = it.x + sway, hy = it.y - h;
+      U(it.x, it.y, (g) => {
       g.strokeStyle = "#4b8a3a"; g.lineWidth = 4; g.lineCap = "round";
       g.beginPath(); g.moveTo(it.x, it.y); g.quadraticCurveTo(it.x + sway, it.y - h * 0.5, it.x + sway, it.y - h); g.stroke();
       const hx = it.x + sway, hy = it.y - h;
@@ -353,6 +374,7 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
         for (let p = 0; p < 5; p++) { const a = (p / 5) * TAU + t * 0.5; g.fillStyle = p % 2 ? "#ffb0e8" : "#ffd1f4"; g.beginPath(); g.arc(hx + Math.cos(a) * pr, hy + Math.sin(a) * pr, pr * 0.75, 0, TAU); g.fill(); }
         g.fillStyle = "#ffe27a"; g.beginPath(); g.arc(hx, hy, pr * 0.6, 0, TAU); g.fill();
       }
+      });
       if (up >= 1 && Math.random() < 0.05) for (let s = 0; s < 3; s++) add({ kind: "smoke", x: hx, y: hy - 4, vx: rnd(-30, 30), vy: rnd(-60, -20), life: 1.2, size: rnd(8, 13), grow: 14, color: pick(["#ffb0e8", "#a8e890", "#fff3a0"]) });
     }
     if (Math.random() < 0.2) add({ kind: "spark", x: z.x + rnd(-R, R) * 0.9, y: z.y + rnd(-R, R) * 0.5, vx: rnd(-20, 20), vy: rnd(-60, -20), life: 1.1, size: rnd(1.6, 3), color: pick(["#fff3a0", "#d8ff8a"]) });
@@ -376,18 +398,22 @@ export function specLinger(g: CanvasRenderingContext2D, id: string, z: { x: numb
       const a = hash(k * 3 + z.id) * TAU, d = Math.sqrt(hash(k * 6 + 3)) * R * 0.78;
       const bx = z.x + Math.cos(a) * d, by = z.y + Math.sin(a) * d - ph * 10;
       const br = 3 + ph * 11;
+      U(bx, by, (g) => {
       g.fillStyle = k % 2 ? "rgba(190,120,255,.5)" : "rgba(150,255,100,.45)"; g.strokeStyle = "rgba(255,255,255,.8)"; g.lineWidth = 1.6;
       g.beginPath(); g.arc(bx, by, br, 0, TAU); g.fill(); g.stroke();
       g.fillStyle = "rgba(255,255,255,.8)"; g.beginPath(); g.arc(bx - br * 0.3, by - br * 0.3, br * 0.22, 0, TAU); g.fill();
+      });
       if (ph > 0.96 || (ph < 0.03 && Math.random() < 0.3)) for (let s = 0; s < 5; s++) add({ kind: "dot", x: bx, y: by, vx: rnd(-90, 90), vy: rnd(-180, -60), g: 600, life: 0.5, size: rnd(2, 4), color: s % 2 ? "#a855f7" : "#7ed957" });
     }
     for (let k = 0; k < 5; k++) {
       const a = hash(k * 8 + z.id) * TAU, d = R * (0.2 + 0.6 * hash(k * 2 + 1));
       const bx = z.x + Math.cos(a) * d, by = z.y + Math.sin(a) * d;
       const h = (18 + Math.sin(t * 3 + k * 2) * 8) * grow;
+      U(bx, by, (g) => {
       g.strokeStyle = k % 2 ? "#8a3fd0" : "#6cc23a"; g.lineWidth = 6;
       g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx + Math.sin(t * 2 + k) * 8, by - h * 0.5, bx + Math.sin(t * 2 + k) * 4, by - h); g.stroke();
       ball(g, bx + Math.sin(t * 2 + k) * 4, by - h, 5, "rgba(255,255,255,.5)", g.strokeStyle as string);
+      });
     }
     if (Math.random() < 0.3) add({ kind: "smoke", x: z.x + rnd(-R, R) * 0.7, y: z.y + rnd(-R, R) * 0.4, vx: rnd(-14, 14), vy: rnd(-70, -30), life: 1.1, size: rnd(9, 15), grow: 20, color: Math.random() < 0.5 ? "#6b8c2a" : "#6b21a8" });
   }

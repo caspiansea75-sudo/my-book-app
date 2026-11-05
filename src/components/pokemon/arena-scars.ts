@@ -18,6 +18,7 @@ function rng(seed: number) {
 type Tone = { pit: string; deep: string; rim: string; dust: string; chip: string[] };
 const DIRT: Tone = { pit: "#3a2a1b", deep: "#1c130b", rim: "rgba(176,146,98,.55)", dust: "rgba(96,72,44,.34)", chip: ["#6f7480", "#8b909a", "#575c66", "#7a6a56"] };
 const TONES: Partial<Record<StageKind, Tone>> = {
+  glacier: { pit: "#6d8aa3", deep: "#3d566d", rim: "rgba(235,248,255,.7)", dust: "rgba(180,210,230,.3)", chip: ["#dff3ff", "#bfe0f5", "#9ec6e2", "#ffffff"] },
   ice: { pit: "#6d8aa3", deep: "#3d566d", rim: "rgba(235,248,255,.7)", dust: "rgba(180,210,230,.3)", chip: ["#dff3ff", "#bfe0f5", "#9ec6e2", "#ffffff"] },
   lava: { pit: "#150f0e", deep: "#0a0707", rim: "rgba(255,120,40,.35)", dust: "rgba(20,12,10,.45)", chip: ["#3a3030", "#2a2222", "#4a3a36", "#1c1616"] },
   crystal: { pit: "#2a2040", deep: "#150f26", rim: "rgba(190,160,255,.5)", dust: "rgba(60,40,100,.32)", chip: ["#a98bff", "#7f66d6", "#cdb8ff", "#5b4aa0"] },
@@ -66,7 +67,7 @@ export class Scars {
 
   private with(fn: (g: CanvasRenderingContext2D) => void) {
     const g = this.g;
-    if (!g) return;
+    if (!g || this.stage === "ocean") return; // nothing marks open water
     g.save();
     g.setTransform(SC, 0, 0, SC, 0, 0);
     fn(g);

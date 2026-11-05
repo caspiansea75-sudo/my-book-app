@@ -76,6 +76,7 @@ export type Snap = {
   o: Collection;
   /** Floor hazards (Spikes, Toxic Spikes, Stealth Rock). */
   hz?: Collection;
+  fz?: Collection;
   e: Ev[];
 };
 
@@ -113,7 +114,7 @@ function collect(prev: Map<number, J>, list: Keyed[], make: (x: J) => J, full: b
 /** Host side: turns the state of the fight into small messages. */
 export class SnapshotEncoder {
   private q = 0;
-  private prev = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>(), hz: new Map<number, J>() };
+  private prev = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>(), hz: new Map<number, J>(), fz: new Map<number, J>() };
   private prevHeader: J = {};
 
   /**
@@ -153,6 +154,7 @@ export class SnapshotEncoder {
       i: collect(this.prev.i, S.items, (x) => plain(x), full),
       o: collect(this.prev.o, S.obs, (x) => plain(x), full),
       hz: collect(this.prev.hz, S.hazards ?? [], (x) => plain(x), full),
+      fz: collect(this.prev.fz, S.frozen ?? [], (x) => plain(x), full),
       e: events,
     };
   }
@@ -161,7 +163,7 @@ export class SnapshotEncoder {
 const emptyState = (): State =>
   ({
     mode: "royale", time: 0, nextId: 1, fighters: [], projs: [], zones: [], events: [], phase: "intro", introT: 0, wave: 1, score: 0,
-    hazards: [], freeze: 0, slow: 0, zPending: null, stage: "stone", obs: [], holes: [], pools: [], items: [], itemT: 0, hazardT: 0, field: "none",
+    hazards: [], freeze: 0, slow: 0, zPending: null, stage: "stone", obs: [], holes: [], pools: [], frozen: [], items: [], itemT: 0, hazardT: 0, field: "none",
     perks: [], taken: [], storm: { r: 520, on: false }, winner: false, place: 0, perfects: 0, easy: 1, mp: true,
   }) as State;
 
@@ -172,7 +174,7 @@ export class SnapshotDecoder {
   readonly S: State = emptyState();
   private lastQ = 0;
   private got = false;
-  private maps = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>(), hz: new Map<number, J>() };
+  private maps = { f: new Map<number, J>(), p: new Map<number, J>(), z: new Map<number, J>(), i: new Map<number, J>(), o: new Map<number, J>(), hz: new Map<number, J>(), fz: new Map<number, J>() };
   private goal = new Map<object, Smooth>();
   /** Events that arrived since the last call to `takeEvents`. */
   private events: Ev[] = [];
@@ -235,6 +237,7 @@ export class SnapshotDecoder {
     this.merge("i", s.i, S.items, false);
     this.merge("o", s.o, S.obs, false);
     this.merge("hz", s.hz ?? { u: {}, r: [] }, S.hazards, false);
+    this.merge("fz", s.fz ?? { u: {}, r: [] }, S.frozen, false);
     if (s.e.length) this.events.push(...s.e);
     return true;
   }
@@ -278,6 +281,10 @@ export type InputMsg = {
   u: number;
   /** Combo finisher presses so far. */
   fn?: number;
+  /** Special-movement presses so far. */
+  mv?: number;
+  /** Which type's movement is selected (0 or 1). */
+  ms?: number;
   /** Quick Battle: the squad member asked for, and how many requests so far (so a lost message cannot lose a swap). */
   sw?: number;
   sn?: number;
@@ -290,6 +297,8 @@ export class InputSender {
   private d = 0;
   private u = 0;
   private fn = 0;
+  private mvn = 0;
+  private ms = 0;
   private sw = -1;
   private sn = 0;
   /**
@@ -301,6 +310,8 @@ export class InputSender {
     if (inp.dodge) this.d++;
     if (inp.ult) this.u++;
     if (inp.fin) this.fn++;
+    if (inp.mov) this.mvn++;
+    if (inp.movSel !== undefined) this.ms = inp.movSel;
     if (inp.swap !== undefined && inp.swap >= 0) {
       this.sw = inp.swap;
       this.sn++;
@@ -316,6 +327,8 @@ export class InputSender {
       d: this.d,
       u: this.u,
       fn: this.fn,
+      mv: this.mvn,
+      ms: this.ms,
       sw: this.sw,
       sn: this.sn,
     };
@@ -324,7 +337,7 @@ export class InputSender {
 
 /** Host side: turns the newest message of a member into the controls for the next step. */
 export class InputReceiver {
-  private last = new Map<number, { q: number; c: number[]; d: number; u: number; fn: number; sn: number }>();
+  private last = new Map<number, { q: number; c: number[]; d: number; u: number; fn: number; mv: number; sn: number }>();
   private latest = new Map<number, InputMsg>();
   put(fid: number, m: InputMsg) {
     const cur = this.latest.get(fid);
@@ -338,10 +351,10 @@ export class InputReceiver {
   take(fid: number): Input {
     const m = this.latest.get(fid);
     if (!m) return { mx: 0, my: 0, aim: null, cast: [false, false, false, false], dodge: false, ult: false };
-    const prev = this.last.get(fid) ?? { q: 0, c: [...m.c], d: m.d, u: m.u, fn: m.fn ?? 0, sn: m.sn ?? 0 }; // first message: no phantom presses
+    const prev = this.last.get(fid) ?? { q: 0, c: [...m.c], d: m.d, u: m.u, fn: m.fn ?? 0, mv: m.mv ?? 0, sn: m.sn ?? 0 }; // first message: no phantom presses
     const cast = [0, 1, 2, 3].map((i) => m.c[i]! > prev.c[i]! || !!(m.held & (1 << i))) as [boolean, boolean, boolean, boolean];
-    const inp: Input = { mx: m.mx, my: m.my, aim: m.aim, cast, dodge: m.d > prev.d, ult: m.u > prev.u, fin: (m.fn ?? 0) > prev.fn, swap: (m.sn ?? 0) > prev.sn ? m.sw : undefined };
-    this.last.set(fid, { q: m.q, c: [...m.c], d: m.d, u: m.u, fn: m.fn ?? 0, sn: m.sn ?? 0 });
+    const inp: Input = { mx: m.mx, my: m.my, aim: m.aim, cast, dodge: m.d > prev.d, ult: m.u > prev.u, fin: (m.fn ?? 0) > prev.fn, mov: (m.mv ?? 0) > prev.mv, movSel: m.ms ?? 0, swap: (m.sn ?? 0) > prev.sn ? m.sw : undefined };
+    this.last.set(fid, { q: m.q, c: [...m.c], d: m.d, u: m.u, fn: m.fn ?? 0, mv: m.mv ?? 0, sn: m.sn ?? 0 });
     return inp;
   }
 }
