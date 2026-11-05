@@ -6,7 +6,8 @@
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { decodeGif, frameAt, type GifFrames } from "@/components/pokemon/gif-frames";
 import { fighterOf, type Fighter, type StageId } from "./sd-data";
-import { ROUND_TIME, STAGE_W, type Atk, type Ev, type PState, type Pl, type Proj, type World } from "./sd-engine";
+import { TYPE_COLOR } from "@/lib/pokemon/shared";
+import { ROUND_TIME, STAGE_W, windupOf, type Atk, type Ev, type PState, type Pl, type Proj, type World } from "./sd-engine";
 import { GROUND_Y, VH, VW, drawStage } from "./sd-stages";
 
 type G = CanvasRenderingContext2D;
@@ -17,6 +18,7 @@ type Ghost = { x: number; y: number; rot: number; sx: number; sy: number; flip: 
 /** What is only about looks: smooth turning, landing squash, dust, after-images. The fight rules never see it. */
 type Vis = { flip: number; land: number; bounce: number; hover: number; prevY: number; prevSt: PState; dust: number; trail: Ghost[]; trailT: number; star: number; tx: number };
 const newVis = (): Vis => ({ flip: 1, land: 0, bounce: 0, hover: 0, prevY: 0, prevSt: "idle", dust: 0, trail: [], trailT: 0, star: 0, tx: 0 });
+type Zap = { x: number; len: number; t: number; color: string };
 type Banner = { text: string; sub?: string; t: number; max: number; color: string };
 
 const FONT = `"Noto Sans Bengali", ui-sans-serif, system-ui, sans-serif`;
@@ -56,6 +58,7 @@ export class SdRenderer {
   private last = 0;
   private tmp: HTMLCanvasElement | null = null;
   private broken = false;
+  private zaps: Zap[] = [];
   private vis: [Vis, Vis] = [newVis(), newVis()];
   private clock = 0;
 
@@ -77,6 +80,7 @@ export class SdRenderer {
     this.zoom = 1;
     this.vis = [newVis(), newVis()];
     this.clock = 0;
+    this.zaps = [];
   }
 
   /** Fetch the pictures ahead of time so the fight starts with everyone drawn. */
@@ -170,6 +174,28 @@ export class SdRenderer {
         burst(26, e.color ?? "#ffb347", 560, 5, 80);
         sfx.zhit();
         break;
+      case "nova": {
+        const rad = e.r ?? 150;
+        ring(e.color ?? "#ffffff", rad * 1.7, 0.55);
+        ring("#ffffff", rad * 1.15, 0.35);
+        burst(22, e.color ?? "#ffffff", 540, 5, 60);
+        sfx.zhit();
+        break;
+      }
+      case "zap": {
+        const dir = Math.sign(e.r ?? 1) || 1, len = Math.abs(e.r ?? 400);
+        this.zaps.push({ x: e.x, len: len * dir, t: 0.24, color: e.color ?? "#ffe27a" });
+        for (let i = 0; i < 16; i++) this.parts.push({ x: e.x + dir * len * (i / 15), y: 16, vx: (Math.random() - 0.5) * 80, vy: 120 + Math.random() * 260, life: 0.45, max: 0.45, size: 5, color: e.color ?? "#ffe27a", kind: "dot" });
+        this.flash = Math.max(this.flash, 0.2);
+        sfx.hit(true, false);
+        break;
+      }
+      case "dig": {
+        burst(e.heavy ? 18 : 12, "rgba(130,98,62,.9)", 300, 8, 120);
+        ring("#8a6a42", e.heavy ? 130 : 70, 0.4);
+        sfx.hit(!!e.heavy, false);
+        break;
+      }
       case "clash":
         burst(10, e.color ?? "#ffffff", 300, 3);
         ring("#ffffff", 40, 0.25);
@@ -352,6 +378,8 @@ export class SdRenderer {
           for (let i = 0; i < 2; i++) this.parts.push({ x: p.x - Math.sign(p.vx) * (14 + i * 8), y: 5, vx: -Math.sign(p.vx) * (30 + Math.random() * 40), vy: 30 + Math.random() * 40, life: 0.38, max: 0.38, size: 7 + Math.random() * 5, color: "rgba(235,225,205,.55)", kind: "dot" });
         }
       }
+      // green sparks rise while it recovers
+      if (p.regenT > 0 && Math.random() < dt * 12) this.parts.push({ x: p.x + (Math.random() - 0.5) * f.bw * 1.6, y: p.y + f.h * 0.2, vx: 0, vy: 90 + Math.random() * 60, life: 0.6, max: 0.6, size: 5, color: "#7be08a", kind: "dot" });
       // the winner throws stars
       if (p.st === "win") {
         v.star -= dt;
@@ -458,10 +486,40 @@ export class SdRenderer {
           const q = clamp(a.t / 0.14, 0, 1), s2 = clamp((a.t - 0.14) / 0.09, 0, 1), r2 = clamp((a.t - 0.23) / 0.26, 0, 1);
           if (a.t < 0.14) { rot = -fc * 0.24 * q; sy = 1 - 0.09 * q; sx = 1 + 0.05 * q; dx = -fc * 10 * q; }
           else { const o = a.t < 0.23 ? ease(s2) : 1 - ease(r2); rot = fc * 0.5 * o; dx = fc * 44 * o; dy -= 15 * o; sx = 1 + 0.12 * o; sy = 1 - 0.06 * o; }
-        } else if (a.kind === "spec") {
-          const q = clamp(a.t / 0.16, 0, 1), r2 = clamp((a.t - 0.16) / 0.26, 0, 1);
-          if (a.t < 0.16) { rot = -fc * 0.17 * q; sy = 1 - 0.08 * q; sx = 1 + 0.05 * q; dx = Math.sin(t * 70) * 1.6 * q; }
-          else { rot = fc * 0.15 * (1 - r2); dx = -fc * 12 * (1 - r2); sx = 0.96 + 0.04 * r2; sy = 1.06 - 0.06 * r2; }
+        } else if (a.kind === "move") {
+          const m = f.moves[a.mi];
+          const k = m?.kind ?? "proj";
+          const wu = m ? windupOf(m) : 0.16;
+          const q = clamp(a.t / wu, 0, 1), r2 = clamp((a.t - wu) / 0.28, 0, 1);
+          if (k === "dash") {
+            if (a.t < wu) { rot = -fc * 0.2 * q; sy = 1 - 0.1 * q; dx = -fc * 8 * q; }
+            else if (a.rush > 0) { rot = fc * 0.34; sx = 1.2; sy = 0.9; dy -= 4; }
+            else { rot = fc * 0.14 * (1 - r2); sx = 1 + 0.06 * (1 - r2); }
+          } else if (k === "nova") {
+            if (a.t < wu) { sy = 1 - 0.18 * q; sx = 1 + 0.1 * q; dy += 3 * q; }
+            else { sy = 1.12 - 0.12 * r2; sx = 0.94 + 0.06 * r2; dy -= 16 * (1 - r2); }
+          } else if (k === "burrow") {
+            const hid = a.t >= wu && a.t < wu + 0.5;
+            if (a.t < wu) { sy = 1 - 0.3 * q; dy += 10 * q; }
+            else if (hid) { alpha = 0; }
+            else { const u = clamp((a.t - wu - 0.5) / 0.3, 0, 1); sy = 1.2 - 0.2 * u; dy -= Math.sin(u * Math.PI) * 44; }
+          } else if (k === "beam") {
+            rot = fc * 0.09; dx = -fc * 6 + Math.sin(t * 80) * 1.4; sy = 0.97;
+          } else if (k === "grab") {
+            if (a.t < wu) { rot = -fc * 0.15 * q; dx = -fc * 6 * q; } else { rot = fc * 0.3 * (1 - r2); dx = fc * 32 * (1 - r2); sx = 1.08; }
+          } else if (k === "guard") {
+            sy = 0.86; sx = 1.07; rot = -fc * 0.06;
+          } else if (k === "heal") {
+            sy = 1.03 + Math.sin(t * 6) * 0.02; rot = Math.sin(t * 3) * 0.03;
+          } else if (k === "buff") {
+            dx = Math.sin(t * 70) * 2; sy = 1.06 + Math.sin(t * 20) * 0.03; dy -= 4;
+          } else if (k === "bolt") {
+            sy = 1 + 0.08 * q; dy -= 10 * q; rot = -fc * 0.08 * q;
+          } else if (a.t < wu) {
+            rot = -fc * 0.17 * q; sy = 1 - 0.08 * q; sx = 1 + 0.05 * q; dx = Math.sin(t * 70) * 1.6 * q;
+          } else {
+            rot = fc * 0.15 * (1 - r2); dx = -fc * 12 * (1 - r2); sx = 0.96 + 0.04 * r2; sy = 1.06 - 0.06 * r2;
+          }
         } else {
           if (w.freeze > 0 && w.superBy === slot) { dx = Math.sin(t * 90) * 3; sy = 1.06 + Math.sin(t * 24) * 0.03; sx = 1.04; rot = Math.sin(t * 50) * 0.03; }
           else if (a.rush > 0) { rot = fc * 0.36; sx = 1.2; sy = 0.9; dy -= 4; }
@@ -490,8 +548,8 @@ export class SdRenderer {
 
     // after-images behind quick moves: a kick, a rush, being sent flying
     const a = p.atk;
-    const fast = (p.st === "atk" && a && ((a.kind === "kick" && a.t >= 0.12 && a.t < 0.34) || (a.kind === "super" && a.rush > 0))) || ((p.st === "down" || p.st === "hurt") && Math.abs(p.vx) > 320);
-    if (fast && this.clock - v.trailT > (a?.kind === "super" ? 0.02 : 0.035)) {
+    const fast = (p.st === "atk" && a && ((a.kind === "kick" && a.t >= 0.12 && a.t < 0.34) || ((a.kind === "super" || a.kind === "move") && a.rush > 0))) || ((p.st === "down" || p.st === "hurt") && Math.abs(p.vx) > 320);
+    if (fast && this.clock - v.trailT > (a?.kind === "super" || a?.kind === "move" ? 0.02 : 0.035)) {
       v.trailT = this.clock;
       v.trail.push({ x: p.x + po.dx, y: p.y - po.dy, rot: po.rot, sx: po.sx, sy: po.sy, flip: v.flip, born: this.clock, color: f.color });
       if (v.trail.length > 7) v.trail.shift();
@@ -543,6 +601,8 @@ export class SdRenderer {
     }
     g.restore();
 
+    if (po.alpha > 0.1) this.auras(g, w, p, f, px, py);
+
     if (p.st === "block") {
       g.save();
       g.strokeStyle = `rgba(160,215,255,${0.5 + 0.2 * Math.sin(w.time * 20)})`;
@@ -551,6 +611,42 @@ export class SdRenderer {
       g.ellipse(px + p.face * f.bw * 0.55 * this.zoom, py - f.h * 0.42 * this.zoom, f.bw * 0.7 * this.zoom, f.h * 0.5 * this.zoom, 0, 0, Math.PI * 2);
       g.stroke();
       g.restore();
+    }
+  }
+
+  /** What a move leaves on the Pokémon: a power-up glow, a shield, a recovery glow and a tag for burn, poison and the rest. */
+  private auras(g: G, w: World, p: Pl, f: Fighter, px: number, py: number) {
+    const z = this.zoom;
+    const cy = py - f.h * 0.48 * z, rx = f.bw * 1.1 * z, ry = f.h * 0.58 * z;
+    if (p.buff.t > 0) {
+      const gr = g.createRadialGradient(px, cy, 4, px, cy, ry * 1.2);
+      gr.addColorStop(0, hexA("#ff9a3c", 0.05)); gr.addColorStop(0.7, hexA("#ff9a3c", 0.28 + 0.1 * Math.sin(w.time * 9))); gr.addColorStop(1, hexA("#ff9a3c", 0));
+      g.fillStyle = gr;
+      g.fillRect(px - ry * 1.3, cy - ry * 1.3, ry * 2.6, ry * 2.6);
+      g.fillStyle = hexA("#ffd38a", 0.85);
+      for (let i = 0; i < 3; i++) { const u = ((w.time * 1.4 + i / 3) % 1); this.txt(g, "▲", px + (i - 1) * f.bw * 0.7 * z, cy + ry * (0.6 - u * 1.4), 12 * z, hexA("#ffd38a", 1 - u)); }
+    }
+    if (p.guardT > 0) {
+      g.save();
+      g.fillStyle = hexA("#9fd2ff", 0.16 + 0.06 * Math.sin(w.time * 12));
+      g.strokeStyle = hexA("#d6efff", 0.8);
+      g.lineWidth = 3;
+      g.beginPath(); g.ellipse(px, cy, rx * 1.15, ry * 1.1, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.restore();
+    }
+    if (p.regenT > 0) {
+      const gr = g.createRadialGradient(px, cy, 4, px, cy, ry);
+      gr.addColorStop(0, hexA("#7be08a", 0.28)); gr.addColorStop(1, hexA("#7be08a", 0));
+      g.fillStyle = gr;
+      g.fillRect(px - ry, cy - ry, ry * 2, ry * 2);
+    }
+    if (p.sk) {
+      const tag: Record<string, [string, string]> = { brn: ["BRN", "#ff7a3a"], psn: ["PSN", "#b36be0"], par: ["PAR", "#e6b800"], frz: ["FRZ", "#5cc8f0"], slp: ["SLP", "#8a96ff"], cnf: ["CNF", "#e08cf0"] };
+      const [txt, col] = tag[p.sk] ?? ["", "#fff"];
+      const bx = px, by = py - f.h * 1.05 * z - 14 * z;
+      g.fillStyle = col; rr(g, bx - 20, by - 9, 40, 18, 8); g.fill();
+      this.txt(g, txt, bx, by, 11, "#ffffff", { align: "center", stroke: "rgba(0,0,0,.5)", lw: 2 });
+      if (p.sk === "frz") { g.fillStyle = "rgba(190,235,255,.28)"; g.beginPath(); g.ellipse(px, cy, rx, ry, 0, 0, Math.PI * 2); g.fill(); }
     }
   }
 
@@ -583,17 +679,53 @@ export class SdRenderer {
         g.restore();
       }
     }
-    if (p.st === "atk" && a && a.kind === "spec" && a.t < 0.2) {
-      const q = clamp(a.t / 0.16, 0, 1);
-      const ox = px + dir * (f.bw + 14) * z, oy = py - f.h * 0.45 * z, r = (5 + 24 * q) * z;
-      const gr = g.createRadialGradient(ox, oy, 1, ox, oy, r * 1.8);
-      gr.addColorStop(0, "rgba(255,255,255,.95)"); gr.addColorStop(0.35, hexA(f.special.color, 0.85)); gr.addColorStop(1, hexA(f.special.color, 0));
-      g.fillStyle = gr;
-      g.beginPath(); g.arc(ox, oy, r * 1.8, 0, Math.PI * 2); g.fill();
-      g.strokeStyle = hexA(f.special.color, 0.7 * (1 - q * 0.4)); g.lineWidth = 2;
-      for (let i = 0; i < 6; i++) {
-        const ang = (i / 6) * Math.PI * 2 + w.time * 8, rr = r * (2.6 - q * 1.4);
-        g.beginPath(); g.moveTo(ox + Math.cos(ang) * rr, oy + Math.sin(ang) * rr); g.lineTo(ox + Math.cos(ang) * rr * 0.7, oy + Math.sin(ang) * rr * 0.7); g.stroke();
+    if (p.st === "atk" && a && a.kind === "move") {
+      const m = f.moves[a.mi];
+      if (m) {
+        const wu = windupOf(m);
+        const col = TYPE_COLOR[m.type] ?? f.color;
+        const kd = m.kind;
+        const q = clamp(a.t / wu, 0, 1);
+        const ox = px + dir * (f.bw + 14) * z, oy = py - f.h * 0.45 * z;
+        if (a.t < wu + 0.04 && (kd === "proj" || kd === "spread" || kd === "homing" || kd === "lob" || kd === "bolt" || kd === "beam" || kd === "hazard")) {
+          const r = (5 + 24 * q) * z;
+          const gr = g.createRadialGradient(ox, oy, 1, ox, oy, r * 1.8);
+          gr.addColorStop(0, "rgba(255,255,255,.95)"); gr.addColorStop(0.35, hexA(col, 0.85)); gr.addColorStop(1, hexA(col, 0));
+          g.fillStyle = gr;
+          g.beginPath(); g.arc(ox, oy, r * 1.8, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = hexA(col, 0.7 * (1 - q * 0.4)); g.lineWidth = 2;
+          for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI * 2 + w.time * 8, rr = r * (2.6 - q * 1.4);
+            g.beginPath(); g.moveTo(ox + Math.cos(ang) * rr, oy + Math.sin(ang) * rr); g.lineTo(ox + Math.cos(ang) * rr * 0.7, oy + Math.sin(ang) * rr * 0.7); g.stroke();
+          }
+        } else if (kd === "nova" && a.t < wu + 0.05) {
+          // a ring closes in on it before the burst
+          g.strokeStyle = hexA(col, 0.8); g.lineWidth = 4 * z;
+          g.beginPath(); g.arc(px, py - f.h * 0.4 * z, (f.h * 0.9 * (1.2 - q)) * z + 8, 0, Math.PI * 2); g.stroke();
+        } else if (kd === "beam") {
+          const n = m.n ?? 6;
+          if (a.t >= wu && a.t < wu + n * 0.11 + 0.04) {
+            const len = ((m.range ?? 260) + f.bw) * z;
+            const pulse = 0.85 + 0.15 * Math.sin(w.time * 44);
+            g.save();
+            g.translate(px + dir * f.bw * 0.4 * z, oy);
+            g.scale(dir, 1);
+            const hh = 20 * z * pulse;
+            const gr = g.createLinearGradient(0, 0, len, 0);
+            gr.addColorStop(0, hexA(col, 0.95)); gr.addColorStop(1, hexA(col, 0.3));
+            g.fillStyle = gr;
+            g.beginPath(); g.moveTo(0, -hh * 0.6); g.lineTo(len, -hh); g.lineTo(len, hh); g.lineTo(0, hh * 0.6); g.closePath(); g.fill();
+            g.fillStyle = "rgba(255,255,255,.85)";
+            g.beginPath(); g.moveTo(0, -hh * 0.2); g.lineTo(len, -hh * 0.35); g.lineTo(len, hh * 0.35); g.lineTo(0, hh * 0.2); g.closePath(); g.fill();
+            g.restore();
+          }
+        } else if (kd === "burrow" && a.t >= wu && a.t < wu + 0.5) {
+          // a mound of earth runs along the floor where it is digging
+          g.fillStyle = "rgba(120,92,58,.95)";
+          g.beginPath(); g.ellipse(px, this.gy + 2, 46 * z, 15 * z, 0, Math.PI, 0); g.fill();
+          g.fillStyle = "rgba(90,66,40,.9)";
+          g.beginPath(); g.ellipse(px, this.gy + 2, 30 * z, 9 * z, 0, Math.PI, 0); g.fill();
+        }
       }
     }
     // super: energy streams into the Pokémon while the screen is frozen, and a ring runs outward from its feet
@@ -651,26 +783,91 @@ export class SdRenderer {
       }
       return;
     }
+    if (pr.kind === "bolt") {
+      // the warning: a pulsing band where the lightning is about to strike
+      const len = pr.len * z, d = pr.dir;
+      const k = clamp(1 - pr.delay / 0.4, 0, 1);
+      g.save();
+      g.globalAlpha = 0.25 + 0.5 * k * (0.6 + 0.4 * Math.sin(t * 30));
+      g.fillStyle = pr.color;
+      const gyy = this.gy;
+      g.fillRect(Math.min(x, x + d * len), gyy - 150 * z, len, 150 * z);
+      g.strokeStyle = "#fff"; g.lineWidth = 2; g.setLineDash([10, 8]);
+      g.strokeRect(Math.min(x, x + d * len), gyy - 150 * z, len, 150 * z);
+      g.restore();
+      return;
+    }
+    if (pr.kind === "trap") {
+      const gyy = this.gy, r = pr.r * z;
+      g.save();
+      g.globalAlpha = clamp(pr.life / 0.6, 0, 1);
+      if (pr.hz === "toxic") {
+        g.fillStyle = "rgba(140,70,190,.75)";
+        g.beginPath(); g.ellipse(x, gyy + 6, r * 1.1, r * 0.3, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "rgba(190,120,240,.8)";
+        for (let i = 0; i < 4; i++) { const bx = x + Math.sin(t * 2 + i * 1.7) * r * 0.7, by = gyy + 4 - Math.abs(Math.sin(t * 3 + i * 2.3)) * 16 * z; g.beginPath(); g.arc(bx, by, 4 * z, 0, Math.PI * 2); g.fill(); }
+      } else if (pr.hz === "rocks") {
+        g.fillStyle = "#7b756c";
+        for (let i = -2; i <= 2; i++) { const bx = x + i * r * 0.42; const h = (16 + (Math.abs(i) % 2) * 10) * z; g.beginPath(); g.moveTo(bx - 12 * z, gyy + 6); g.lineTo(bx - 4 * z, gyy + 6 - h); g.lineTo(bx + 8 * z, gyy + 6 - h * 0.7); g.lineTo(bx + 14 * z, gyy + 6); g.closePath(); g.fill(); }
+      } else {
+        g.fillStyle = "#c9ced8";
+        for (let i = -3; i <= 3; i++) { const bx = x + i * r * 0.3; g.beginPath(); g.moveTo(bx - 7 * z, gyy + 6); g.lineTo(bx, gyy + 6 - 26 * z); g.lineTo(bx + 7 * z, gyy + 6); g.closePath(); g.fill(); }
+      }
+      g.restore();
+      return;
+    }
     const y = this.Y(pr.y);
-    const dir = Math.sign(pr.vx) || 1;
+    const sp = Math.hypot(pr.vx, pr.vy) || 1;
+    const ux = pr.vx / sp, uy = -pr.vy / sp; // direction on the screen
     const r = pr.r * z;
-    const len = pr.kind === "beam" ? 260 * z : 70 * z;
-    const tail = g.createLinearGradient(x, y, x - dir * len, y);
+    const len = (pr.kind === "beam" ? 260 : 70) * z;
+    const tx = x - ux * len, ty = y - uy * len;
+    const tail = g.createLinearGradient(x, y, tx, ty);
     tail.addColorStop(0, hexA(pr.color, 0.8)); tail.addColorStop(1, hexA(pr.color, 0));
     g.fillStyle = tail;
-    g.beginPath(); g.moveTo(x, y - r * 0.8); g.lineTo(x - dir * len, y); g.lineTo(x, y + r * 0.8); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(x - uy * r * 0.8, y + ux * r * 0.8); g.lineTo(tx, ty); g.lineTo(x + uy * r * 0.8, y - ux * r * 0.8); g.closePath(); g.fill();
     const gr = g.createRadialGradient(x, y, 1, x, y, r * 2);
     gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.35, hexA(pr.color, 0.95)); gr.addColorStop(1, hexA(pr.color, 0));
     g.fillStyle = gr;
     g.beginPath(); g.arc(x, y, r * 2, 0, Math.PI * 2); g.fill();
-    if (pr.type === "Electric") {
-      g.strokeStyle = "#fff9b0"; g.lineWidth = 2.5;
-      g.beginPath(); g.moveTo(x - dir * len * 0.7, y);
-      for (let i = 1; i <= 6; i++) g.lineTo(x - dir * len * 0.7 + dir * (len * 0.7 * i) / 6, y + Math.sin(t * 40 + i * 2.3) * r * 0.9);
-      g.stroke();
-    } else if (pr.type === "Fire") {
-      g.fillStyle = hexA("#ffe9a0", 0.8);
-      g.beginPath(); g.arc(x + Math.sin(t * 30) * 2, y + Math.cos(t * 26) * 2, r * 0.55, 0, Math.PI * 2); g.fill();
+    // what the shot looks like depends on its type
+    switch (pr.type) {
+      case "Electric":
+        g.strokeStyle = "#fff9b0"; g.lineWidth = 2.5;
+        g.beginPath(); g.moveTo(tx + (x - tx) * 0.3, ty + (y - ty) * 0.3);
+        for (let i = 1; i <= 6; i++) g.lineTo(tx + (x - tx) * (0.3 + 0.7 * (i / 6)) - uy * Math.sin(t * 40 + i * 2.3) * r * 0.9, ty + (y - ty) * (0.3 + 0.7 * (i / 6)) + ux * Math.sin(t * 40 + i * 2.3) * r * 0.9);
+        g.stroke();
+        break;
+      case "Fire":
+        g.fillStyle = hexA("#ffe9a0", 0.8);
+        g.beginPath(); g.arc(x + Math.sin(t * 30) * 2, y + Math.cos(t * 26) * 2, r * 0.55, 0, Math.PI * 2); g.fill();
+        break;
+      case "Water": case "Poison":
+        g.fillStyle = hexA(pr.type === "Water" ? "#ffffff" : "#e0b0ff", 0.55);
+        for (let i = 0; i < 3; i++) { const q = (i + 1) / 4; g.beginPath(); g.arc(x - ux * len * q * 0.9 + Math.sin(t * 9 + i) * r * 0.35, y - uy * len * q * 0.9 + Math.cos(t * 8 + i) * r * 0.35, r * (0.32 - i * 0.05), 0, Math.PI * 2); g.fill(); }
+        break;
+      case "Ice":
+        g.strokeStyle = "#e8fbff"; g.lineWidth = 2;
+        for (let i = 0; i < 4; i++) { const an = t * 5 + (i * Math.PI) / 2; g.beginPath(); g.moveTo(x - Math.cos(an) * r * 1.3, y - Math.sin(an) * r * 1.3); g.lineTo(x + Math.cos(an) * r * 1.3, y + Math.sin(an) * r * 1.3); g.stroke(); }
+        break;
+      case "Grass": case "Bug":
+        g.fillStyle = hexA("#d6ffb0", 0.8);
+        g.save(); g.translate(x, y); g.rotate(t * 9); g.beginPath(); g.ellipse(0, 0, r * 0.9, r * 0.4, 0, 0, Math.PI * 2); g.fill(); g.restore();
+        break;
+      case "Rock": case "Ground": case "Steel":
+        g.fillStyle = hexA(pr.type === "Steel" ? "#dfe6ef" : "#a89678", 0.9);
+        g.save(); g.translate(x, y); g.rotate(t * 7); g.beginPath(); for (let i = 0; i < 6; i++) { const an = (i / 6) * Math.PI * 2; g.lineTo(Math.cos(an) * r * (0.6 + (i % 2) * 0.25), Math.sin(an) * r * (0.6 + (i % 2) * 0.25)); } g.closePath(); g.fill(); g.restore();
+        break;
+      case "Ghost": case "Dark":
+        g.fillStyle = hexA("#2a1238", 0.8);
+        g.beginPath(); g.arc(x, y, r * 0.7, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#ffd6ff"; g.beginPath(); g.arc(x - r * 0.22, y - r * 0.1, r * 0.1, 0, Math.PI * 2); g.arc(x + r * 0.22, y - r * 0.1, r * 0.1, 0, Math.PI * 2); g.fill();
+        break;
+      case "Psychic": case "Fairy":
+        g.strokeStyle = hexA("#ffffff", 0.7); g.lineWidth = 2;
+        for (let i = 0; i < 2; i++) { g.beginPath(); g.arc(x, y, r * (1.1 + i * 0.5 + 0.12 * Math.sin(t * 10 + i)), 0, Math.PI * 2); g.stroke(); }
+        break;
+      default: break;
     }
   }
 
@@ -697,6 +894,24 @@ export class SdRenderer {
       }
     }
     this.parts = this.parts.filter((p) => p.life > 0);
+    for (const zp of this.zaps) {
+      zp.t -= dt;
+      const k = clamp(zp.t / 0.24, 0, 1);
+      const x0 = this.X(zp.x), x1 = this.X(zp.x + zp.len);
+      g.save();
+      g.lineJoin = "round";
+      for (let pass = 0; pass < 2; pass++) {
+        g.strokeStyle = pass === 0 ? hexA(zp.color, 0.8 * k) : hexA("#ffffff", k);
+        g.lineWidth = (pass === 0 ? 10 : 3.5) * k * this.zoom;
+        g.beginPath();
+        const steps = 14, hTop = this.gy - 135 * this.zoom;
+        g.moveTo(x0, hTop);
+        for (let i = 1; i <= steps; i++) g.lineTo(x0 + ((x1 - x0) * i) / steps, this.gy - (20 + (i % 2 ? 110 : 20)) * this.zoom + Math.sin(i * 12.9 + this.clock * 50) * 18 * this.zoom);
+        g.stroke();
+      }
+      g.restore();
+    }
+    this.zaps = this.zaps.filter((zp) => zp.t > 0);
     for (const p of this.pops) {
       p.t -= dt; p.y += 38 * dt;
       const a = clamp(p.t / 0.5, 0, 1);
@@ -787,6 +1002,25 @@ export class SdRenderer {
       if (left) rr(g, mx, my, mv, 12, 6); else rr(g, mx + mw - mv, my, mv, 12, 6);
       g.fill();
       this.txt(g, full ? (this.lang === "bn" ? "সুপার রেডি!" : "SUPER READY!") : (this.lang === "bn" ? "পাওয়ার" : "POWER"), left ? mx : mx + mw, my - 11, 13, full ? "#ffd54a" : "#ffffffcc", { align: left ? "left" : "right", stroke: "rgba(0,0,0,.8)" });
+      // the four moves it knows: name, type colour, and a cooldown that drains away
+      {
+        const chipW = 71, chipH = 19, cy0 = VH - 50;
+        f.moves.forEach((m, i) => {
+          const cx0 = mx + i * (chipW + 3);
+          const cd = Math.max(0, p.mcd[i] ?? 0);
+          const col = TYPE_COLOR[m.type] ?? "#999999";
+          g.fillStyle = "rgba(10,8,24,.8)"; rr(g, cx0, cy0, chipW, chipH, 5); g.fill();
+          if (cd > 0) { g.fillStyle = "rgba(255,255,255,.14)"; rr(g, cx0, cy0, chipW * clamp(cd / m.cd, 0, 1), chipH, 5); g.fill(); }
+          g.fillStyle = cd > 0 ? hexA(col, 0.45) : col; rr(g, cx0, cy0, 4, chipH, 2); g.fill();
+          g.strokeStyle = cd > 0 ? "rgba(255,255,255,.12)" : hexA(col, 0.9); g.lineWidth = 1.5; rr(g, cx0, cy0, chipW, chipH, 5); g.stroke();
+          g.font = `700 10px ${FONT}`;
+          let label = m.name;
+          while (label.length > 3 && g.measureText(label).width > chipW - 12) label = label.slice(0, -2);
+          if (label !== m.name) label += "…";
+          this.txt(g, label, cx0 + 8, cy0 + chipH / 2, 10, cd > 0 ? "#ffffff88" : "#ffffff");
+          if (cd > 0.05) this.txt(g, cd.toFixed(cd < 10 ? 1 : 0), cx0 + chipW - 4, cy0 + chipH / 2, 9, "#ffffffcc", { align: "right" });
+        });
+      }
       // combo counter
       if (p.combo >= 2) {
         const k = easeOutBack(clamp((1.2 - p.comboT) * 8, 0, 1));

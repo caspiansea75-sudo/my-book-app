@@ -6,7 +6,7 @@ import { ROSTER } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import { useMe } from "@/lib/use-me";
 import { FIGHTER_IDS, LEVELS, STAGES, fighterOf, type Level, type StageId } from "./sd-data";
-import { NO_INPUT, newBrain, newWorld, snapshot, step, think, type Input, type World } from "./sd-engine";
+import { BUTTONS, NO_INPUT, newBrain, newWorld, snapshot, step, think, type Input, type World } from "./sd-engine";
 import { SdNet, blend, cleanCode, newCode, type Pulse, type Wire } from "./sd-net";
 import { SdRenderer } from "./sd-render";
 import "./showdown.css";
@@ -23,9 +23,9 @@ const shot = (id: string, k: "dex" | "ani") => `/api/sprite?k=${k}&id=${encodeUR
 
 /* ------------------------------------------------------------------ controls */
 
-const MAP_SOLO: Record<string, keyof Input> = { KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r", KeyW: "u", ArrowUp: "u", KeyS: "d", ArrowDown: "d", KeyJ: "a", KeyZ: "a", KeyK: "b", KeyX: "b", KeyL: "c", KeyC: "c", Space: "s", KeyV: "s", KeyI: "s" };
-const MAP_P1: Record<string, keyof Input> = { KeyA: "l", KeyD: "r", KeyW: "u", KeyS: "d", KeyF: "a", KeyG: "b", KeyH: "c", KeyT: "s" };
-const MAP_P2: Record<string, keyof Input> = { ArrowLeft: "l", ArrowRight: "r", ArrowUp: "u", ArrowDown: "d", KeyJ: "a", KeyK: "b", KeyL: "c", KeyI: "s" };
+const MAP_SOLO: Record<string, keyof Input> = { KeyA: "l", ArrowLeft: "l", KeyD: "r", ArrowRight: "r", KeyW: "u", ArrowUp: "u", KeyS: "d", ArrowDown: "d", KeyJ: "a", KeyZ: "a", KeyK: "m1", Digit1: "m1", KeyL: "m2", Digit2: "m2", KeyU: "m3", Digit3: "m3", KeyI: "m4", Digit4: "m4", Space: "s", KeyV: "s" };
+const MAP_P1: Record<string, keyof Input> = { KeyA: "l", KeyD: "r", KeyW: "u", KeyS: "d", KeyF: "a", KeyG: "m1", KeyH: "m2", KeyT: "m3", KeyY: "m4", KeyR: "s" };
+const MAP_P2: Record<string, keyof Input> = { ArrowLeft: "l", ArrowRight: "r", ArrowUp: "u", ArrowDown: "d", Slash: "a", Comma: "m1", Period: "m2", Semicolon: "m3", Quote: "m4", ShiftRight: "s" };
 /* full screen: the real Fullscreen API where the browser has it (it needs a tap or key press, which "Fight!" is) */
 type FsEl = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void };
 type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => Promise<void> | void };
@@ -44,13 +44,14 @@ const orientation = () => (typeof screen === "undefined" ? undefined : (screen a
 
 const typing = (t: EventTarget | null) => t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
 
-function TBtn({ id, label, cls, touch, latch, hint }: { id: keyof Input; label: string; cls?: string; touch: Input; latch: (k: keyof Input) => void; hint?: string }) {
+function TBtn({ id, label, cls, touch, latch, hint, color }: { id: keyof Input; label: string; cls?: string; touch: Input; latch: (k: keyof Input) => void; hint?: string; color?: string }) {
   const [on, setOn] = useState(false);
   const off = () => { touch[id] = false; setOn(false); };
   return (
     <button
       type="button"
       className={`sd-btn ${cls ?? ""} ${on ? "on" : ""}`}
+      style={color ? { borderColor: color } : undefined}
       onPointerDown={(e) => { e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* fine */ } touch[id] = true; latch(id); setOn(true); }}
       onPointerUp={off}
       onPointerCancel={off}
@@ -117,12 +118,13 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const touch = useRef<Input>({ ...NO_INPUT }).current;
-  const pulse = useRef<Pulse>({ a: false, b: false, c: false, s: false, u: false }).current;
+  const pulse = useRef<Pulse>({ a: false, m1: false, m2: false, m3: false, m4: false, s: false, u: false }).current;
   const [over, setOver] = useState<Summary | null>(null);
   const [lost, setLost] = useState(false);
   const [muted, setMuted] = useState(sfx.isMuted());
   const [showPad, setShowPad] = useState(() => { try { return localStorage.getItem("sd-pad") !== "0"; } catch { return true; } });
   const togglePad = () => setShowPad((v) => { try { localStorage.setItem("sd-pad", v ? "0" : "1"); } catch { /* fine */ } return !v; });
+  const mine = fighterOf(cfg.role === "guest" ? cfg.b : cfg.a);
   const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
   // the fight fills the whole screen; if it was started without a tap (a friend's room), the first tap or key brings full screen in
   useEffect(() => {
@@ -136,7 +138,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const latch = useCallback((k: keyof Input) => { if (k === "a" || k === "b" || k === "c" || k === "s" || k === "u") pulse[k] = true; }, [pulse]);
+  const latch = useCallback((k: keyof Input) => { if (k !== "l" && k !== "r" && k !== "d") pulse[k] = true; }, [pulse]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -161,7 +163,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
     const down = new Set<string>();
     const snaps: { t: number; w: World }[] = [];
     let remote: Input = { ...NO_INPUT };
-    const rPulse: Pulse = { a: false, b: false, c: false, s: false, u: false };
+    const rPulse: Pulse = { a: false, m1: false, m2: false, m3: false, m4: false, s: false, u: false };
     let remoteAt = performance.now();
     let shown = false, stopped = false, acc = 0, ticks = 0, last = performance.now(), lastSend = 0, raf = 0;
     const net = cfg.net;
@@ -170,7 +172,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
       net.lastHeard = performance.now();
       net.handler = (d: Wire, from: string) => {
         if (d.k === "w" && role === "guest") { snaps.push({ t: performance.now(), w: d.w }); if (snaps.length > 6) snaps.shift(); }
-        else if (d.k === "in" && role === "host") { remote = d.i; for (const k of ["a", "b", "c", "s", "u"] as const) if (d.p[k]) rPulse[k] = true; remoteAt = performance.now(); }
+        else if (d.k === "in" && role === "host") { remote = d.i; for (const k of BUTTONS) if (d.p[k]) rPulse[k] = true; remoteAt = performance.now(); }
         else if (d.k === "bye") { stopped = true; setLost(true); }
         else prev?.(d, from);
       };
@@ -218,7 +220,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
         if (net && now - lastSend > 30) {
           lastSend = now;
           net.cast({ k: "in", i: readKeys(MAP_SOLO, touch), p: { ...pulse } });
-          pulse.a = pulse.b = pulse.c = pulse.s = pulse.u = false;
+          for (const k of BUTTONS) pulse[k] = false;
         }
       } else {
         acc += dt;
@@ -231,11 +233,11 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
           else {
             ia = readKeys(MAP_SOLO, touch);
             ib = now - remoteAt > 700 ? { ...NO_INPUT } : { ...remote };
-            for (const k of ["a", "b", "c", "s", "u"] as const) if (rPulse[k]) { ib[k] = true; rPulse[k] = false; }
+            for (const k of BUTTONS) if (rPulse[k]) { ib[k] = true; rPulse[k] = false; }
           }
           if (role === "cpu" || role === "host") {
             // a pulse from the touch pad: make sure a quick tap still lands as one press
-            for (const k of ["a", "b", "c", "s", "u"] as const) if (pulse[k]) { ia[k] = true; pulse[k] = false; }
+            for (const k of BUTTONS) if (pulse[k]) { ia[k] = true; pulse[k] = false; }
           }
           before = prevOf(world);
           step(world, ia, ib, 1 / 60);
@@ -297,17 +299,17 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
         <div className="sd-pad">
           <StickPad touch={touch} latch={latch} keys={!coarse} />
           <div className="sd-acts">
-            <TBtn id="a" label={t("ঘুষি", "Jab")} hint={coarse ? undefined : "J"} touch={touch} latch={latch} />
-            <TBtn id="b" label={t("লাথি", "Kick")} hint={coarse ? undefined : "K"} touch={touch} latch={latch} />
-            <TBtn id="c" label={t("স্পেশাল", "Special")} hint={coarse ? undefined : "L"} touch={touch} latch={latch} />
+            {([["m3", 2, "U"], ["m4", 3, "I"]] as const).map(([id, i, key]) => { const m = mine.moves[i]; return m ? <TBtn key={id} id={id} label={m.name} color={TYPE_COLOR[m.type]} hint={coarse ? undefined : key} touch={touch} latch={latch} /> : <span key={id} />; })}
             <TBtn id="s" label={t("সুপার", "Super")} cls="sup" hint={coarse ? undefined : "Space"} touch={touch} latch={latch} />
+            {([["m1", 0, "K"], ["m2", 1, "L"]] as const).map(([id, i, key]) => { const m = mine.moves[i]; return m ? <TBtn key={id} id={id} label={m.name} color={TYPE_COLOR[m.type]} hint={coarse ? undefined : key} touch={touch} latch={latch} /> : <span key={id} />; })}
+            <TBtn id="a" label={t("আক্রমণ", "Attack")} cls="atk" hint={coarse ? undefined : "J"} touch={touch} latch={latch} />
           </div>
         </div>
       ) : null}
       {showPad && !over && cfg.role === "local" ? (
         <div className="sd-pad">
-          <div className="sd-legend"><b>P1</b><span>A D {t("চলা", "move")} · W {t("লাফ", "jump")} · S {t("ব্লক", "block")}</span><span>F {t("ঘুষি", "jab")} · G {t("লাথি", "kick")} · H {t("স্পেশাল", "special")} · T {t("সুপার", "super")}</span></div>
-          <div className="sd-legend r"><b>P2</b><span>← → {t("চলা", "move")} · ↑ {t("লাফ", "jump")} · ↓ {t("ব্লক", "block")}</span><span>J {t("ঘুষি", "jab")} · K {t("লাথি", "kick")} · L {t("স্পেশাল", "special")} · I {t("সুপার", "super")}</span></div>
+          <div className="sd-legend"><b>P1</b><span>A D {t("চলা", "move")} · W {t("লাফ", "jump")} · S {t("ব্লক", "block")}</span><span>F {t("আক্রমণ", "attack")} ({t("সামনে+F = লাথি", "forward+F = kick")}) · G H T Y {t("চাল ১-৪", "moves 1-4")} · R {t("সুপার", "super")}</span></div>
+          <div className="sd-legend r"><b>P2</b><span>← → {t("চলা", "move")} · ↑ {t("লাফ", "jump")} · ↓ {t("ব্লক", "block")}</span><span>/ {t("আক্রমণ", "attack")} · , . ; ' {t("চাল ১-৪", "moves 1-4")} · {t("ডান শিফট", "Right Shift")} {t("সুপার", "super")}</span></div>
         </div>
       ) : null}
       {over ? (
@@ -459,7 +461,8 @@ export function ShowdownGame() {
         <small>{label}</small>
         <b>{f.name}</b>
         <div className="sd-types">{f.types.map((ty) => <span key={ty} className="sd-type" style={{ background: TYPE_COLOR[ty] ?? "#777" }}>{ty}</span>)}</div>
-        <small>{t("স্পেশাল", "Special")}: {f.special.name} · {t("সুপার", "Super")}: {lang === "bn" ? f.sup.bn : f.sup.name}</small>
+        <div className="sd-moves">{f.moves.map((m) => <span key={m.id} className="sd-move" style={{ borderColor: TYPE_COLOR[m.type] ?? "#777" }} title={m.desc}>{m.name}</span>)}</div>
+        <small>{t("সুপার", "Super")}: {lang === "bn" ? f.sup.bn : f.sup.name}</small>
       </div>
     );
   };
@@ -545,8 +548,8 @@ export function ShowdownGame() {
       </button>
       <p className="sd-note">
         {mode === "local"
-          ? t("P1: A D W S চলা/লাফ/ব্লক · F ঘুষি · G লাথি · H স্পেশাল · T সুপার.   P2: ← → ↑ ↓ · J K L · I সুপার।", "P1: A D move, W jump, S block · F jab · G kick · H special · T super.   P2: arrows · J K L · I super.")
-          : t("A/D বা ← → চলা · W/↑ লাফ · S/↓ ব্লক · J ঘুষি · K লাথি · L স্পেশাল · স্পেস সুপার (পাওয়ার ভরলে)। ফোনে স্ক্রিনের বোতাম।", "A/D or ← → move · W/↑ jump · S/↓ block · J jab · K kick · L special · Space super (when POWER is full). Touch buttons on phones.")}
+          ? t("P1: A D W S · F আক্রমণ · G H T Y চাল · R সুপার.   P2: ← → ↑ ↓ · / আক্রমণ · , . ; ' চাল · ডান শিফট সুপার।", "P1: A D move, W jump, S block · F attack · G H T Y moves · R super.   P2: arrows · / attack · , . ; ' moves · Right Shift super.")
+          : t("A/D বা ← → চলা · W/↑ লাফ · S/↓ ব্লক · J আক্রমণ (সামনে+J = লাথি) · K L U I = পোকেমনের নিজের চারটি চাল · স্পেস সুপার (পাওয়ার ভরলে)। ফোনে স্ক্রিনের প্যাড ও বোতাম।", "A/D or ← → move · W/↑ jump · S/↓ block · J attack (forward+J = kick) · K L U I use the Pokémon's own four moves · Space super (when POWER is full). On phones: the pad and buttons on screen.")}
       </p>
     </div>
   );

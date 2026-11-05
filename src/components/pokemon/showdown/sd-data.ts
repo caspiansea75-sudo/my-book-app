@@ -2,7 +2,7 @@
  * Fight Showdown: who can fight and what they can do. Plain data, no DOM.
  * Everything is worked out from the Arena roster (types, base stats, size, role) so every Pokémon there can fight here too.
  */
-import { MOVES, ROSTER, Z_MOVES, Z_SIGNATURE, locoOf, type Loco, type Species } from "@/lib/pokemon/arena-data";
+import { MOVES, ROSTER, Z_MOVES, Z_SIGNATURE, locoOf, type Loco, type MoveDef, type Species } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 
 export type SuperKind = "rush" | "beam" | "blast";
@@ -22,7 +22,8 @@ export type Fighter = {
   /** drawn height of the picture in world pixels, and half the body width */
   h: number;
   bw: number;
-  special: { name: string; type: string; speed: number; color: string };
+  /** its own four moves, from the Arena data: they are what the four move buttons do */
+  moves: MoveDef[];
   sup: { name: string; bn: string; type: string; kind: SuperKind };
   role: Species["role"];
   /** how it gets about: decides how it is animated (hovering, slithering, running…) */
@@ -31,14 +32,10 @@ export type Fighter = {
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-const SPECIAL_SPEED: Record<string, number> = { Electric: 760, Psychic: 560, Fire: 600, Water: 540, Ice: 620, Ghost: 480, Dark: 520, Dragon: 600, Fairy: 540, Poison: 500, Grass: 560, Flying: 700, Steel: 640, Rock: 460, Ground: 480, Fighting: 600, Bug: 600, Normal: 580 };
-
 function build(sp: Species): Fighter {
   const [hp, atk, def, spa, spd, spe] = sp.bs;
   const t0 = sp.types[0] ?? "Normal";
-  // the first of its Arena moves that shares its type names its special; otherwise its first move does
-  const mv = sp.moves.map((m) => MOVES[m]).filter(Boolean);
-  const pick = mv.find((m) => m!.type === t0) ?? mv[0];
+  const moves = sp.moves.map((m) => MOVES[m]).filter((m): m is MoveDef => !!m).slice(0, 4);
   const sig = Z_SIGNATURE[sp.id];
   const z = sig ?? Z_MOVES[t0] ?? { name: "Final Burst", bn: "ফাইনাল বার্স্ট" };
   const kind: SuperKind = sp.role === "brawler" ? "rush" : sp.role === "shooter" ? "beam" : "blast";
@@ -55,12 +52,7 @@ function build(sp: Species): Fighter {
     guard: clamp(1.18 - (def + spd) / 600, 0.82, 1.1),
     h: Math.round(clamp(96 + sp.size * 3.6, 130, 230)),
     bw: Math.round(clamp(24 + sp.size * 0.9, 34, 58)),
-    special: {
-      name: pick?.name ?? "Energy Ball",
-      type: pick?.type ?? t0,
-      speed: SPECIAL_SPEED[pick?.type ?? t0] ?? 580,
-      color: TYPE_COLOR[pick?.type ?? t0] ?? "#ffffff",
-    },
+    moves,
     sup: { name: z.name, bn: z.bn, type: sig?.type ?? t0, kind },
     role: sp.role,
     loco: locoOf(sp),

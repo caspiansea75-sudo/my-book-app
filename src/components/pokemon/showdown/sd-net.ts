@@ -2,7 +2,7 @@
 import { P2PRoom } from "@/lib/multiplayer";
 import type { Input, World } from "./sd-engine";
 
-export type Pulse = { a: boolean; b: boolean; c: boolean; s: boolean; u: boolean };
+export type Pulse = { a: boolean; m1: boolean; m2: boolean; m3: boolean; m4: boolean; s: boolean; u: boolean };
 export type Wire =
   | { k: "hello"; id: string; name: string }
   | { k: "welcome"; id: string; name: string }

@@ -36,7 +36,7 @@
 .sd-bar { display: flex; gap: .5rem; justify-content: flex-end; padding: .4rem; position: absolute; top: 4.4rem; right: .3rem; z-index: 3; }
 .sd-ico { width: 2.1rem; height: 2.1rem; border-radius: 999px; background: rgba(10,8,24,.6); color: #fff; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.2); cursor: pointer; }
 .sd-pad { position: absolute; inset: auto 0 1.9rem 0; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 .8rem; pointer-events: none; z-index: 3; }
-.sd-acts { display: grid; gap: .4rem; pointer-events: auto; grid-template-columns: repeat(2, 3.6rem); grid-template-rows: repeat(2, 3.6rem); }
+.sd-acts { display: grid; gap: .35rem; pointer-events: auto; grid-template-columns: repeat(3, 3.3rem); grid-template-rows: repeat(2, 3.3rem); }
 .sd-stick { position: relative; width: 9.6rem; height: 9.6rem; border-radius: 50%; border: 2px solid rgba(255,255,255,.38); background: radial-gradient(circle, rgba(255,255,255,.14), rgba(10,8,24,.42) 70%); pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; cursor: pointer; }
 .sd-knob { position: absolute; left: 50%; top: 50%; width: 3.8rem; height: 3.8rem; margin: -1.9rem 0 0 -1.9rem; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.7), rgba(255,255,255,.28)); border: 2px solid rgba(255,255,255,.7); box-shadow: 0 4px 10px rgba(0,0,0,.35); pointer-events: none; }
 .sd-arr { position: absolute; color: rgba(255,255,255,.55); font-size: .8rem; pointer-events: none; }
@@ -54,7 +54,7 @@
   .sd-pad { opacity: .72; }
   .sd-stick { width: 8rem; height: 8rem; }
   .sd-knob { width: 3.1rem; height: 3.1rem; margin: -1.55rem 0 0 -1.55rem; }
-  .sd-acts { grid-template-columns: repeat(2, 3.1rem); grid-template-rows: repeat(2, 3.1rem); }
+  .sd-acts { grid-template-columns: repeat(3, 3rem); grid-template-rows: repeat(2, 3rem); }
 }
 .sd-btn { border-radius: 999px; border: 2px solid rgba(255,255,255,.4); background: rgba(10,8,24,.45); color: #fff; font: 800 .72rem var(--font-sans, inherit); display: grid; place-items: center; touch-action: none; -webkit-tap-highlight-color: transparent; }
 .sd-btn.on { background: rgba(255,200,80,.55); }
@@ -86,3 +86,8 @@ body.sd-lock { overflow: hidden; }
   .sd-full .sd-pad { bottom: calc(env(safe-area-inset-bottom, 0px) + 1.4rem); }
   .sd-hint { display: block; }
 }
+
+.sd-btn { padding: .1rem; text-align: center; line-height: 1.05; font-size: .56rem; overflow: hidden; word-break: break-word; }
+.sd-btn.atk { background: rgba(255,255,255,.18); }
+.sd-moves { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
+.sd-move { font-size: .64rem; padding: 0 .4rem; border-radius: .4rem; border: 1.5px solid; background: rgba(0,0,0,.25); }
