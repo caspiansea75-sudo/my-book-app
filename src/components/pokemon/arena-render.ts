@@ -1865,7 +1865,7 @@ export class ArenaRenderer {
         const q = this.proj(p.x, p.y);
         const sx = q.Z * q.f;
         // in the player views a big blast on the ground (the splat and glow of a nova or a landing blow) lies on the floor, not standing up
-        const bigFlat = this.v3 && ((p.kind === "splat" && p.size >= 90) || (p.kind === "glow" && p.size + Math.max(0, p.grow) * Math.max(0, p.life) >= 120));
+        const bigFlat = this.v3 && ((p.kind === "splat" && p.size >= 70) || (p.kind === "glow" && p.size + Math.max(0, p.grow) * Math.max(0, p.life) >= 80));
         const flat = p.kind === "gring" || p.kind === "crack" || bigFlat;
         const mixed = !p.sky && (p.kind === "streak" || p.kind === "arc" || p.kind === "ring");
         if (this.v3) {
@@ -2854,6 +2854,10 @@ export class ArenaRenderer {
     if (this.v3 || always) this.standQ.push({ x, y, draw });
     else draw(g);
   }
+  /** A pit or hole: in the player views it is drawn straight onto the floor (this canvas lies flat there), never as a ball standing in the air. */
+  private flatOnFloor(g: CanvasRenderingContext2D, _x: number, _y: number, draw: (g: CanvasRenderingContext2D) => void) {
+    draw(g);
+  }
   private sky(g: CanvasRenderingContext2D, x: number, y: number, draw: (g: CanvasRenderingContext2D) => void) {
     if (this.v3) this.skyQ.push({ x, y, draw });
     else draw(g);
@@ -2914,11 +2918,11 @@ export class ArenaRenderer {
             g.restore();
             if (Math.random() < 0.6) this.parts.push({ kind: "dot", x: z.x + rnd(-sz, sz), y: sy + rnd(-sz, sz), vx: rnd(-30, 30), vy: rnd(-60, 20), g: -40, life: 0.45, max: 0.45, size: rnd(2, 4.5), grow: 0, color: Math.random() < 0.5 ? "#ffd84d" : "#ff7a2a" });
           });
-          if (z.type === "Dark" && z.mv.kind === "lob") this.sky(g, z.x, z.y, (g) => {
+          if (z.type === "Dark" && z.mv.kind === "lob") this.flatOnFloor(g, z.x, z.y, (g) => {
             // a void opens: a black sphere with a violet rim and cracks running out of it
             const rr = z.r * (0.35 + prog * 0.65);
             g.save();
-            g.translate(z.x, z.y - rr * 0.35);
+            g.translate(z.x, z.y - (this.v3 ? 0 : rr * 0.35));
             const gr = g.createRadialGradient(0, 0, rr * 0.2, 0, 0, rr * 1.35);
             gr.addColorStop(0, "#07010f");
             gr.addColorStop(0.7, "#1a0630");
@@ -3001,7 +3005,9 @@ export class ArenaRenderer {
         }
         g.restore();
       } else if (z.mv.linger && z.shape === "circle") {
-        if (this.v3) this.stand(g, z.x, z.y, (g) => this.drawWhirl(g, z));
+        // the tornadoes stand up in the player views; the specialty pools and pits (lava pool, whirlpool prison, spore garden, toxic flood...)
+        // lie flat on the floor, and put only the things that rise out of them (jets, fountains, flowers) upright on their own
+        if (this.v3 && !SPEC_ART.has(z.mv.fx ?? z.mv.id)) this.stand(g, z.x, z.y, (g) => this.drawWhirl(g, z));
         else this.drawWhirl(g, z);
       } else {
         // the strike itself

@@ -483,7 +483,8 @@ const SCENES: Record<string, (Zc: Z, c: string) => void> = {
     g.save(); g.translate(cx, cy); g.scale(1, 0.42); g.globalCompositeOperation = "lighter";
     for (const [rr, c, w] of [[120, "#ffd0e8", 10], [150, "#c9a0ff", 6], [190, "#6a3ac0", 4]] as const) { g.globalAlpha = a * 0.8; g.strokeStyle = c; g.lineWidth = w; g.beginPath(); g.arc(0, 0, R(rr * (0.5 + k * 0.6)), 0, TAU); g.stroke(); }
     g.restore();
-    g.save(); g.globalAlpha = a; g.fillStyle = "#000"; g.beginPath(); g.arc(cx, cy, R(70 * k + 6), 0, TAU); g.fill(); g.restore();
+    // a hole in the floor, so lying flat (not a ball standing in the air) in the player views
+    g.save(); g.globalAlpha = a; g.fillStyle = "#000"; g.beginPath(); if (STRAIGHT) g.ellipse(cx, cy, R(70 * k + 6) * 1.5, R(70 * k + 6) * 0.63, 0, 0, TAU); else g.arc(cx, cy, R(70 * k + 6), 0, TAU); g.fill(); g.restore();
     glow(g, x, y, 120, "#e4d8f8", "#8a5be0", a * 0.5);
   },
 

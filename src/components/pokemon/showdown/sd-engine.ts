@@ -99,7 +99,7 @@ export type Proj = {
 
 export type Phase = "intro" | "fight" | "ko" | "roundEnd" | "matchEnd";
 export type EvKind = "hit" | "block" | "spec" | "super" | "ko" | "jump" | "land" | "text" | "round" | "fight" | "win" | "ready" | "clash" | "boom" | "time" | "nova" | "zap" | "dig";
-export type Ev = { n: number; k: EvKind; x: number; y: number; heavy?: boolean; text?: string; color?: string; slot?: number; r?: number };
+export type Ev = { n: number; k: EvKind; x: number; y: number; heavy?: boolean; text?: string; color?: string; slot?: number; r?: number; ty?: string };
 
 export type World = {
   seed: number;
@@ -312,7 +312,7 @@ function applyHit(w: World, att: Pl, def: Pl, o: HitOpts) {
   att.meter = Math.min(100, att.meter + o.meter);
   def.meter = Math.min(100, def.meter + 4 + finalDmg * 0.5);
   if (att.meter >= 100 && o.meter > 0 && att.meter - o.meter < 100) emit(w, { k: "ready", x: att.x, y: att.y, slot: att.slot });
-  if (!o.light || att.combo % 3 === 0) emit(w, { k: "hit", x: hx, y: hy, heavy: o.heavy, slot: def.slot, color: o.type ? (TYPE_COLOR[o.type] ?? af.color) : "#ffffff" });
+  if (!o.light || att.combo % 3 === 0) emit(w, { k: "hit", x: hx, y: hy, heavy: o.heavy, slot: def.slot, color: o.type ? (TYPE_COLOR[o.type] ?? af.color) : "#ffffff", ty: o.type });
   if (o.type && mult >= 2) emit(w, { k: "text", x: def.x, y: def.y + df.h + 18, text: "Super effective!", color: "#ffd54a" });
   else if (o.type && mult === 0) emit(w, { k: "text", x: def.x, y: def.y + df.h + 18, text: "No effect…", color: "#b0b0b0" });
   else if (o.type && mult < 1 && !o.light) emit(w, { k: "text", x: def.x, y: def.y + df.h + 18, text: "Not very effective…", color: "#9fb3c8" });
@@ -394,7 +394,7 @@ function stepMove(w: World, me: Pl, foe: Pl, a: Atk, dt: number): boolean {
   const color = TYPE_COLOR[def.type] ?? f.color;
   const chest = me.y + f.h * 0.5;
   const hb = hurtbox(foe);
-  const fire = () => { a.fired = true; emit(w, { k: "spec", x: me.x + me.face * f.bw, y: chest, slot: me.slot, color }); };
+  const fire = () => { a.fired = true; emit(w, { k: "spec", x: me.x + me.face * f.bw, y: chest, slot: me.slot, color, ty: def.type }); };
   switch (def.kind) {
     case "proj": {
       if (!a.fired && a.t >= wu) { fire(); spawn(w, me, def, { x: me.x + me.face * (f.bw + 20), y: chest, vx: me.face * (def.speed ?? 560), r: 20, life: 1.7 }); }
@@ -443,14 +443,14 @@ function stepMove(w: World, me: Pl, foe: Pl, a: Atk, dt: number): boolean {
       break;
     }
     case "burrow": {
-      if (!a.fired && a.t >= wu) { a.fired = true; emit(w, { k: "dig", x: me.x, y: 0, color, slot: me.slot }); }
+      if (!a.fired && a.t >= wu) { a.fired = true; emit(w, { k: "dig", x: me.x, y: 0, color, slot: me.slot, ty: def.type }); }
       if (a.t >= wu && a.t < wu + DIG_TIME) {
         me.inv = Math.max(me.inv, 0.08);
         const go = clamp(foe.x - me.x, -950 * dt, 950 * dt);
         me.x += go;
       } else if (a.t >= wu + DIG_TIME && !a.hit) {
         a.hit = true;
-        emit(w, { k: "dig", x: me.x, y: 0, color, slot: me.slot, heavy: true });
+        emit(w, { k: "dig", x: me.x, y: 0, color, slot: me.slot, heavy: true, ty: def.type });
         if (Math.abs(foe.x - me.x) < f.bw + 90 && foe.y < 150) {
           applyHit(w, me, foe, { dmg: def.power * BASE, kb: 380, stun: 0.5, launch: true, type: def.type, meter: 6, heavy: true, status: def.status ?? null });
         }
@@ -461,7 +461,7 @@ function stepMove(w: World, me: Pl, foe: Pl, a: Atk, dt: number): boolean {
       if (!a.fired && a.t >= wu) {
         fire();
         const rad = (def.range ?? 150) + f.bw;
-        emit(w, { k: "nova", x: me.x, y: me.y + 30, color, r: rad, slot: me.slot });
+        emit(w, { k: "nova", x: me.x, y: me.y + 30, color, r: rad, slot: me.slot, ty: def.type });
         w.shake = Math.max(w.shake, 0.3);
         if (Math.abs(foe.x - me.x) < rad + f.bw * 0.6 && foe.y < rad * 0.85) {
           applyHit(w, me, foe, { dmg: def.power * BASE, kb: 440, stun: 0.5, launch: def.power >= 1.8, type: def.type, meter: 6, heavy: true, status: def.status ?? null });
@@ -489,7 +489,7 @@ function stepMove(w: World, me: Pl, foe: Pl, a: Atk, dt: number): boolean {
         const gx = me.x + me.face * (f.bw + 70);
         if (Math.abs(foe.x - gx) < 85 + f.bw * 0.5 && Math.abs(foe.y - me.y) < 90 && foe.st !== "down" && foe.st !== "ko") {
           applyHit(w, me, foe, { dmg: def.power * BASE * 1.1, kb: 500, stun: 0.9, launch: true, type: def.type, unblockable: true, meter: 8, heavy: true, status: def.status ?? null });
-          emit(w, { k: "boom", x: foe.x, y: 20, color });
+          emit(w, { k: "boom", x: foe.x, y: 20, color, ty: def.type });
         } else emit(w, { k: "text", x: me.x + me.face * 60, y: me.y + f.h + 20, text: "Missed!", color: "#c9d2e8" });
       }
       break;
@@ -723,7 +723,7 @@ function stepProj(w: World, dt: number) {
           if (hb.x1 > pr.x - pr.r && hb.x0 < pr.x + pr.r && hb.y0 < 190) {
             applyHit(w, att, def, { dmg: pr.dmg, kb: 520, stun: 0.8, launch: pr.big, type: pr.type, meter: 0, heavy: true, status: pr.status });
           }
-          emit(w, { k: "boom", x: pr.x, y: 20, color: pr.color });
+          emit(w, { k: "boom", x: pr.x, y: 20, color: pr.color, ty: pr.mv === "super" ? undefined : pr.type });
           w.shake = Math.max(w.shake, 0.6);
         } else if (pr.kind === "bolt") {
           const hb = hurtbox(def);
@@ -731,7 +731,7 @@ function stepProj(w: World, dt: number) {
           if (Math.max(x0, x1) > hb.x0 && Math.min(x0, x1) < hb.x1 && hb.y0 < 170) {
             applyHit(w, att, def, { dmg: pr.dmg, kb: 340, stun: 0.55, launch: pr.big, type: pr.type, meter: 4, heavy: true, status: pr.status });
           }
-          emit(w, { k: "zap", x: pr.x, y: 0, color: pr.color, r: pr.len * pr.dir });
+          emit(w, { k: "zap", x: pr.x, y: 0, color: pr.color, r: pr.len * pr.dir, ty: pr.type });
           w.shake = Math.max(w.shake, 0.35);
         }
       }
@@ -760,7 +760,7 @@ function stepProj(w: World, dt: number) {
       const hb = hurtbox(def);
       if (pr.x + pr.r > hb.x0 && pr.x - pr.r < hb.x1 && hb.y0 < 50) {
         const st = pr.status ?? (pr.hz === "toxic" ? { kind: "psn" as StatusKind, chance: 0.9 } : null);
-        if (applyHit(w, att, def, { dmg: pr.dmg, kb: 160, stun: 0.3, launch: false, type: pr.type, meter: 3, heavy: false, status: st })) { emit(w, { k: "boom", x: pr.x, y: 10, color: pr.color }); continue; }
+        if (applyHit(w, att, def, { dmg: pr.dmg, kb: 160, stun: 0.3, launch: false, type: pr.type, meter: 3, heavy: false, status: st })) { emit(w, { k: "boom", x: pr.x, y: 10, color: pr.color, ty: pr.type }); continue; }
       }
     } else if (pr.kind === "ball" || pr.kind === "beam") {
       if (!pr.hits.includes(def.slot)) {

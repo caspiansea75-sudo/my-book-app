@@ -12,7 +12,22 @@ import { GROUND_Y, VH, VW, drawStage } from "./sd-stages";
 
 type G = CanvasRenderingContext2D;
 type Sprite = { gif: GifFrames | null; still: HTMLImageElement | null; done: boolean };
-type Part = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: "dot" | "ring" | "streak" };
+type PShape = "dot" | "star" | "shard" | "leaf" | "drop" | "bubble";
+type Part = { x: number; y: number; vx: number; vy: number; life: number; max: number; size: number; color: string; kind: "dot" | "ring" | "streak"; shape?: PShape; g?: number; rot?: number; spin?: number };
+type Slash = { x: number; y: number; t: number; color: string; flip: number };
+type Bend = { f: number; w: number; p: number; t: number };
+
+/** bright core, middle, dark edge for each type: what its moves are made of */
+const PAL: Record<string, [string, string, string]> = {
+  Fire: ["#fff1b8", "#ff8a2a", "#c2301a"], Water: ["#e8fbff", "#4fb3ff", "#1f5fbf"], Electric: ["#ffffff", "#ffe65a", "#d9a300"],
+  Grass: ["#eaffc0", "#6fd45a", "#2f8f3a"], Ice: ["#ffffff", "#bdeeff", "#6ac2e6"], Fighting: ["#fff3e0", "#ff9a6a", "#c24a2a"],
+  Poison: ["#f3d6ff", "#b36be0", "#6a2a9a"], Ground: ["#f3e2c0", "#c9a064", "#7a5a2a"], Flying: ["#ffffff", "#bfd0ff", "#7f94d6"],
+  Psychic: ["#fff0fa", "#ff7ac8", "#c23a8a"], Bug: ["#f2ffc0", "#b4d93a", "#6e8a1a"], Rock: ["#f0e6d2", "#b8a37a", "#6b5a3a"],
+  Ghost: ["#f3e0ff", "#8a5ad6", "#3d2468"], Dragon: ["#e6dcff", "#6a5aff", "#3a2ab0"], Dark: ["#d6c8c0", "#6a5a58", "#2a2224"],
+  Steel: ["#ffffff", "#c8d2de", "#7a8898"], Fairy: ["#ffffff", "#ffb3e6", "#e070b0"], Normal: ["#ffffff", "#e0d8c8", "#a09a88"],
+};
+const pal = (ty?: string): [string, string, string] => PAL[ty ?? ""] ?? ["#ffffff", "#e8e8f0", "#a0a0b8"];
+const CLAWS = new Set(["Dragon", "Dark", "Normal", "Fighting", "Bug", "Flying", "Steel"]);
 type Pop = { x: number; y: number; t: number; text: string; color: string };
 type Ghost = { x: number; y: number; rot: number; sx: number; sy: number; flip: number; born: number; color: string };
 /** What is only about looks: smooth turning, landing squash, dust, after-images. The fight rules never see it. */
@@ -59,6 +74,8 @@ export class SdRenderer {
   private tmp: HTMLCanvasElement | null = null;
   private broken = false;
   private zaps: Zap[] = [];
+  private slashes: Slash[] = [];
+  private dt = 0.016;
   private vis: [Vis, Vis] = [newVis(), newVis()];
   private clock = 0;
 
@@ -81,6 +98,7 @@ export class SdRenderer {
     this.vis = [newVis(), newVis()];
     this.clock = 0;
     this.zaps = [];
+    this.slashes = [];
   }
 
   /** Fetch the pictures ahead of time so the fight starts with everyone drawn. */
@@ -144,6 +162,99 @@ export class SdRenderer {
     return this.portraits.get(id) ?? null;
   }
 
+  /* --------------------------------------------------------- type effects */
+
+  private pt(x: number, y: number, vx: number, vy: number, life: number, size: number, color: string, shape: PShape = "dot", g = 600) {
+    this.parts.push({ x, y, vx, vy, life, max: life, size, color, kind: "dot", shape, g, rot: Math.random() * 6, spin: (Math.random() - 0.5) * 14 });
+  }
+  private ringAt(x: number, y: number, color: string, size: number, life = 0.4) {
+    this.parts.push({ x, y, vx: 0, vy: 0, life, max: life, size, color, kind: "ring" });
+  }
+  private spray(x: number, y: number, n: number, speed: number, up: number, size: number, cols: string[], shape: PShape, g: number, life = 0.55) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random() * 0.6);
+      this.pt(x, y, Math.cos(a) * v, Math.sin(a) * v + up, life * (0.7 + Math.random() * 0.6), size * (0.6 + Math.random() * 0.8), cols[i % cols.length]!, shape, g);
+    }
+  }
+
+  /** What a hit looks like depends on the type that made it. */
+  private impact(x: number, y: number, ty: string | undefined, heavy: boolean) {
+    const [c, m, d] = pal(ty);
+    const n = heavy ? 1.6 : 1;
+    switch (ty) {
+      case "Fire": this.spray(x, y, 12 * n, 300, 120, 8, [c, m, d], "dot", -300); this.ringAt(x, y, m, 80 * n); break;
+      case "Water": this.spray(x, y, 14 * n, 340, 220, 5, [c, m], "drop", 900); this.ringAt(x, y, m, 70 * n); break;
+      case "Electric": this.spray(x, y, 10 * n, 520, 0, 3.5, [c, m], "shard", 0, 0.3); this.parts.push({ x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 110 * n, color: m, kind: "streak" }); break;
+      case "Ice": this.spray(x, y, 12 * n, 360, 160, 7, [c, m], "shard", 500); this.ringAt(x, y, c, 70 * n); break;
+      case "Grass": this.spray(x, y, 10 * n, 260, 160, 8, [m, d, c], "leaf", 200, 0.8); break;
+      case "Poison": this.spray(x, y, 9 * n, 200, 100, 8, [m, d], "bubble", -150, 0.8); break;
+      case "Ghost": case "Dark": this.spray(x, y, 10 * n, 220, 40, 9, [m, d], "dot", -100, 0.7); this.ringAt(x, y, d, 80 * n); break;
+      case "Psychic": case "Fairy": this.spray(x, y, 10 * n, 300, 0, 8, [c, m], "star", 0, 0.6); this.ringAt(x, y, m, 90 * n); this.ringAt(x, y, c, 55 * n, 0.3); break;
+      case "Rock": case "Ground": this.spray(x, y, 10 * n, 380, 200, 8, [m, d], "shard", 900); break;
+      case "Steel": this.spray(x, y, 8 * n, 480, 0, 4, [c, m], "star", 0, 0.35); this.ringAt(x, y, c, 100 * n, 0.25); break;
+      case "Fighting": this.spray(x, y, 10 * n, 420, 100, 6, [c, m], "star", 300); this.ringAt(x, y, m, 120 * n, 0.3); break;
+      default: this.spray(x, y, 10 * n, 320, 100, 5, [c, m], "dot", 600); this.ringAt(x, y, c, 60 * n);
+    }
+    // the clawing and biting kinds leave claw marks
+    if (ty && CLAWS.has(ty) && heavy) this.slashes.push({ x, y, t: 0.28, color: m, flip: Math.random() < 0.5 ? 1 : -1 });
+  }
+
+  /** A burst all around it: ripples, flames, shards, shock-waves... */
+  private novaFx(x: number, y: number, rad: number, ty: string | undefined) {
+    const [c, m, d] = pal(ty);
+    this.ringAt(x, y, m, rad * 1.7, 0.55);
+    this.ringAt(x, y, c, rad * 1.15, 0.35);
+    switch (ty) {
+      case "Fire": this.spray(x, y, 24, rad * 3, 80, 9, [c, m, d], "dot", -260, 0.7); break;
+      case "Water": this.ringAt(x, y, m, rad * 2.1, 0.7); this.ringAt(x, y, c, rad * 0.8, 0.3); this.spray(x, y, 16, rad * 2.4, 260, 5, [c, m], "drop", 900); break;
+      case "Electric": for (let i = 0; i < 3; i++) this.parts.push({ x, y, vx: 0, vy: 0, life: 0.3, max: 0.3, size: rad * (1.2 + i * 0.5), color: i ? m : c, kind: "streak" }); this.spray(x, y, 14, rad * 3.2, 0, 3.5, [c, m], "shard", 0, 0.3); break;
+      case "Ice": this.spray(x, y, 20, rad * 3, 80, 8, [c, m], "shard", 400, 0.7); break;
+      case "Ground": case "Rock": case "Fighting": this.ringAt(x, 6, m, rad * 2.3, 0.5); this.spray(x, 10, 18, rad * 2.2, 380, 8, [m, d, c], "shard", 1000, 0.8); break;
+      case "Grass": case "Bug": this.spray(x, y, 18, rad * 2.6, 120, 9, [m, d, c], "leaf", 120, 0.9); break;
+      case "Psychic": case "Fairy": this.ringAt(x, y, c, rad * 2.2, 0.6); this.spray(x, y, 18, rad * 2.6, 0, 9, [c, m], "star", 0, 0.8); break;
+      case "Poison": this.spray(x, y, 14, rad * 1.6, 90, 10, [m, d], "bubble", -140, 1); break;
+      case "Ghost": case "Dark": this.ringAt(x, y, d, rad * 2, 0.7); this.spray(x, y, 16, rad * 2, 40, 10, [m, d], "dot", -80, 0.9); break;
+      case "Dragon": this.ringAt(x, y, c, rad * 2.2, 0.6); this.slashes.push({ x, y: y + 20, t: 0.3, color: m, flip: 1 }, { x, y: y + 20, t: 0.3, color: m, flip: -1 }); this.spray(x, y, 18, rad * 2.8, 60, 7, [m, d], "star", 100, 0.7); break;
+      default: this.spray(x, y, 20, rad * 3, 60, 6, [c, m], "dot", 500);
+    }
+  }
+
+  /** The bursts of a lobbed blast and of a landed grab. */
+  private boomFx(x: number, y: number, ty: string | undefined, color: string) {
+    const [c, m, d] = pal(ty);
+    this.ringAt(x, y, ty ? m : color, 230, 0.55);
+    switch (ty) {
+      case "Fire": this.spray(x, y, 30, 460, 200, 10, [c, m, d], "dot", -200, 0.8); break;
+      case "Water": for (let i = 0; i < 16; i++) this.pt(x + (Math.random() - 0.5) * 80, 6, (Math.random() - 0.5) * 120, 420 + Math.random() * 380, 0.8, 6, i % 2 ? c : m, "drop", 900); break;
+      case "Ground": case "Rock": this.spray(x, y, 26, 420, 360, 10, [m, d, c], "shard", 1000, 0.9); break;
+      case "Poison": this.spray(x, y, 18, 220, 120, 11, [m, d], "bubble", -140, 1); break;
+      case "Ice": this.spray(x, y, 24, 380, 200, 9, [c, m], "shard", 500, 0.8); break;
+      case "Psychic": case "Fairy": this.spray(x, y, 24, 360, 0, 10, [c, m], "star", 0, 0.8); break;
+      case "Grass": this.spray(x, y, 20, 300, 200, 10, [m, d, c], "leaf", 160, 1); break;
+      case "Ghost": case "Dark": this.spray(x, y, 22, 300, 60, 11, [m, d], "dot", -100, 0.9); break;
+      default: this.spray(x, y, 26, 560, 80, 5, [ty ? m : color, c], "dot", 600);
+    }
+  }
+
+  /** A trail left behind by a shot while it flies. */
+  private trail(pr: Proj) {
+    if (Math.random() > this.dt * (pr.kind === "beam" ? 40 : 24)) return;
+    const [c, m, d] = pal(pr.type);
+    const x = pr.x - Math.sign(pr.vx) * pr.r * 0.8 + (Math.random() - 0.5) * pr.r, y = pr.y + (Math.random() - 0.5) * pr.r;
+    switch (pr.type) {
+      case "Fire": this.pt(x, y, 0, 40, 0.5, 7, Math.random() < 0.5 ? m : c, "dot", -260); break;
+      case "Water": this.pt(x, y, 0, 30, 0.5, 4, Math.random() < 0.5 ? c : m, "drop", 700); break;
+      case "Electric": this.pt(x, y, (Math.random() - 0.5) * 240, (Math.random() - 0.5) * 240, 0.22, 3, c, "shard", 0); break;
+      case "Ice": this.pt(x, y, 0, 20, 0.7, 5, c, "star", 150); break;
+      case "Grass": case "Bug": this.pt(x, y, 0, 30, 0.7, 7, m, "leaf", 150); break;
+      case "Poison": this.pt(x, y, 0, 40, 0.8, 6, m, "bubble", -120); break;
+      case "Ghost": case "Dark": this.pt(x, y, 0, 20, 0.6, 8, d, "dot", -60); break;
+      case "Psychic": case "Fairy": this.pt(x, y, 0, 0, 0.5, 6, c, "star", 0); break;
+      case "Rock": case "Ground": case "Steel": this.pt(x, y, 0, 0, 0.5, 5, m, "shard", 800); break;
+      default: this.pt(x, y, 0, 0, 0.35, 5, m, "dot", 0);
+    }
+  }
+
   /* --------------------------------------------------------------- events */
 
   private onEvent(e: Ev, w: World) {
@@ -156,9 +267,9 @@ export class SdRenderer {
     const ring = (color: string, size: number, life = 0.4) => this.parts.push({ x: e.x, y: e.y, vx: 0, vy: 0, life, max: life, size, color, kind: "ring" });
     switch (e.k) {
       case "hit":
-        burst(e.heavy ? 18 : 10, "#fff6c0", e.heavy ? 520 : 340, 4);
-        burst(6, e.color ?? "#ffffff", 300, 5);
+        burst(e.heavy ? 12 : 6, "#fff6c0", e.heavy ? 520 : 340, 4);
         ring("#ffffff", e.heavy ? 90 : 55);
+        this.impact(e.x, e.y, e.ty, !!e.heavy);
         if (e.heavy) this.parts.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 120, color: "#ffffff", kind: "streak" });
         sfx.hit(!!e.heavy, false);
         break;
@@ -168,7 +279,8 @@ export class SdRenderer {
         sfx.dodge();
         break;
       case "spec":
-        burst(7, e.color ?? "#ffffff", 220, 4);
+        burst(4, e.color ?? "#ffffff", 220, 4);
+        this.spray(e.x, e.y, 6, 240, 40, 6, [pal(e.ty)[0], pal(e.ty)[1]], e.ty === "Electric" ? "shard" : e.ty === "Water" ? "drop" : e.ty === "Fire" ? "dot" : "star", e.ty === "Fire" ? -200 : 300, 0.45);
         sfx.cast("proj");
         break;
       case "super":
@@ -179,15 +291,11 @@ export class SdRenderer {
         sfx.zstart();
         break;
       case "boom":
-        ring(e.color ?? "#ffb347", 230, 0.55);
-        burst(26, e.color ?? "#ffb347", 560, 5, 80);
+        this.boomFx(e.x, e.y, e.ty, e.color ?? "#ffb347");
         sfx.zhit();
         break;
       case "nova": {
-        const rad = e.r ?? 150;
-        ring(e.color ?? "#ffffff", rad * 1.7, 0.55);
-        ring("#ffffff", rad * 1.15, 0.35);
-        burst(22, e.color ?? "#ffffff", 540, 5, 60);
+        this.novaFx(e.x, e.y, e.r ?? 150, e.ty);
         sfx.zhit();
         break;
       }
@@ -281,6 +389,7 @@ export class SdRenderer {
     // everything that only sways, breathes or flutters runs on this clock: it advances smoothly on every screen refresh
     // (the fight's own clock moves in 1/60 s steps, which looks uneven on a 120 or 144 Hz screen)
     this.clock += dt;
+    this.dt = dt;
     const t = this.clock;
 
     for (const e of w.evs) if (e.n > this.lastEv) { this.lastEv = e.n; this.onEvent(e, w); }
@@ -544,6 +653,81 @@ export class SdRenderer {
     return { rot, sx, sy, dx, dy, alpha };
   }
 
+  /** How the body bends, not just leans: the head leads a strike and snaps back when hit, the spine sways when it walks, the tail lags behind. */
+  private bendOf(w: World, p: Pl, f: Fighter): Bend {
+    const t = this.clock, slot = p.slot, loco = f.loco;
+    const mv = clamp(Math.abs(p.vx) / f.walk, 0, 1.6);
+    const ease = (x: number) => 1 - Math.pow(1 - clamp(x, 0, 1), 3);
+    let bf = 0, bw = 1.6, bp = t * 2.4 + slot, bt = 0;
+    if (loco === "slither" || loco === "surf") { bw = 5; bp = t * 4.5 + slot; }
+    else if (loco === "float") { bw = 3.4; bp = t * 2.2 + slot; }
+    else if (loco === "fly") { bw = 2.4; bp = t * 3 + slot; }
+    switch (p.st) {
+      case "walk": {
+        const fwd = p.vx * p.face >= 0;
+        bf = (fwd ? 7 : -4) * mv; bw += 4 * mv + (loco === "slither" || loco === "surf" ? 6 * mv : 0); bp = t * (loco === "run" ? 19 : 13) + slot;
+        break;
+      }
+      case "jump": bf = clamp((p.vx * p.face) / 80, -8, 14); bw = 1.5; break;
+      case "block": bf = 8; bt = -3; bw = 1; break;
+      case "hurt": { const k = clamp(1 - p.t / 0.3, 0, 1); bf = -28 * k; bt = 9 * k; bw = 6 * k; bp = t * 50; break; }
+      case "win": bw = 7; bp = t * 10 + slot; bf = 4; break;
+      case "atk": {
+        const a = p.atk;
+        if (!a) break;
+        if (a.kind === "jab") {
+          const q = clamp(a.t / 0.06, 0, 1), s2 = clamp((a.t - 0.06) / 0.07, 0, 1), r2 = clamp((a.t - 0.13) / 0.12, 0, 1);
+          const out = a.t < 0.06 ? -q * 0.6 : a.t < 0.13 ? -0.6 + 1.6 * ease(s2) : 1 - ease(r2);
+          bf = 24 * out; bt = -7 * out;
+        } else if (a.kind === "kick") {
+          const q = clamp(a.t / 0.14, 0, 1), s2 = clamp((a.t - 0.14) / 0.09, 0, 1), r2 = clamp((a.t - 0.23) / 0.26, 0, 1);
+          if (a.t < 0.14) { bf = -18 * q; bt = 9 * q; } else { const o = a.t < 0.23 ? ease(s2) : 1 - ease(r2); bf = 34 * o; bt = -12 * o; }
+        } else if (a.kind === "move") {
+          const m = f.moves[a.mi];
+          const k = m?.kind ?? "proj";
+          const wu = m ? windupOf(m) : 0.16;
+          const q = clamp(a.t / wu, 0, 1), r2 = clamp((a.t - wu) / 0.28, 0, 1);
+          if (k === "dash") bf = a.t < wu ? -14 * q : a.rush > 0 ? 38 : 12 * (1 - r2);
+          else if (k === "nova") bf = a.t < wu ? -10 * q : 8 * (1 - r2);
+          else if (k === "beam") { bf = 12; bw = 3; bp = t * 60; }
+          else if (k === "grab") bf = a.t < wu ? -10 * q : 30 * (1 - r2);
+          else if (k === "bolt") bf = -8 * q;
+          else if (k === "buff") { bw = 5; bp = t * 40; }
+          else if (k === "guard") bf = 7;
+          else if (k === "heal") { bw = 3; bp = t * 5; }
+          else if (k === "burrow") bf = 0;
+          else bf = a.t < wu ? -16 * q : 18 * (1 - r2);
+        } else if (w.freeze > 0 && w.superBy === slot) { bw = 6; bp = t * 60; }
+        else if (a.rush > 0) bf = 40;
+        break;
+      }
+      default: break;
+    }
+    return { f: bf, w: bw, p: bp, t: bt };
+  }
+
+  /** Draws the picture bent: thin strips, each leaning so its edges meet its neighbours' exactly, so the body curves with no cuts. */
+  private bent(g: G, el: CanvasImageSource, w0: number, h0: number, dw: number, dh: number, b: Bend | null) {
+    if (!b || Math.abs(b.f) + Math.abs(b.w) + Math.abs(b.t) < 0.6) { g.drawImage(el, -dw / 2, -dh, dw, dh); return; }
+    const z = this.zoom;
+    // x-shift at a height u (0 = feet, 1 = top); the picture faces left, so "forward" is -x here
+    const off = (u: number) => (-(b.f * Math.pow(u, 1.6) + b.t * Math.pow(1 - u, 2.2)) + b.w * Math.sin(b.p - u * 2.3) * Math.pow(u, 1.15)) * z;
+    const N = 22;
+    for (let i = 0; i < N; i++) {
+      const rTop = Math.floor((i * h0) / N), rNom = Math.floor(((i + 1) * h0) / N);
+      const rBot = Math.min(h0, rNom + 1); // one extra row of overlap, drawn with the same lean, hides any hairline
+      if (rNom <= rTop) continue;
+      const yT = -dh + (rTop * dh) / h0;
+      const hn = ((rNom - rTop) * dh) / h0;
+      const offT = off(1 - rTop / h0), offB = off(1 - rNom / h0);
+      const k = (offB - offT) / hn;
+      g.save();
+      g.transform(1, 0, k, 1, offT - k * yT, 0);
+      g.drawImage(el, 0, rTop, w0, rBot - rTop, -dw / 2, yT, dw, ((rBot - rTop) * dh) / h0);
+      g.restore();
+    }
+  }
+
   private fighter(g: G, w: World, p: Pl) {
     const f = fighterOf(p.id);
     const v = this.vis[p.slot];
@@ -564,6 +748,11 @@ export class SdRenderer {
       if (v.trail.length > 7) v.trail.shift();
     }
     v.trail = v.trail.filter((gh) => this.clock - gh.born < 0.26);
+    if (a && a.kind === "move" && a.rush > 0) {
+      const mdef = f.moves[a.mi];
+      const [c0, m0] = pal(mdef?.type);
+      if (Math.random() < this.dt * 55) this.pt(p.x - p.face * 24, p.y + 14 + Math.random() * f.h * 0.55, -p.face * 90, 30, 0.45, 7, Math.random() < 0.5 ? c0 : m0, mdef?.type === "Water" ? "drop" : mdef?.type === "Electric" ? "shard" : "dot", mdef?.type === "Fire" ? -250 : 300);
+    }
     if (el) {
       for (const gh of v.trail) {
         const age = (this.clock - gh.born) / 0.26;
@@ -598,8 +787,9 @@ export class SdRenderer {
     if (el) {
       const dw = w0 * sc, dh = h0 * sc;
       g.imageSmoothingEnabled = true;
-      g.drawImage(el, -dw / 2, -dh, dw, dh);
-      if (p.flash > 0) this.tint(g, el, w0, h0, dw, dh, "#ffffff", clamp(p.flash / 0.14, 0, 1) * 0.85);
+      const bend = this.bendOf(w, p, f);
+      this.bent(g, el, w0, h0, dw, dh, bend);
+      if (p.flash > 0) this.tint(g, el, w0, h0, dw, dh, "#ffffff", clamp(p.flash / 0.14, 0, 1) * 0.85, bend);
     } else {
       // while the picture is still on its way: a coloured blob with the first letter
       const r = f.h * 0.3 * this.zoom;
@@ -719,13 +909,16 @@ export class SdRenderer {
             g.save();
             g.translate(px + dir * f.bw * 0.4 * z, oy);
             g.scale(dir, 1);
-            const hh = 20 * z * pulse;
-            const gr = g.createLinearGradient(0, 0, len, 0);
-            gr.addColorStop(0, hexA(col, 0.95)); gr.addColorStop(1, hexA(col, 0.3));
-            g.fillStyle = gr;
-            g.beginPath(); g.moveTo(0, -hh * 0.6); g.lineTo(len, -hh); g.lineTo(len, hh); g.lineTo(0, hh * 0.6); g.closePath(); g.fill();
-            g.fillStyle = "rgba(255,255,255,.85)";
-            g.beginPath(); g.moveTo(0, -hh * 0.2); g.lineTo(len, -hh * 0.35); g.lineTo(len, hh * 0.35); g.lineTo(0, hh * 0.2); g.closePath(); g.fill();
+            this.beamArt(g, m.type, len, 20 * z * pulse, w.time);
+            if (Math.random() < this.dt * 36) {
+              const lw = (m.range ?? 260) + f.bw, bx = p.x + dir * (f.bw * 0.4 + Math.random() * lw), by = p.y + f.h * 0.45 + (Math.random() - 0.5) * 36;
+              const [c0, m0] = pal(m.type);
+              if (m.type === "Fire") this.pt(bx, by, 0, 60, 0.5, 7, Math.random() < 0.5 ? m0 : c0, "dot", -260);
+              else if (m.type === "Water") this.pt(bx, by, 0, 90, 0.5, 4, c0, "drop", 800);
+              else if (m.type === "Electric") this.pt(bx, by, (Math.random() - 0.5) * 300, (Math.random() - 0.5) * 300, 0.2, 3, c0, "shard", 0);
+              else if (m.type === "Ice") this.pt(bx, by, 0, 20, 0.7, 5, c0, "star", 160);
+              else this.pt(bx, by, 0, 30, 0.4, 5, m0, "dot", 0);
+            }
             g.restore();
           }
         } else if (kd === "burrow" && a.t >= wu && a.t < wu + 0.5) {
@@ -753,7 +946,70 @@ export class SdRenderer {
     }
   }
 
-  private tint(g: G, el: CanvasImageSource, w0: number, h0: number, dw: number, dh: number, color: string, a: number) {
+  private beamArt(g: G, ty: string, len: number, hh: number, t: number) {
+    const [c, m, d] = pal(ty);
+    const poly = (half: (x: number) => number, c0: string, c1: string) => {
+      const gr = g.createLinearGradient(0, 0, len, 0);
+      gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+      g.fillStyle = gr;
+      g.beginPath();
+      for (let i = 0; i <= 24; i++) { const x = (len * i) / 24; g.lineTo(x, -half(x)); }
+      for (let i = 24; i >= 0; i--) { const x = (len * i) / 24; g.lineTo(x, half(x)); }
+      g.closePath();
+      g.fill();
+    };
+    const taper = (x: number) => hh * (0.55 + 0.45 * (x / len));
+    switch (ty) {
+      case "Fire":
+        poly((x) => taper(x) * (0.85 + 0.25 * Math.sin(x * 0.05 - t * 30)), hexA(m, 0.95), hexA(d, 0.4));
+        poly((x) => taper(x) * 0.5 * (0.9 + 0.2 * Math.sin(x * 0.07 - t * 40)), hexA(c, 0.95), hexA(m, 0.3));
+        break;
+      case "Water":
+        poly(taper, hexA(m, 0.9), hexA(d, 0.35));
+        g.strokeStyle = hexA(c, 0.8); g.lineWidth = 2;
+        for (let i = 0; i < 7; i++) { const x = (t * 500 + (i * len) / 7) % len; g.beginPath(); g.moveTo(x, -taper(x) * 0.6); g.lineTo(x + 18, taper(x) * 0.6); g.stroke(); }
+        break;
+      case "Electric":
+        poly((x) => taper(x) * 0.35, hexA(m, 0.5), hexA(m, 0.1));
+        for (let pass = 0; pass < 2; pass++) {
+          g.strokeStyle = pass ? "#ffffff" : hexA(m, 0.9); g.lineWidth = pass ? 2 : 6; g.lineJoin = "round";
+          g.beginPath(); g.moveTo(0, 0);
+          for (let i = 1; i <= 16; i++) g.lineTo((len * i) / 16, Math.sin(i * 12.9 + t * 60) * hh * 0.9 * (i / 16));
+          g.stroke();
+        }
+        break;
+      case "Ice":
+        poly(taper, hexA(c, 0.9), hexA(m, 0.35));
+        g.fillStyle = "#ffffff";
+        for (let i = 0; i < 6; i++) { const x = (t * 300 + (i * len) / 6) % len; g.beginPath(); for (let k = 0; k < 8; k++) { const r = k % 2 ? 3 : 9, an = (k * Math.PI) / 4; g.lineTo(x + Math.cos(an) * r, Math.sin(an) * r); } g.closePath(); g.fill(); }
+        break;
+      case "Psychic": case "Fairy":
+        poly((x) => taper(x) * 0.6, hexA(m, 0.5), hexA(m, 0.12));
+        g.strokeStyle = hexA(c, 0.85); g.lineWidth = 3;
+        for (let i = 0; i < 6; i++) { const x = (t * 400 + (i * len) / 6) % len; g.beginPath(); g.ellipse(x, 0, hh * 0.3, taper(x) * 0.95, 0, 0, Math.PI * 2); g.stroke(); }
+        break;
+      case "Ghost": case "Dark":
+        poly((x) => taper(x) * 0.7, hexA(d, 0.85), hexA(m, 0.2));
+        g.strokeStyle = hexA(m, 0.9); g.lineWidth = 3;
+        for (let k = 0; k < 2; k++) { g.beginPath(); for (let i = 0; i <= 20; i++) g.lineTo((len * i) / 20, Math.sin(i * 0.9 - t * 18 + k * 3) * hh * 0.7); g.stroke(); }
+        break;
+      case "Grass": case "Bug":
+        poly(taper, hexA(m, 0.85), hexA(d, 0.3));
+        g.fillStyle = hexA(c, 0.9);
+        for (let i = 0; i < 6; i++) { const x = (t * 350 + (i * len) / 6) % len; g.save(); g.translate(x, Math.sin(t * 8 + i) * hh * 0.4); g.rotate(t * 6 + i); g.beginPath(); g.ellipse(0, 0, 11, 4, 0, 0, Math.PI * 2); g.fill(); g.restore(); }
+        break;
+      case "Poison":
+        poly(taper, hexA(m, 0.85), hexA(d, 0.3));
+        g.strokeStyle = hexA(c, 0.85); g.lineWidth = 2;
+        for (let i = 0; i < 6; i++) { const x = (t * 260 + (i * len) / 6) % len; g.beginPath(); g.arc(x, Math.sin(t * 6 + i * 2) * hh * 0.4, 6 + (i % 3) * 3, 0, Math.PI * 2); g.stroke(); }
+        break;
+      default:
+        poly(taper, hexA(m, 0.95), hexA(m, 0.3));
+        poly((x) => taper(x) * 0.4, "rgba(255,255,255,.85)", "rgba(255,255,255,.3)");
+    }
+  }
+
+  private tint(g: G, el: CanvasImageSource, w0: number, h0: number, dw: number, dh: number, color: string, a: number, bend: Bend | null = null) {
     if (!this.tmp) this.tmp = document.createElement("canvas");
     const c = this.tmp;
     if (c.width !== w0 || c.height !== h0) { c.width = w0; c.height = h0; }
@@ -766,7 +1022,7 @@ export class SdRenderer {
     tg.fillRect(0, 0, w0, h0);
     const old = g.globalAlpha;
     g.globalAlpha = old * a;
-    g.drawImage(c, -dw / 2, -dh, dw, dh);
+    this.bent(g, c, w0, h0, dw, dh, bend);
     g.globalAlpha = old;
   }
 
@@ -825,6 +1081,7 @@ export class SdRenderer {
       g.restore();
       return;
     }
+    this.trail(pr);
     const y = this.Y(pr.y);
     const sp = Math.hypot(pr.vx, pr.vy) || 1;
     const ux = pr.vx / sp, uy = -pr.vy / sp; // direction on the screen
@@ -884,7 +1141,7 @@ export class SdRenderer {
     for (const p of this.parts) {
       p.life -= dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.kind === "dot") p.vy -= 600 * dt;
+      if (p.kind === "dot") { p.vy -= (p.g ?? 600) * dt; p.rot = (p.rot ?? 0) + (p.spin ?? 0) * dt; }
       const k = clamp(p.life / p.max, 0, 1);
       const sx = this.X(p.x), sy = this.Y(p.y);
       if (p.kind === "ring") {
@@ -896,13 +1153,54 @@ export class SdRenderer {
         g.lineWidth = 3;
         for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.beginPath(); g.moveTo(sx + Math.cos(a) * 14, sy + Math.sin(a) * 14); g.lineTo(sx + Math.cos(a) * (14 + p.size * (1 - k)), sy + Math.sin(a) * (14 + p.size * (1 - k))); g.stroke(); }
       } else {
-        g.fillStyle = p.color.startsWith("#") ? hexA(p.color, k) : p.color;
-        g.globalAlpha = p.color.startsWith("#") ? 1 : k;
-        g.beginPath(); g.arc(sx, sy, p.size * (0.4 + 0.6 * k) * this.zoom, 0, Math.PI * 2); g.fill();
+        const hex = p.color.startsWith("#");
+        const col = hex ? hexA(p.color, k) : p.color;
+        g.fillStyle = col;
+        g.strokeStyle = col;
+        g.globalAlpha = hex ? 1 : k;
+        const sz = p.size * (0.4 + 0.6 * k) * this.zoom;
+        switch (p.shape) {
+          case "star":
+            g.beginPath();
+            for (let i = 0; i < 8; i++) { const r = i % 2 ? sz * 0.35 : sz * 1.4, an = (i * Math.PI) / 4 + (p.rot ?? 0); g.lineTo(sx + Math.cos(an) * r, sy + Math.sin(an) * r); }
+            g.closePath(); g.fill();
+            break;
+          case "shard":
+            g.save(); g.translate(sx, sy); g.rotate(p.rot ?? 0); g.fillRect(-sz * 0.3, -sz * 1.1, sz * 0.6, sz * 2.2); g.restore();
+            break;
+          case "leaf":
+            g.beginPath(); g.ellipse(sx, sy, sz * 1.3, sz * 0.5, p.rot ?? 0, 0, Math.PI * 2); g.fill();
+            break;
+          case "drop":
+            g.beginPath(); g.ellipse(sx, sy, sz * 0.6, sz * 0.95, 0, 0, Math.PI * 2); g.fill();
+            break;
+          case "bubble":
+            g.lineWidth = 2; g.beginPath(); g.arc(sx, sy, sz, 0, Math.PI * 2); g.stroke();
+            break;
+          default:
+            g.beginPath(); g.arc(sx, sy, sz, 0, Math.PI * 2); g.fill();
+        }
         g.globalAlpha = 1;
       }
     }
     this.parts = this.parts.filter((p) => p.life > 0);
+    for (const sl of this.slashes) {
+      sl.t -= dt;
+      const k = clamp(sl.t / 0.3, 0, 1), grow = 1 - k;
+      const cx = this.X(sl.x), cy = this.Y(sl.y);
+      g.save();
+      g.lineCap = "round";
+      g.strokeStyle = hexA(sl.color, k);
+      for (let i = -1; i <= 1; i++) {
+        g.lineWidth = (6 - Math.abs(i) * 2) * this.zoom * k + 1;
+        g.beginPath();
+        g.moveTo(cx - sl.flip * (50 - i * 4) * this.zoom, cy - (60 - i * 22) * this.zoom + 10 * i);
+        g.lineTo(cx - sl.flip * (50 - i * 4) * this.zoom + sl.flip * (70 + grow * 60) * this.zoom, cy - (60 - i * 22) * this.zoom + 10 * i + (90 + grow * 70) * this.zoom);
+        g.stroke();
+      }
+      g.restore();
+    }
+    this.slashes = this.slashes.filter((sl) => sl.t > 0);
     for (const zp of this.zaps) {
       zp.t -= dt;
       const k = clamp(zp.t / 0.24, 0, 1);
