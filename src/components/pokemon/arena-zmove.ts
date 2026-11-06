@@ -170,22 +170,50 @@ const SCENES: Record<string, (Zc: Z, c: string) => void> = {
   },
 
   Fire(Zc) {
-    const { g, t, p, a, x } = Zc;
+    const { g, t, p, a, x, y } = Zc;
     // the meteor: a textured lava sphere crashing in from the upper left, with a long flame tail
     const k = sm(0.08, 0.9, p);
     const sl = STRAIGHT ? 0 : 1;
-    const fx = x + (W / 2 - x) * 0.4 - (1 - k) * 380 * sl, fy = -140 + (H * 0.52 + 140) * k;
+    // in the player views it drops straight down and burns as a flat pit on the floor, not as a ball standing in the air
+    const gy = cl(y + 10, H * 0.42, H * 0.78);
+    const land = STRAIGHT ? sm(0.06, 0.58, p) : k;
+    const fx = x + (W / 2 - x) * 0.4 - (1 - k) * 380 * sl, fy = STRAIGHT ? -140 + (gy + 140) * land : -140 + (H * 0.52 + 140) * k;
     const r = 60 + k * 110;
+    const pit = STRAIGHT ? sm(0.55, 0.78, p) : 0;
+    const ball = a * (STRAIGHT ? 1 - sm(0.5, 0.62, p) : 1);
     for (let i = 0; i < 26; i++) {
       const tk = i / 26;
       const tx = fx - (190 * tk * (1 - k * 0.2) + 40 * tk) * sl, ty = fy - 300 * tk * (1 - k * 0.2) - 40 * tk;
-      glow(g, tx + Math.sin(t * 20 + i) * 8, ty, r * (1 - tk * 0.6), i % 2 ? "#ffb02e" : "#ff5a1a", "#7a1604", a * (0.55 - tk * 0.5));
+      glow(g, tx + Math.sin(t * 20 + i) * 8, ty, r * (1 - tk * 0.6), i % 2 ? "#ffb02e" : "#ff5a1a", "#7a1604", ball * (0.55 - tk * 0.5));
     }
-    texBall(g, fx, fy, r, "lava", t, a, "#ffd36a");
-    glow(g, fx, fy, r * 2.2, "#fff2b0", "#ff6a1a", a * 0.7);
+    if (ball > 0.02) {
+      texBall(g, fx, fy, r, "lava", t, ball, "#ffd36a");
+      glow(g, fx, fy, r * 2.2, "#fff2b0", "#ff6a1a", ball * 0.7);
+    }
+    if (pit > 0.01) {
+      // the pit: the same lava seen lying flat on the floor, with a bright rim and heat shimmer, flames licking up from it
+      const pr = 60 + pit * 80;
+      g.save();
+      g.translate(fx, gy);
+      g.scale(1, 0.3);
+      glow(g, 0, 0, pr * 1.7, "#ff8a1f", "#7a1604", a * pit * 0.6);
+      texBall(g, 0, 0, pr, "lava", t, a * pit, "#ffd36a");
+      g.globalCompositeOperation = "lighter";
+      g.globalAlpha = a * pit * 0.8;
+      g.strokeStyle = "#ffe27a";
+      g.lineWidth = 6;
+      g.beginPath();
+      g.arc(0, 0, pr * (1 + 0.04 * Math.sin(t * 9)), 0, TAU);
+      g.stroke();
+      g.restore();
+      for (let i = 0; i < 14; i++) {
+        const an = hs(i + 40) * TAU, d = Math.sqrt(hs(i + 50)) * pr * 0.9, ph = (t * (1.2 + hs(i + 60)) + hs(i)) % 1;
+        glow(g, fx + Math.cos(an) * d, gy + Math.sin(an) * d * 0.3 - ph * 70, 10 + hs(i + 70) * 10, i % 2 ? "#ffb02e" : "#fff2b0", "#ff5a1a", a * pit * (1 - ph) * 0.8);
+      }
+    }
     // heat rings off the sphere and a river of lava glowing on the ground below
     g.save(); g.globalCompositeOperation = "lighter";
-    for (let i = 0; i < 3; i++) { g.globalAlpha = a * 0.3 * (1 - i / 3); g.strokeStyle = "#ffb02e"; g.lineWidth = 3; g.beginPath(); g.ellipse(fx, fy, R(r * (1.3 + i * 0.35 + (t * 1.4) % 0.35)), R(r * (1.3 + i * 0.35) * 0.9), 0, 0, TAU); g.stroke(); }
+    for (let i = 0; i < 3; i++) { g.globalAlpha = ball * 0.3 * (1 - i / 3); g.strokeStyle = "#ffb02e"; g.lineWidth = 3; g.beginPath(); g.ellipse(fx, fy, R(r * (1.3 + i * 0.35 + (t * 1.4) % 0.35)), R(r * (1.3 + i * 0.35) * 0.9), 0, 0, TAU); g.stroke(); }
     g.restore();
     glow(g, W / 2, H * 0.92, 520 * k, "#ff8a1f", "#7a1604", a * 0.5);
     for (let i = 0; i < 64; i++) {

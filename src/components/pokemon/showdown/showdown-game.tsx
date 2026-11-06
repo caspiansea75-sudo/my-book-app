@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Gamepad2, Maximize2, RotateCw, Volume2, VolumeX, X } from "lucide-react";
 import { sfx } from "@/components/pokemon/arena-sfx";
-import { useT } from "@/components/pokemon/ui";
+import { Sprite, useT } from "@/components/pokemon/ui";
 import { ROSTER } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
 import { useMe } from "@/lib/use-me";
@@ -13,13 +13,12 @@ import "./showdown.css";
 
 type Mode = "cpu" | "local" | "online";
 type Role = "cpu" | "local" | "host" | "guest";
-type Cfg = { role: Role; a: string; b: string; stage: StageId; level: Level; seed: number; na: string; nb: string; net: SdNet | null; key: number };
+type Cfg = { role: Role; a: string; b: string; stage: StageId; level: Level; speed: number; seed: number; na: string; nb: string; net: SdNet | null; key: number };
 type Friend = { name: string; pick: string };
 
 const RANDOM = "random";
 const pickOf = (v: string) => (v === RANDOM ? FIGHTER_IDS[Math.floor(Math.random() * FIGHTER_IDS.length)]! : v);
 const TYPES = ["Normal", "Fire", "Water", "Electric", "Grass", "Ice", "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug", "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy"];
-const shot = (id: string, k: "dex" | "ani") => `/api/sprite?k=${k}&id=${encodeURIComponent(id)}`;
 
 /* ------------------------------------------------------------------ controls */
 
@@ -223,7 +222,7 @@ function Match({ cfg, onExit, onAgain, getRoot }: { cfg: Cfg; onExit: () => void
           for (const k of BUTTONS) pulse[k] = false;
         }
       } else {
-        acc += dt;
+        acc += dt * cfg.speed;
         let n = 0;
         while (acc >= 1 / 60 && n < 6) {
           acc -= 1 / 60; n++; ticks++;
@@ -352,6 +351,7 @@ export function ShowdownGame() {
   const [foe, setFoe] = useState<string>(RANDOM);
   const [aim, setAim] = useState<"me" | "foe">("me");
   const [level, setLevel] = useState<Level>("normal");
+  const [speed, setSpeed] = useState(1);
   const [stage, setStage] = useState<StageId>("stadium");
   const [q, setQ] = useState("");
   const [typeF, setTypeF] = useState("");
@@ -391,7 +391,7 @@ export function ShowdownGame() {
       else if (d.k === "bye") { setFriend(null); setLinked(false); setNote(t("হোস্ট বেরিয়ে গেছে।", "The host left.")); }
       else if (d.k === "start") {
         setStage(d.stage as StageId);
-        setCfg({ role: "guest", a: d.a, b: d.b, stage: d.stage as StageId, level: "normal", seed: d.seed, na: d.na, nb: d.nb, net, key: Date.now() });
+        setCfg({ role: "guest", a: d.a, b: d.b, stage: d.stage as StageId, level: "normal", speed: 1, seed: d.seed, na: d.na, nb: d.nb, net, key: Date.now() });
       }
     };
     net.handler = (d) => lobbyRef.current(d);
@@ -427,7 +427,7 @@ export function ShowdownGame() {
   const startSolo = () => {
     sfx.unlock();
     enterFs(rootRef.current);
-    setCfg({ role: mode === "cpu" ? "cpu" : "local", a: pickOf(mine), b: pickOf(foe), stage, level, seed: seed(), na: myName, nb: mode === "cpu" ? "CPU" : "P2", net: null, key: Date.now() });
+    setCfg({ role: mode === "cpu" ? "cpu" : "local", a: pickOf(mine), b: pickOf(foe), stage, level, speed, seed: seed(), na: myName, nb: mode === "cpu" ? "CPU" : "P2", net: null, key: Date.now() });
   };
   const startHost = useCallback((a?: string, b?: string) => {
     const net = netRef.current;
@@ -436,8 +436,8 @@ export function ShowdownGame() {
     enterFs(rootRef.current);
     const A = a ?? pickOf(mine), B = b ?? pickOf(friend.pick), s = seed();
     net.send({ k: "start", a: A, b: B, stage, seed: s, na: myName, nb: friend.name });
-    setCfg({ role: "host", a: A, b: B, stage, level: "normal", seed: s, na: myName, nb: friend.name, net, key: Date.now() });
-  }, [friend, mine, stage, myName]);
+    setCfg({ role: "host", a: A, b: B, stage, level: "normal", speed, seed: s, na: myName, nb: friend.name, net, key: Date.now() });
+  }, [friend, mine, stage, myName, speed]);
 
   const again = () => {
     if (!cfg) return;
@@ -466,7 +466,7 @@ export function ShowdownGame() {
       </div>
     );
   };
-  const big = (id: string) => (id === RANDOM ? <div className="sd-big" style={{ display: "grid", placeItems: "center", fontSize: "5rem", color: "var(--color-lamp)" }}>?</div> : <img className="sd-big" src={shot(id, "ani")} alt="" onError={(e) => { e.currentTarget.src = shot(id, "dex"); }} />);
+  const big = (id: string) => (id === RANDOM ? <div className="sd-big" style={{ display: "grid", placeItems: "center", fontSize: "5rem", color: "var(--color-lamp)" }}>?</div> : <Sprite info={{ id, num: fighterOf(id).num, types: fighterOf(id).types }} className="sd-big" />);
   const canFight = mode !== "online" || (role === "host" && linked);
 
   return (
@@ -526,7 +526,7 @@ export function ShowdownGame() {
         </button>
         {list.map((s) => (
           <button key={s.id} type="button" className={`sd-tile ${mine === s.id ? "me" : ""} ${mode !== "online" && foe === s.id ? "foe" : ""}`} onClick={() => setPick(s.id)} title={s.name}>
-            <img src={shot(s.id, "dex")} alt="" loading="lazy" />
+            <Sprite info={{ id: s.id, num: s.num, types: s.types }} still className="sd-timg" alt={s.name} />
             <span>{s.name}</span>
           </button>
         ))}
@@ -535,6 +535,12 @@ export function ShowdownGame() {
       <div className="sd-chips">
         <span className="sd-lab">{t("মঞ্চ", "Stage")}</span>
         {STAGES.map((s) => <button key={s.id} type="button" className={`sd-chip ${stage === s.id ? "on" : ""}`} onClick={() => setStage(s.id)} disabled={mode === "online" && role === "guest"}>{lang === "bn" ? s.bn : s.name}</button>)}
+      </div>
+      <div className="sd-chips">
+        <span className="sd-lab">{t("গতি", "Game speed")}</span>
+        {([[0.8, t("ধীর", "Slow")], [1, t("স্বাভাবিক", "Normal")], [1.2, t("দ্রুত", "Fast")]] as [number, string][]).map(([v, label]) => (
+          <button key={v} type="button" className={`sd-chip ${speed === v ? "on" : ""}`} onClick={() => setSpeed(v)} disabled={mode === "online" && role === "guest"}>{label}</button>
+        ))}
       </div>
       {mode === "cpu" ? (
         <div className="sd-chips">

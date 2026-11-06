@@ -91,3 +91,4 @@ body.sd-lock { overflow: hidden; }
 .sd-btn.atk { background: rgba(255,255,255,.18); }
 .sd-moves { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; }
 .sd-move { font-size: .64rem; padding: 0 .4rem; border-radius: .4rem; border: 1.5px solid; background: rgba(0,0,0,.25); }
+.sd-timg { width: 3.2rem; height: 3.2rem; object-fit: contain; }

@@ -6,7 +6,7 @@
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { decodeGif, frameAt, type GifFrames } from "@/components/pokemon/gif-frames";
 import { fighterOf, type Fighter, type StageId } from "./sd-data";
-import { TYPE_COLOR } from "@/lib/pokemon/shared";
+import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 import { ROUND_TIME, STAGE_W, windupOf, type Atk, type Ev, type PState, type Pl, type Proj, type World } from "./sd-engine";
 import { GROUND_Y, VH, VW, drawStage } from "./sd-stages";
 
@@ -42,7 +42,7 @@ export class SdRenderer {
   tags: [string, string] = ["", ""];
   lang: "bn" | "en" = "en";
   private sprites = new Map<string, Sprite>();
-  private portraits = new Map<string, HTMLImageElement>();
+  private portraits = new Map<string, HTMLImageElement | null>();
   private parts: Part[] = [];
   private pops: Pop[] = [];
   private banner: Banner | null = null;
@@ -96,9 +96,7 @@ export class SdRenderer {
     if (s) return s;
     const sp: Sprite = { gif: null, still: null, done: false };
     this.sprites.set(id, sp);
-    const still = new Image();
-    still.onload = () => { sp.still = still; };
-    still.src = `/api/sprite?k=dex&id=${encodeURIComponent(id)}`;
+    this.loadStill(id, (im) => { sp.still = im; });
     fetch(`/api/sprite?k=ani&id=${encodeURIComponent(id)}`)
       .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error("http"))))
       .then((b) => { sp.gif = decodeGif(b); sp.done = true; })
@@ -125,14 +123,25 @@ export class SdRenderer {
     this.txt(g, (this.lang === "bn" ? "পোকেমন তৈরি হচ্ছে" : "Getting the Pokémon ready") + dots, VW / 2, VH / 2, 34, "#ffffff", { align: "center", stroke: "rgba(0,0,0,.8)" });
   }
 
+  /** The still picture, trying the next address when one is missing: small picture, old-style picture, official artwork. */
+  private loadStill(id: string, set: (im: HTMLImageElement) => void) {
+    const chain = spriteChain({ id, num: fighterOf(id).num }, { still: true });
+    const next = (i: number) => {
+      if (i >= chain.length) return;
+      const im = new Image();
+      im.onload = () => set(im);
+      im.onerror = () => next(i + 1);
+      im.src = chain[i]!;
+    };
+    next(0);
+  }
+
   private portrait(id: string): HTMLImageElement | null {
-    let im = this.portraits.get(id);
-    if (!im) {
-      im = new Image();
-      im.src = `/api/sprite?k=dex&id=${encodeURIComponent(id)}`;
-      this.portraits.set(id, im);
+    if (!this.portraits.has(id)) {
+      this.portraits.set(id, null);
+      this.loadStill(id, (im) => this.portraits.set(id, im));
     }
-    return im.complete && im.naturalWidth > 0 ? im : null;
+    return this.portraits.get(id) ?? null;
   }
 
   /* --------------------------------------------------------------- events */
@@ -540,7 +549,7 @@ export class SdRenderer {
     const v = this.vis[p.slot];
     const sp = this.sprite(p.id);
     let el: CanvasImageSource | null = null, w0 = 0, h0 = 0;
-    if (sp.gif) { el = frameAt(sp.gif, this.clock * 1000).el; w0 = sp.gif.w; h0 = sp.gif.h; }
+    if (sp.gif) { el = frameAt(sp.gif, this.clock).el; w0 = sp.gif.w; h0 = sp.gif.h; }
     else if (sp.still && sp.still.naturalWidth) { el = sp.still; w0 = sp.still.naturalWidth; h0 = sp.still.naturalHeight; }
     const po = this.pose(w, p, f, v);
     const sc = (f.h / (h0 || 96)) * this.zoom;

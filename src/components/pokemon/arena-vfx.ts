@@ -51,9 +51,9 @@ const PAL: Record<string, Pal[]> = {
 /** "id:motif" or "id:motif:colourVariant (0-2)". Moves not listed fall back to a motif chosen from their kind and name. */
 const TABLE = `
 flamethrower:flame flamewheel:vortex firepunch:fist:1 flareblitz:flame:1 blazekick:kick fireblast:bomb willowisp:wisp heatwave:wave overheat:beam:1 eruption:rock sacredfire:wing:2 blastburn:bomb:1 fusionflare:orb:2 firespin:vortex:1
-waterpulse:orb surf:wave hydropump:beam aquatail:tail aquajet:drill waterfall:drop:1 scald:cloud:1 watershuriken:star:2 muddywater:wave:2 originpulse:vortex:1 waterspout:vortex whirlpool:vortex:1 hydrocannon:bomb bubblebeam:drop
+waterpulse:orb surf:wave hydropump:beam aquatail:tail aquajet:drill waterfall:drop:1 scald:cloud:1 watershuriken:star:2 muddywater:wave:2 originpulse:vortex:1 waterspout:vortex whirlpool:vortex:1 hydrocannon:beam:1 bubblebeam:drop
 razorleaf:leaf leafblade:blade:1 leafstorm:leaf:1 solarbeam:beam:2 energyball:orb:1 gigadrain:wisp:1 woodhammer:fist:2 seedbomb:bomb spore:cloud stunspore:cloud:1 sleeppowder:cloud:2 petaldance:leaf:2 frenzyplant:spike aromatherapy:star:1 synthesis:leaf:2
-thundershock:bolt thunderbolt:bolt:1 thunder:bolt:2 shockwave:wisp:1 chargebeam:beam nuzzle:star spark:star:1 thunderpunch:fist wildcharge:vortex volttackle:vortex:1 electroball:orb discharge:bolt:1 zapcannon:beam:1 fusionbolt:bolt:2 plasmafists:fist:2 boltstrike:bolt thunderwave:wave:1
+thundershock:bolt thunderbolt:bolt:1 thunder:bolt:2 shockwave:wisp:1 chargebeam:beam nuzzle:star spark:star:1 thunderpunch:fist wildcharge:bolt:2 volttackle:bolt:1 electroball:orb discharge:bolt:1 zapcannon:beam:1 fusionbolt:bolt:2 plasmafists:fist:2 boltstrike:bolt thunderwave:wave:1
 powdersnow:cloud iceshard:gem icebeam:beam glaciate:spike:1 iciclecrash:spike blizzard:cloud:1 icepunch:fist frostbreath:cloud:2 freezedry:beam:1
 aurasphere:orb:2 closecombat:fist:1 dynamicpunch:fist:1 crosschop:blade:2 drainpunch:fist:2 superpower:fist:1 sacredsword:blade:1 skyuppercut:kick:1 forcepalm:wave:1 machpunch:fist bulkup:star:1 brickbreak:fist:2 focusblast:bomb:2
 toxic:cloud sludgebomb:bomb venoshock:drop:2 poisonjab:drill acidspray:drop:1 sludgewave:wave gunkshot:bomb:2
@@ -63,7 +63,7 @@ psyshock:orb psybeam:beam futuresight:rune psychic:sonic extrasensory:sonic:1 ps
 bugbuzz:sonic:2 uturn:vortex:2 megahorn:drill:1 signalbeam:beam:1 lunge:claw:1 silverwind:wing:2 pinmissile:spike:2 xscissor:blade:2 quiverdance:star:2
 powergem:gem:1 rockblast:rock:1 headsmash:rock:2 ancientpower:rock:1 diamondstorm:gem rocktomb:rock stoneedge:gem:2 rockslide:rock accelerock:kick:2 meteormash:fist:1
 hex:wisp:1 poltergeist:rune:1 spectralthief:claw:2 shadowforce:vortex:1 astralbarrage:wisp:2 moongeistbeam:beam:1 shadowclaw:claw shadowball:orb shadowsneak:tail:2 phantomforce:vortex confuseray:wisp:2 shadowblast:beam
-dragonclaw:claw:1 dragontail:tail:1 spacialrend:blade:2 roaroftime:sonic:1 coreenforcer:beam:2 clangingscales:sonic:2 dragondance:vortex:2 dragonbreath:flame:1 eternabeam:beam:1 dragonrush:drill:1 dragonpulse:orb:1 dracometeor:bomb:1 outrage:vortex:1
+seismictoss:wave:1 dragonclaw:claw:1 dragontail:tail:1 spacialrend:blade:2 roaroftime:sonic:1 coreenforcer:beam:2 clangingscales:sonic:2 dragondance:vortex:2 dragonbreath:flame:1 eternabeam:beam:1 dragonrush:drill:1 dragonpulse:orb:1 dracometeor:bomb:1 outrage:vortex:1
 foulplay:claw:1 suckerpunch:fist:1 knockoff:fist:2 nightdaze:sonic:1 nastyplot:rune:1 pursuit:tail:1 crunch:claw:2 darkpulse:sonic darkvoid:vortex:1 nightslash:blade:1
 ironhead:kick:1 irontail:tail gyroball:vortex:2 doomdesire:rune:1 steelbeam:beam:1 steelwing:wing:1 behemothblade:blade bulletpunch:fist:1 flashcannon:orb:1 kingsshield:rune:2 irondefense:rune
 dazzlinggleam:star playrough:claw:2 drainingkiss:star:1 fleurcannon:beam:2 lightofruin:bomb:2 mistyexplosion:cloud:2 geomancy:star:2 fairywind:wing:2 moonlight:star moonblast:orb:1

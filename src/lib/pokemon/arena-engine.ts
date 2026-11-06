@@ -1435,8 +1435,10 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       break;
     case "dash": {
       const range = mv.range ?? 200;
-      f.dash = { t: 0, total: 0.2, dx, dy, dist: range, mv, hit: new Set() };
-      f.invuln = Math.max(f.invuln, 0.14);
+      // some rushes are longer than the usual flick: "Vanish and strike" must be seen to vanish, a dive to dive
+      const total = VANISH_DASH.has(mv.id) ? 0.5 : DIVE_DASH[mv.id] ? 0.32 : mv.id === "drillrun" ? 0.3 : 0.2;
+      f.dash = { t: 0, total, dx, dy, dist: range, mv, hit: new Set() };
+      f.invuln = Math.max(f.invuln, VANISH_DASH.has(mv.id) ? total + 0.05 : 0.14);
       break;
     }
     case "burrow": {
@@ -1780,6 +1782,10 @@ export function tryCast(S: State, f: Fighter, slot: number, input: Input | null 
 }
 
 /* ------------------------------------------------------- special movement */
+
+/** Rushes that vanish for the strike ("Vanish and strike") and those that fly: the height of the dive. */
+export const VANISH_DASH = new Set(["phantomforce", "shadowforce"]);
+export const DIVE_DASH: Record<string, number> = { bravebird: 40, skyattack: 46, dragonascent: 60 };
 
 const movDef = (f: Fighter): Mobility | null => (f.mov ? MOBILITY[f.mov.id] ?? null : null);
 /** Underground or out of this world: cannot be hit, cannot cast, walks through everything. */
@@ -2619,13 +2625,16 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
           f.dash = null;
         }
       } else {
+        // a flying dive rises and comes down
+        const lift = DIVE_DASH[f.dash.mv.id];
+        if (lift) f.air = Math.sin(Math.PI * Math.min(1, f.dash.t / f.dash.total)) * lift;
         for (const o of foesOf(S, f)) {
           if (!f.dash.hit.has(o.id) && len(o.x - f.x, o.y - f.y) <= f.r + o.r + 6) {
             f.dash.hit.add(o.id);
             strike(S, f, o, baseDamage(f, f.dash.mv), f.dash.mv.type, { kx: f.dash.dx, ky: f.dash.dy, kb: 330, status: f.dash.mv.status, mv: f.dash.mv.id });
           }
         }
-        if (f.dash.t >= f.dash.total) f.dash = null;
+        if (f.dash.t >= f.dash.total) { if (DIVE_DASH[f.dash.mv.id]) f.air = 0; f.dash = null; }
       }
     }
     moveFighter(S, f, dt);

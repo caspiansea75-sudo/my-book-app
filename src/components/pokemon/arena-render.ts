@@ -13,7 +13,7 @@ import { drawAmbient } from "./arena-scenery";
 import { Scars } from "./arena-scars";
 import { CROWD_FRAMES, crowdFrames } from "./arena-crowd";
 import { drawIceSheet, drawOcean } from "./arena-water";
-import { ARENA, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
+import { ARENA, DIVE_DASH, VANISH_DASH, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
 import { drawHazard } from "@/components/pokemon/arena-hazard";
 import { organic, sigil, smooth as smoothPath } from "@/components/pokemon/arena-shape";
@@ -22,7 +22,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
-type Parti = { baked?: boolean; ox?: number; oy?: number; oy2?: number; ax?: number; ay?: number; /** height above the floor (the player views lift it on screen) */ z?: number; vz?: number; gz?: number; kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
+type Parti = { baked?: boolean; /** comes down from the sky in the player views: straight down onto its spot, standing upright */ sky?: boolean; ox?: number; oy?: number; oy2?: number; ax?: number; ay?: number; /** height above the floor (the player views lift it on screen) */ z?: number; vz?: number; gz?: number; kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
 /** Lob moves that come down as a glowing orb (their own element, with a tail) before they land. */
@@ -67,6 +67,10 @@ const defaultSources: SpriteSource = (id, num) => {
 const PAD = { l: 420, r: 420, t: 300, b: 300 };
 /** The screen is always laid out as these units (the arena itself is bigger now: the picture is scaled so zoom 1 shows all of it). */
 const SCR = { W: 960, H: 600, CX: 480, CY: 300 };
+/** The kinds of effect that are big, soft and bright: in the player views they are thinned out when they fill the screen. */
+/** Kinds of piece that can fall out of the sky in the player views. */
+const SKY3 = new Set<string>(["streak", "plank", "shard", "flame", "dot", "leaf", "flake", "spark", "star", "smoke", "puff"]);
+const FILL3 = new Set<string>(["splat", "glow", "cross", "dome", "puff", "smoke", "plume", "star", "gring", "shard"]);
 const ARENA_FIT = SCR.W / ARENA.W;
 /** Where the sun is, as a direction in the arena (an angle): it lights the sprites, throws the shadows and shows in the sky of the player views. */
 const SUN_AZ = -2.3;
@@ -226,6 +230,7 @@ export class ArenaRenderer {
   private hist = new Map<number, { x: number; y: number }[]>();
   /** Special movement: where each fighter last left a mark on the floor. */
   private movLast = new Map<number, { x: number; y: number }>();
+  private flashed = new Set<number>();
   private debris: { x: number; y: number; seed: number; t: number }[] = [];
   /** damage that stays on the floor for the whole match */
   private scars = new Scars();
@@ -258,6 +263,8 @@ export class ArenaRenderer {
   /** How fast the player is running, 0..1, eased: the camera drifts back and the view widens a little as it runs. */
   private spd = 0;
   /** How round the shadow under the Pokémon being drawn should be (set by the floor-perspective of its spot). */
+  /** Screen scale of the last thing placed for a player view (pixels per arena unit). */
+  private sc3 = 1;
   private gkNow = 1;
   private horCol = "#a9d6c2";
   private c3: Cam3 = { px: ARENA.CX, py: ARENA.CY, H: 140, phi: 0.37, cp: 0.93, sp: 0.36, fl: 520, hz: 108, fx: 0, fy: -1, rx: 1, ry: 0 };
@@ -388,6 +395,7 @@ export class ArenaRenderer {
     const c = this.c3;
     const k = this.scale;
     const sc = q.sc;
+    this.sc3 = sc;
     // how squashed the floor looks at this distance
     const sf = c.H / q.depth;
     this.gkNow = Math.max(0.4, Math.min(2.4, sf * 2.3));
@@ -1561,6 +1569,7 @@ export class ArenaRenderer {
       if (h.length > 34) h.pop();
       this.hist.set(f.id, h);
       this.movFx(f);
+      this.dashFx(f);
     }
     for (const sc of this.scorch) sc.t -= dtReal;
     this.scorch = this.scorch.filter((sc) => sc.t > 0);
@@ -1718,7 +1727,7 @@ export class ArenaRenderer {
         } else if (md.kind === "blink" || md.kind === "stalk") ghost(mv.ox, mv.oy, 0.55 * (1 - k));
         else if (md.kind === "vanish" && k >= 0.5) ghost(mv.tx, mv.ty, (k - 0.5) * 2, 0.5);
       }
-      things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => { const va = md?.kind === "vanish" && mv ? this.vanishAlpha(mv.t / mv.total) : 1; if (va <= 0.01) return; g.save(); g.globalAlpha *= va; this.drawFighter(g, f, S, f === you); g.restore(); }, "f") });
+      things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => { const va = md?.kind === "vanish" && mv ? this.vanishAlpha(mv.t / mv.total) : this.dashAlpha(f); if (va <= 0.01) return; g.save(); g.globalAlpha *= va; this.drawFighter(g, f, S, f === you); g.restore(); }, "f") });
     }
     for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     // standing things (spikes, rocks, whirls) take their place among the fighters
@@ -1821,6 +1830,15 @@ export class ArenaRenderer {
           p.ax = p.x;
           p.ay = p.y;
         }
+        // Something that FALLS fast (a strike, a meteor, a shower of stones) must come straight down out of the sky onto its spot. Left as
+        // it was, it slid in from the side at a slant (or, for a streak, ran along the floor towards the camera), so its sideways motion
+        // is dropped and it is drawn upright.
+        if (this.v3 && p.vy > 0 && p.g >= 0 && SKY3.has(p.kind) && p.ax !== undefined && p.ay !== undefined && p.ay - p.y >= 160 && Math.abs(p.ax - p.x) <= (p.ay - p.y) * 1.2) {
+          p.x = p.ax;
+          p.ox = p.ax;
+          p.vx = 0;
+          p.sky = true;
+        }
       }
       if (p.z !== undefined) {
         p.z += (p.vz ?? 0) * dt;
@@ -1841,13 +1859,15 @@ export class ArenaRenderer {
         p.x = p.x2 + Math.cos(p.rot ?? 0) * p.weight;
         p.y = p.y2 + Math.sin(p.rot ?? 0) * p.weight;
       }
-      const a = Math.max(0, p.life / p.max);
+      let a = Math.max(0, p.life / p.max);
       if (this.clean && p.kind === "text") continue;
       if (T) {
         const q = this.proj(p.x, p.y);
         const sx = q.Z * q.f;
-        const flat = p.kind === "gring" || p.kind === "crack";
-        const mixed = p.kind === "streak" || p.kind === "arc" || p.kind === "ring";
+        // in the player views a big blast on the ground (the splat and glow of a nova or a landing blow) lies on the floor, not standing up
+        const bigFlat = this.v3 && ((p.kind === "splat" && p.size >= 90) || (p.kind === "glow" && p.size + Math.max(0, p.grow) * Math.max(0, p.life) >= 120));
+        const flat = p.kind === "gring" || p.kind === "crack" || bigFlat;
+        const mixed = !p.sky && (p.kind === "streak" || p.kind === "arc" || p.kind === "ring");
         if (this.v3) {
           // flat things lie where they are; everything else is upright and moves on the screen plane around its spawn spot
           let ax = p.x;
@@ -1857,6 +1877,13 @@ export class ArenaRenderer {
             else { ax = p.ax ?? p.ox ?? p.x; ay = p.ay ?? p.oy ?? p.y; }
           }
           if (!this.place3(g, ax, ay, flat ? "fl" : mixed ? "mix" : "bb", flat ? 0 : (p.z ?? 0))) continue; // behind the camera
+          // seen from behind the caster a big blast sits right in front of the lens and would white out the whole picture: the larger it looks on
+          // screen, the more see-through it gets, so the fighters and the rest of the move still show through
+          if (FILL3.has(p.kind)) {
+            const apparent = Math.max(0, p.size) * this.sc3;
+            const lim = SCR.H * 0.3;
+            if (apparent > lim) a *= Math.max(0.3, lim / apparent);
+          }
         } else {
           const q = this.proj(p.x, p.y);
           const sx = q.Z * q.f;
@@ -5493,6 +5520,44 @@ export class ArenaRenderer {
     return k >= 0.5 ? 0 : Math.max(0, 1 - k / 0.4);
   }
 
+  /** "Vanish and strike": how visible a Pokémon is during Phantom Force / Shadow Force. */
+  private dashAlpha(f: Fighter) {
+    const d = f.dash;
+    if (!d || !VANISH_DASH.has(d.mv.id)) return 1;
+    const k = Math.min(1, d.t / d.total);
+    return k < 0.18 ? 1 - (k / 0.18) * 0.94 : k > 0.78 ? 0.06 + ((k - 0.78) / 0.22) * 0.94 : 0.06;
+  }
+
+  /** What the description of a rush promises: vanishing smoke, haunted objects, a drill's spiral, the wind of a dive. */
+  private dashFx(f: Fighter) {
+    const d = f.dash;
+    if (!d || !f.alive || d.under) return;
+    const id = d.mv.id, k = Math.min(1, d.t / d.total);
+    const P = (o: Partial<Parti> & { kind: Parti["kind"]; color: string }) => this.parts.push({ x: f.x, y: f.y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: 4, grow: 0, ...o });
+    const ang = Math.atan2(d.dy, d.dx);
+    if (VANISH_DASH.has(id)) {
+      const c = id === "shadowforce" ? "#2a1f45" : "#a98bd6";
+      for (let i = 0; i < 2; i++) P({ kind: "smoke", x: f.x + rnd(-14, 14), y: f.y + rnd(-14, 8), vx: rnd(-25, 25), vy: rnd(-60, -10), life: rnd(0.5, 0.9), max: 0.9, size: rnd(8, 15), grow: 16, color: Math.random() < 0.5 ? c : "#e6d8ff" });
+      if (k < 0.06 || (k > 0.93 && !this.flashed.has(f.id))) { this.ring(f.x, f.y, "#c8a8ff", k < 0.5 ? 70 : 110, 0.4); if (k > 0.5) this.flashed.add(f.id); }
+      if (k < 0.5) this.flashed.delete(f.id);
+    } else if (id === "poltergeist") {
+      // things from the room fly in a ring round the Pokémon and are flung along with it
+      for (let i = 0; i < 2; i++) {
+        const a = this.t * 9 + i * 3.14;
+        P({ kind: Math.random() < 0.5 ? "leaf" : "dot", x: f.x + Math.cos(a) * 34, y: f.y + Math.sin(a) * 20, vx: Math.cos(ang) * 120 + rnd(-30, 30), vy: Math.sin(ang) * 120 + rnd(-30, 30), life: rnd(0.4, 0.8), max: 0.8, size: rnd(4, 7), rot: rnd(0, 6), vr: rnd(-14, 14), color: Math.random() < 0.5 ? "#9a6fe0" : "#5b4a78" });
+      }
+    } else if (id === "drillrun") {
+      // a drill: points of dust running round in a spiral
+      for (let i = 0; i < 3; i++) {
+        const a = this.t * 28 + i * 2.1;
+        P({ kind: "dot", x: f.x + Math.cos(a) * 22 * (0.4 + k), y: f.y + Math.sin(a) * 12 * (0.4 + k), vx: -Math.cos(ang) * 60, vy: -Math.sin(ang) * 60, life: 0.35, max: 0.35, size: rnd(2, 3.6), color: Math.random() < 0.5 ? "#e9d9b0" : "#ffffff" });
+      }
+    } else if (DIVE_DASH[id]) {
+      for (let i = 0; i < 3; i++) P({ kind: "smoke", x: f.x + rnd(-10, 10), y: f.y + rnd(-6, 6), vx: -Math.cos(ang) * 120 + rnd(-30, 30), vy: -Math.sin(ang) * 120 + rnd(-30, 30), life: rnd(0.25, 0.5), max: 0.5, size: rnd(6, 11), grow: 16, color: id === "skyattack" ? "#fff2b0" : id === "dragonascent" ? "#b9a8ff" : "#e6f0ff" });
+      if (id === "skyattack") P({ kind: "star", vx: rnd(-40, 40), vy: rnd(-40, 40), life: 0.5, max: 0.5, size: rnd(4, 7), color: "#fff6c8" });
+    }
+  }
+
   /** A faded copy of a Pokémon somewhere else: speed trails, the spot a blink left, the place a vanished one comes back to. */
   private drawGhost(g: CanvasRenderingContext2D, f: Fighter, S: State, x: number, y: number, a: number) {
     if (a <= 0.01) return;
@@ -6042,9 +6107,11 @@ export class ArenaRenderer {
       };
       // Turning round in the player views: it does not flatten and flip. Facing us or away from us it looks much the same from both
       // sides, so the picture simply blends into its mirror image as it passes through that, the way a real turn changes the view.
-      const lw = clamp(0.5 - 0.5 * clamp(cf / 0.55, -1, 1), 0, 1); // how much it faces left
-      const dom = lw >= 0.5 ? 1 : -1;
-      const minor = 1 - Math.max(lw, 1 - lw);
+      // It must settle on ONE side: while it faces us (or away) the two sides are almost the same picture, but not quite, and blending both
+      // all the time showed a ghost twin beside it. So the side is chosen with a margin (faceLeft), and the old side only fades out for the
+      // moment the turn takes (`fd` eases from one side to the other in about a tenth of a second).
+      const dom = (ps.fd ?? fdTarget) >= 0 ? 1 : -1;
+      const minor = Math.max(0, (1 - Math.abs(ps.fd ?? fdTarget)) / 2);
       const drawMain = (gg: CanvasRenderingContext2D) => {
         if (!this.v3) return view(gg, faceN, 1);
         view(gg, dom, 1);
