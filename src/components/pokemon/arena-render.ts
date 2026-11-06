@@ -2955,7 +2955,7 @@ export class ArenaRenderer {
               g.lineWidth = 6;
               g.beginPath();
               g.moveTo(mx, my);
-              g.lineTo(mx - 10, my - 46);
+              g.lineTo(mx - (this.v3 ? 0 : 10), my - 46);
               g.stroke();
               g.restore();
               if ((z.mv.fx ?? z.mv.id) === "dracometeor") {
@@ -2963,14 +2963,14 @@ export class ArenaRenderer {
                 const rr = 10 + (i % 2) * 4;
                 g.save();
                 g.globalCompositeOperation = "lighter";
-                const tg = g.createLinearGradient(mx, my, mx - 18, my - 90);
+                const tg = g.createLinearGradient(mx, my, mx - (this.v3 ? 0 : 18), my - 90);
                 tg.addColorStop(0, "rgba(255,170,70,.9)");
                 tg.addColorStop(0.5, "rgba(150,90,255,.55)");
                 tg.addColorStop(1, "rgba(120,80,255,0)");
                 g.strokeStyle = tg;
                 g.lineWidth = rr * 1.5;
                 g.lineCap = "round";
-                g.beginPath(); g.moveTo(mx, my); g.lineTo(mx - 18, my - 90); g.stroke();
+                g.beginPath(); g.moveTo(mx, my); g.lineTo(mx - (this.v3 ? 0 : 18), my - 90); g.stroke();
                 const hg = g.createRadialGradient(mx, my, 0, mx, my, rr * 1.8);
                 hg.addColorStop(0, "#ffffff"); hg.addColorStop(0.4, "#ffb04d"); hg.addColorStop(1, "rgba(255,80,0,0)");
                 g.fillStyle = hg; g.beginPath(); g.arc(mx, my, rr * 1.8, 0, Math.PI * 2); g.fill();
@@ -4540,6 +4540,11 @@ export class ArenaRenderer {
   }
 
   /** The big blast falling: a hot glow around the flaming symbol, a tail of fire, smoke and sparks, and embers gathering around the target ring. */
+  /** Where a piece thrown off by something falling out of the sky starts. Its height is not a place on the floor: in the player views it is
+   *  put at the spot it is falling onto and lifted by the height, so it comes down with the thing and not in from the far side. */
+  private aloft(z: { y: number }, sy: number, off: number): { y: number; z?: number } {
+    return this.v3 ? { y: z.y, z: Math.max(0, z.y - sy - off) } : { y: sy + off };
+  }
   private blastFall(g: CanvasRenderingContext2D, z: State["zones"][number], prog: number, sy: number, sz: number) {
     g.save();
     g.globalCompositeOperation = "lighter";
@@ -4566,9 +4571,9 @@ export class ArenaRenderer {
     g.ellipse(z.x, z.y, z.r * (1 - prog * 0.18), z.r * 0.7 * (1 - prog * 0.18), 0, 0, Math.PI * 2);
     g.stroke();
     g.restore();
-    for (let i = 0; i < 4; i++) this.parts.push({ kind: "flame", x: z.x + rnd(-sz * 0.8, sz * 0.8), y: sy + rnd(-sz * 0.3, sz * 0.9), vx: rnd(-30, 30), vy: rnd(-150, -50), g: -20, life: rnd(0.35, 0.65), max: 0.65, size: rnd(7, 13), grow: -6, color: i % 2 ? "#ff7a1a" : "#ffb02e", seed: Math.floor(rnd(0, 99)) });
-    for (let i = 0; i < 3; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "spark", x: z.x + rnd(-sz * 0.6, sz * 0.6), y: sy + rnd(-sz * 0.3, sz * 0.6), vx: Math.cos(a) * 90, vy: Math.sin(a) * 60 - 110, g: 160, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.5, 3), grow: 0, color: i % 2 ? "#ffe08a" : "#ff8a3d" }); }
-    if (Math.random() < 0.55) this.parts.push({ kind: "smoke", x: z.x + rnd(-sz * 0.5, sz * 0.5), y: sy - sz * 0.3, vx: rnd(-20, 20), vy: -50, g: 0, life: 0.9, max: 0.9, size: rnd(9, 15), grow: 22, color: "#3c2a24" });
+    for (let i = 0; i < 4; i++) this.parts.push({ kind: "flame", x: z.x + rnd(-sz * 0.8, sz * 0.8), ...this.aloft(z, sy, rnd(-sz * 0.3, sz * 0.9)), vx: rnd(-30, 30), vy: rnd(-150, -50), g: -20, life: rnd(0.35, 0.65), max: 0.65, size: rnd(7, 13), grow: -6, color: i % 2 ? "#ff7a1a" : "#ffb02e", seed: Math.floor(rnd(0, 99)) });
+    for (let i = 0; i < 3; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "spark", x: z.x + rnd(-sz * 0.6, sz * 0.6), ...this.aloft(z, sy, rnd(-sz * 0.3, sz * 0.6)), vx: Math.cos(a) * 90, vy: Math.sin(a) * 60 - 110, g: 160, life: rnd(0.4, 0.8), max: 0.8, size: rnd(1.5, 3), grow: 0, color: i % 2 ? "#ffe08a" : "#ff8a3d" }); }
+    if (Math.random() < 0.55) this.parts.push({ kind: "smoke", x: z.x + rnd(-sz * 0.5, sz * 0.5), ...this.aloft(z, sy, -sz * 0.3), vx: rnd(-20, 20), vy: -50, g: 0, life: 0.9, max: 0.9, size: rnd(9, 15), grow: 22, color: "#3c2a24" });
     if (prog > 0.25) for (let i = 0; i < 2; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "flame", x: z.x + Math.cos(a) * z.r, y: z.y + Math.sin(a) * z.r * 0.7, vx: -Math.cos(a) * 26, vy: rnd(-90, -40), g: 0, life: 0.5, max: 0.5, size: rnd(4, 7), grow: -4, color: "#ff8a2a", seed: Math.floor(rnd(0, 99)) }); }
   }
 
@@ -5970,7 +5975,7 @@ export class ArenaRenderer {
         this.body(g, im, usedId, f.x + Math.cos(an) * f.r * 2.3, f.y + Math.sin(an) * f.r * 1.1 - f.r * 0.6 - lift + bob, size * 0.92, faceN, sx, sy, rot, "#9dffb0", 0.3 * fade);
       }
     }
-    if (im && !under && f.loco !== "slither" && ((f.dash && !f.dash.under) || rolling)) {
+    if (im && !under && f.loco !== "slither" && ((f.dash && !f.dash.under) || (rolling && !this.v3))) {
       for (const idx of [3, 6, 9]) {
         const h = hist[idx];
         if (h) this.body(g, im, usedId, h.x, h.y - f.r * 0.6 - lift, size, faceN, sx, sy, rot + spin, c, 0.34 - idx * 0.02);
@@ -6111,28 +6116,20 @@ export class ArenaRenderer {
         if (ps.fade && ps.fadeIm && ps.fadeIm !== imMain) this.body(gg, ps.fadeIm, usedId, px, py, size, dirv, sxx, syy, rotMain, undefined, ps.fade * am, wk, rigA);
         this.body(gg, imMain, usedId, px, py, size, dirv, sxx, syy, rotMain, undefined, (ps.fade ? 1 - ps.fade * 0.6 : 1) * am, wk, rigA);
       };
-      // Turning round in the player views: it does not flatten and flip. Facing us or away from us it looks much the same from both
-      // sides, so the picture simply blends into its mirror image as it passes through that, the way a real turn changes the view.
-      // It must settle on ONE side: while it faces us (or away) the two sides are almost the same picture, but not quite, and blending both
-      // all the time showed a ghost twin beside it. So the side is chosen with a margin (faceLeft), and the old side only fades out for the
-      // moment the turn takes (`fd` eases from one side to the other in about a tenth of a second).
-      const dom = (ps.fd ?? fdTarget) >= 0 ? 1 : -1;
-      const minor = Math.max(0, (1 - Math.abs(ps.fd ?? fdTarget)) / 2);
-      const drawMain = (gg: CanvasRenderingContext2D) => {
-        if (!this.v3) return view(gg, faceN, 1);
-        view(gg, dom, 1);
-        if (minor > 0.04) view(gg, -dom, minor);
-      };
+      // Turning round (in every view): a single picture that narrows to its edge and widens on the other side. It used to blend with its
+      // mirror image in the player views, and a Pokémon that keeps changing direction (walking in a circle) then always showed a faint
+      // second copy, an afterimage. One picture, the side chosen with a margin (faceLeft), eased over about a tenth of a second.
+      const drawMain = (gg: CanvasRenderingContext2D) => view(gg, faceN, 1);
       // in the player views the sun lights the picture: bright on the side that faces it, darker on the other, darker towards the feet.
       // Seen from the side it also has a little thickness, like a figure cut out of card, which swings round as it turns.
       if (this.v3 && this.q > 0.7) {
         const side = Math.abs(cf);
-        const T = this.q > 0.88 && side > 0.35 ? clamp(size * 0.05, 2.5, 6) * side : 0;
+        const T = this.q > 0.88 && side > 0.35 ? clamp(size * 0.05, 2.5, 6) * side * Math.min(1, Math.abs(faceN)) ** 3 : 0;
         this.shaded(g, px, py, size * 1.1 + 34, drawMain, T ? [-Math.sign(cf) * T, T * 0.25] : undefined);
       } else drawMain(g);
-      if (f.flash > 0) this.body(g, im, usedId, px, py, size, this.v3 ? dom : faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
-      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, this.v3 ? dom : faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
-      else if (f.tera) this.body(g, im, usedId, px, py, size, this.v3 ? dom : faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
+      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
+      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
+      else if (f.tera) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
       // held by a mind attack: a glowing outline all round
       if (ps.aura) {
         const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);

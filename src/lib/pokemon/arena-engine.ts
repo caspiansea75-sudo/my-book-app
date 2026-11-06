@@ -7,8 +7,8 @@ import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS,
 import { typeMult } from "@/lib/pokemon/shared";
 import { MOBILITY, mobilityOf, type Mobility } from "@/lib/pokemon/arena-mobility";
 
-/** The arena is this many times the size the first one was (960 x 600): more room to run, circle and dodge. */
-const K = 1.5;
+/** The arena is this many times the size the first one was (960 x 600): more room to run, circle and dodge. (1.5 before; 2 now.) */
+const K = 2;
 export const W = 960 * K;
 export const H = 600 * K;
 const MARGIN = 46;

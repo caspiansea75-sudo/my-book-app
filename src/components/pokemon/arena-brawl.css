@@ -24,6 +24,20 @@
 .ab-tools { position: absolute; right: 10px; top: 10px; display: flex; gap: 5px; pointer-events: auto; }
 .ab-ic { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.16); background: rgba(8, 12, 22, 0.72); color: #fff; font-size: 15px; cursor: pointer; }
 .ab-ic:hover { background: rgba(40, 52, 80, 0.9); }
+.ab-ic.off { opacity: 0.6; }
+
+/* ----- music: the button sits with the other tools; its panel opens under the tool row */
+.ab-music { display: contents; }
+.ab-music-pop { position: absolute; top: calc(100% + 6px); right: 0; width: min(240px, 78vw); padding: 10px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(8, 12, 22, 0.94); color: #fff; display: flex; flex-direction: column; gap: 9px; z-index: 30; font-size: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
+.ab-music-row { display: flex; align-items: center; gap: 6px; }
+.ab-music-sw { flex: 1; height: 32px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(60, 130, 255, 0.35); color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; }
+.ab-music-sw[aria-pressed="false"] { background: rgba(255, 255, 255, 0.08); opacity: 0.8; }
+.ab-music-x, .ab-music-step { width: 32px; height: 32px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #fff; font-size: 16px; cursor: pointer; }
+.ab-music-vol { display: grid; grid-template-columns: auto 1fr 28px; gap: 8px; align-items: center; }
+.ab-music-vol input { width: 100%; accent-color: #5aa0ff; height: 22px; }
+.ab-music-vol b { text-align: right; font-variant-numeric: tabular-nums; }
+.ab-music-name { flex: 1; text-align: center; font-weight: 700; display: flex; flex-direction: column; line-height: 1.15; }
+.ab-music-name small { opacity: 0.65; font-weight: 500; font-size: 10px; }
 
 /* ----- controls: joystick bottom-left, move pad bottom-right */
 .ab-ctl { position: absolute; inset: 0; pointer-events: none; --u: clamp(44px, 12.5cqh, 80px); }

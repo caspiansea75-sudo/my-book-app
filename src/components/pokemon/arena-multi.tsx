@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/members/avatar";
 import { ArenaRenderer, type View } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
+import { MusicControl } from "@/components/pokemon/arena-music-control";
 import { aimHandlers, currentAim } from "@/components/pokemon/aim-pad";
 import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
@@ -1209,6 +1210,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label="Zoom in">+</button>
               <button type="button" className="ab-ic" onClick={() => { if (fs) leaveFs(); else { setFs(true); void goNative(); } }} aria-label="Full screen">⛶</button>
+              <MusicControl t={t} />
               <button type="button" className="ab-ic" onClick={() => { const v = !sfx.isMuted(); sfx.setMuted(v); }} aria-label="Sound">🔊</button>
             </div>
             <div className="ab-ctl">

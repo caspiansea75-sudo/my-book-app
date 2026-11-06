@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2, Pause, Play, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { ArenaRenderer, type View } from "@/components/pokemon/arena-render";
 import { sfx } from "@/components/pokemon/arena-sfx";
+import { MusicControl } from "@/components/pokemon/arena-music-control";
 import { aimHandlers, currentAim, type AimCtl } from "@/components/pokemon/aim-pad";
 import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
@@ -1002,6 +1003,7 @@ export function ArenaBrawl() {
               <button type="button" className="ab-ic wide" onClick={() => setZoom(ZOOM0)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label={t("বড় করুন", "Zoom in")}><ZoomIn size={16} /></button>
               <button type="button" className="ab-ic" onClick={() => (fs ? exitFs() : void enterFs(false))} aria-label={fs ? t("ফুল স্ক্রিন থেকে বের হন", "Exit full screen") : t("ফুল স্ক্রিন", "Full screen")}>{fs ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+              <MusicControl t={t} />
               <button type="button" className="ab-ic" onClick={() => { const v = !sfx.isMuted(); sfx.setMuted(v); setMuted(v); }} aria-label={t("শব্দ", "Sound")}>{muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button>
               <button type="button" className="ab-ic" onClick={() => setPausedBoth(!paused)} aria-label={t("বিরতি", "Pause")}>{paused ? <Play size={16} /> : <Pause size={16} />}</button>
             </div>
