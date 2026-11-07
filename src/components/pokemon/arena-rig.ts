@@ -27,9 +27,13 @@ export type Persona = {
   phase: number;
   /** breathing / flicker while idle */
   breathe: number;
+  /** a four-legged walker: its legs step in a travelling wave from the hind legs to the front legs, not as one left foot and one right foot */
+  quad?: boolean;
 };
 
 const cache = new Map<string, Persona>();
+/** Species that walk on four legs (the body plan is not stored in the art). */
+const QUADS = new Set(("growlithe arcanine ponyta rapidash rhyhorn rhydon rhyperior tauros miltank entei raikou suicune eevee vaporeon jolteon flareon espeon umbreon leafeon glaceon sylveon vulpix ninetales alolanninetales persian meowth growlithehisui arcaninehisui houndour houndoom poochyena mightyena zigzagoon linoone lillipup herdier stoutland shinx luxio luxray blitzle zebstrika mudbray mudsdale torterra grotle turtwig bastiodon shieldon cranidos rampardos bidoof bibarel skiddo gogoat litleo pyroar furfrou absol rockruff lycanroc lycanrocmidday lycanrocmidnight lycanrocdusk electrike manectric glameow purugly camerupt numel donphan phanpy swinub piloswine mamoswine girafarig stantler wyrdeer sawsbuck deerling aron lairon aggron golem graveler tyrantrum aurorus wooloo dubwool yamper boltund stoutland snubbull granbull mareep flaaffy ampharos sentret furret raticate rattata rattatalola bouffalant").split(" "));
 const hashId = (s: string) => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973; return h / 9973; };
 
 /** Personality by type, size and name. Nothing is random: the same species always moves the same way. */
@@ -57,6 +61,7 @@ export function personaOf(id: string, types: string[], size: number, loco: strin
   if (loco === "slither") { p.wave = 1.1; p.rate = 0.9 + h * 0.3; }
   if (loco === "float") { p.sway += 0.3; p.thump = 0; }
   if (loco === "surf") { p.wave = 0.7; p.thump = 0; }
+  if (loco !== "fly" && loco !== "slither" && loco !== "float" && loco !== "surf" && QUADS.has(id)) p.quad = true;
   cache.set(key, p);
   return p;
 }
@@ -189,7 +194,8 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
     } else slice(g, src, sw, sh, X0, Y0, w, h, 0, 0, sw, waist, 0, bobTop, 0, wk ? OV : 0);
     if (wk && waist < sh) {
       const R = o.q > 0.7 ? 7 : o.q > 0.45 ? 5 : 3;
-      const C = o.q > 0.7 ? 14 : o.q > 0.45 ? 10 : 6;
+      const quad = !!p.quad;
+      const C = quad ? (o.q > 0.7 ? 24 : o.q > 0.45 ? 16 : 10) : o.q > 0.7 ? 14 : o.q > 0.45 ? 10 : 6;
       // the left foot and the right foot step in turn
       const lift: number[] = [];
       const swing: number[] = [];
@@ -208,8 +214,15 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
           const sx0 = Math.floor((c * sw) / C);
           const sx1 = c === C - 1 ? sw : Math.floor(((c + 1) * sw) / C);
           const wR = smooth(0.3, 0.7, (c + 0.5) / C); // 0 left foot .. 1 right foot, blended in the middle
-          const footDy = mix(-lift[0]! + bobTop * 0.4, -lift[1]! + bobTop * 0.4, wR);
-          const footDx = mix(swing[0]!, swing[1]!, wR);
+          let footDy = mix(-lift[0]! + bobTop * 0.4, -lift[1]! + bobTop * 0.4, wR);
+          let footDx = mix(swing[0]!, swing[1]!, wR);
+          if (quad) {
+            // four legs: the step travels along the body (hind legs first, then the front ones), so neighbouring legs are never in step
+            // and each foot lifts and plants smoothly; the stride is shorter than a biped's
+            const sn = Math.sin(wk.p + ((c + 0.5) / C) * Math.PI * 1.5);
+            footDy = -Math.pow(Math.max(0, sn), 1.25) * wk.a * size * 0.95 + bobTop * 0.4;
+            footDx = sn * wk.a * size * 0.3;
+          }
           slice(g, src, sw, sh, X0, Y0, w, h, sx0, sy0, sx1 - sx0, sy1 - sy0, footDx * ramp, mix(bobTop, footDy, ramp), OV, r === R - 1 ? 0 : OV);
         }
       }

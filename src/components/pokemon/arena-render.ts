@@ -197,6 +197,8 @@ export class ArenaRenderer {
     fadeIm?: Pic;
     /** eased ground speed, so starting and stopping blend instead of snapping between standing and walking */
     sm?: number;
+    /** 1 -> 0 over a fifth of a second after it turns round: drives the little squash */
+    tp?: number;
     lastIm?: Pic;
   }>();
   private dtr = 0;
@@ -1420,7 +1422,7 @@ export class ArenaRenderer {
         for (let i = 0; i < 5; i++) this.parts.push({ kind: "puff", x: x + rnd(-10, 10), y: y - i * 12, vx: rnd(-14, 14), vy: -70 - i * 18, g: 0, life: 0.8, max: 0.8, size: 14 + i * 3, grow: 14, color: i % 2 ? "#e63a1e" : "#ff6a2a", edge: "#7a1408", seed: 10 + i });
         break;
       case "thunder":
-        this.parts.push({ kind: "bolt", x: x + rnd(-50, 50), y: -60, vx: 0, vy: 0, g: 0, life: 0.32, max: 0.32, size: 1, grow: 0, color: "#ffe14d", x2: x, y2: y, seed: Math.floor(x) });
+        this.parts.push({ kind: "bolt", x: x + rnd(-50, 50), y: !this.v3 && this.tilted ? y - 430 : -60, vx: 0, vy: 0, g: 0, life: 0.32, max: 0.32, size: 1, grow: 0, color: "#ffe14d", x2: x, y2: y, seed: Math.floor(x) });
         this.flashT = Math.max(this.flashT, 0.12);
         break;
       case "sleeppowder":
@@ -5822,10 +5824,13 @@ export class ArenaRenderer {
     const cf = Math.cos(fa);
     const faceLeft = ps.left === undefined ? cf < 0 : ps.left ? cf < 0.14 : cf < -0.14;
     ps.left = faceLeft;
-    // left / right is a turn-around: the picture narrows to its edge and widens on the other side
+    // left / right: the picture faces one way or the other straight away (it never narrows to an edge, which looked like a card being flipped).
+    // The turn is shown by a short, soft squash and recover, and the lean the eased facing already gives it.
     const fdTarget = faceLeft ? 1 : -1;
-    ps.fd = ps.fd === undefined ? fdTarget : ps.fd + (fdTarget - ps.fd) * (1 - Math.exp(-this.dtr * 15));
-    const faceN = Math.abs(ps.fd) < 0.12 ? (ps.fd < 0 ? -0.12 : 0.12) : ps.fd;
+    if (ps.fd !== undefined && Math.sign(ps.fd) !== fdTarget) ps.tp = 1;
+    ps.fd = fdTarget;
+    if (ps.tp) ps.tp = Math.max(0, ps.tp - this.dtr / 0.2);
+    const faceN = fdTarget;
     ps.lastIm = im ?? undefined;
     // a direction in the arena -> across / away on the screen the camera sees
     const vd = (dx: number, dy: number) => (this.v3 ? { x: dx * this.c3.rx + dy * this.c3.ry, y: -(dx * this.c3.fx + dy * this.c3.fy) } : { x: dx, y: dy });
@@ -6230,8 +6235,8 @@ export class ArenaRenderer {
       const imMain = im;
       // one look at it, facing `dirv` (1 left, -1 right, or anything between), drawn at `am` strength
       const view = (gg: CanvasRenderingContext2D, dirv: number, am: number) => {
-        // switching between the front and back picture: one picture at a time, squeezed a little for a moment, never two blended
-        const sq = ps.fade ? 1 - 0.28 * Math.sin(Math.min(1, ps.fade) * Math.PI) : 1;
+        // one picture at a time, never two blended; a turn gives it a small squash
+        const sq = ps.tp ? 1 - 0.1 * Math.sin(Math.min(1, ps.tp) * Math.PI) : 1;
         this.body(gg, imMain, usedId, px, py, size, dirv, sxx * sq, syy, rotMain, undefined, am, wk, rigA);
       };
       // Turning round (in every view): a single picture that narrows to its edge and widens on the other side. It used to blend with its
