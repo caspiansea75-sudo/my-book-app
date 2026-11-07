@@ -6,6 +6,7 @@
 import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, movePool, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 import { MOBILITY, mobilityOf, type Mobility } from "@/lib/pokemon/arena-mobility";
+import { abBase, abBlock, abFx, abilityDef, abilitiesOf, abNoStatus, abSpeed, abStrikeIn, abStrikeOut, abTick, giveGain, newAbState, pickAbility, type AbState } from "@/lib/pokemon/arena-abilities";
 
 /** The arena is this many times the size the first one was (960 x 600): more room to run, circle and dodge. (1.5 before; 2 now.) */
 const K = 2;
@@ -53,6 +54,9 @@ export type Fighter = {
   cdMul: number;
   dodgeMul: number;
   speedMul: number;
+  /** its ability (an id from arena-abilities) and what it has built up in the fight */
+  ab: string;
+  abx: AbState;
   cd: [number, number, number, number];
   /** The four moves it brought (a multiplayer or customised loadout). */
   loadout?: string[];
@@ -236,6 +240,7 @@ export type Ev =
   | { t: "awaken"; x: number; y: number; id: number }
   | { t: "item"; x: number; y: number; kind: ItemKind; byPlayer: boolean }
   | { t: "field"; kind: FieldKind }
+  | { t: "ability"; id: number; x: number; y: number; name: string }
   | { t: "hazard"; x: number; y: number }
   | { t: "swap"; team: number; x: number; y: number; name: string; faint: boolean }
   | { t: "arena"; kind: "gust" | "vent" | "tide" | "spot" | "spotget" | "freeze" | "thaw"; x: number; y: number; dx?: number; dy?: number; team?: number }
@@ -608,6 +613,8 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
     cdMul: 1,
     dodgeMul: 1,
     speedMul: 1,
+    ab: pickAbility(sp.id, isPlayer || boss ? 0 : Math.random() < 0.3 ? 1 : 0),
+    abx: newAbState(),
     cd: [rnd(0.3, 1.4), rnd(0.3, 1.4), rnd(0.8, 2.2), rnd(1, 3)],
     cast: null,
     channel: null,
@@ -686,7 +693,7 @@ function makeFighter(S: State, sp: Species, team: number, isPlayer: boolean, x: 
   };
 }
 
-export type NewGameOptions = { dummy?: string; arena?: StageKind; auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[] };
+export type NewGameOptions = { dummy?: string; arena?: StageKind; auto?: boolean; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[]; /** which of its abilities it uses (an id from arena-abilities); its first one if left out */ ability?: string };
 
 export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}): State {
   const S: State = {
@@ -724,6 +731,7 @@ export function newGame(mode: Mode, speciesId: string, opts: NewGameOptions = {}
   };
   const player = makeFighter(S, speciesOf(speciesId), 0, true, mode === "royale" ? CX : 230 * K, mode === "royale" ? CY + 150 * K : CY);
   player.loadout = cleanMoves(speciesId, opts.moves);
+  chooseAbility(player, opts.ability);
   player.auto = !!opts.auto;
   player.cpuGimmick = !!opts.auto; // an auto-piloted player also uses its gimmick
   player.gimmick = opts.gimmick ?? "awaken";
@@ -983,7 +991,7 @@ function trainStep(S: State, dt: number) {
   }
 }
 
-export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[]; /** Team Battle: 0 = Team A (left), 1 = Team B (right). */ team?: number };
+export type MpPlayer = { member: number; name: string; species: string; gimmick?: GimmickKind; mega?: string; tera?: string; moves?: string[]; ability?: string; /** Team Battle: 0 = Team A (left), 1 = Team B (right). */ team?: number };
 
 /** A battle royale between 2-5 members: every fighter is steered by a person, nobody else is in the arena. */
 export function newMpGame(players: MpPlayer[], mode: Mode = "royale", teamBattle = false): State {
@@ -1007,6 +1015,7 @@ export function newMpGame(players: MpPlayer[], mode: Mode = "royale", teamBattle
     if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
     if (pl.tera && TERA_TYPES.includes(pl.tera)) f.teraType = pl.tera;
     f.loadout = cleanMoves(pl.species, pl.moves);
+    chooseAbility(f, pl.ability);
     f.member = pl.member;
     f.name = pl.name;
     f.face = mode === "royale" ? Math.atan2(CY - f.y, CX - f.x) : 0;
@@ -1035,6 +1044,7 @@ function newTeamBattle(S: State, players: MpPlayer[]): State {
         if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
         if (pl.tera && TERA_TYPES.includes(pl.tera)) f.teraType = pl.tera;
         f.loadout = cleanMoves(pl.species, pl.moves);
+        chooseAbility(f, pl.ability);
         f.member = pl.member;
         f.name = pl.name;
         f.face = team === 0 ? 0 : Math.PI;
@@ -1079,6 +1089,7 @@ export function newMpQuick(a: MpSquad, b: MpSquad, arena: StageKind | "random" =
       if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
       if (pk.tera && TERA_TYPES.includes(pk.tera)) f.teraType = pk.tera;
       f.loadout = cleanMoves(pk.species, pk.moves);
+      chooseAbility(f, pk.ability);
       f.member = sq.member;
       f.name = sq.name;
       f.face = team === 0 ? 0 : Math.PI;
@@ -1209,8 +1220,16 @@ function defBoost(dst: Fighter, mvId?: string) {
   return mv ? (isPhysical(mv) ? dst.boost.def : dst.boost.spd) : (dst.boost.def + dst.boost.spd) / 2;
 }
 
+/** Give a fighter the ability the player chose for its species, if that is one it can have. */
+function chooseAbility(f: Fighter, id: string | undefined) {
+  if (id && abilitiesOf(f.sp.id).includes(id)) f.ab = id;
+}
+
+/** The weather as the current step sees it (so damage that is worked out away from the state can still read it). */
+let curField: string = "none";
+
 function baseDamage(src: Fighter, mv: MoveDef, power = mv.power) {
-  return 13 * power * ((src.power * (src.mega > 0 ? src.megaP : 1)) / 90) * (isPhysical(mv) ? src.boost.atk : src.boost.spa) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1) * (src.dyna > 0 ? 1.35 : 1);
+  return 13 * power * ((src.power * (src.mega > 0 ? src.megaP : 1)) / 90) * (isPhysical(mv) ? src.boost.atk : src.boost.spa) * src.dmgMul * (src.buffT > 0 ? src.buffMul : 1) * (src.awaken > 0 ? 1.5 : 1) * (src.dyna > 0 ? 1.35 : 1) * abBase(src, mv, curField);
 }
 
 /** Weather helps some types and hurts others. */
@@ -1227,15 +1246,20 @@ function gainUlt(f: Fighter, amount: number) {
   if ((f.isPlayer || f.cpuGimmick) && !gimmickActive(f)) f.ult = Math.min(100, f.ult + amount);
 }
 
-function applyStatus(S: State, f: Fighter, kind: StatusKind) {
-  if (f.dyna > 0) return;
+/** Put a status effect on a fighter. Returns whether it took. */
+function applyStatus(S: State, f: Fighter, kind: StatusKind): boolean {
+  if (f.dyna > 0) return false;
+  if (abNoStatus(f, kind, S.field)) {
+    abPop(S, f);
+    return false;
+  }
   if (kind === "frz") {
-    if (f.status.frzImmune > 0 || f.boss) return;
+    if (f.status.frzImmune > 0 || f.boss) return false;
     f.status.frz = 1.0;
     f.status.frzImmune = 4.5;
   } else if (kind === "slp") {
     // asleep: cannot act until woken by a hard hit or the time runs out, then safe from sleep for a while
-    if (f.status.frzImmune > 0 || f.boss) return;
+    if (f.status.frzImmune > 0 || f.boss) return false;
     f.status.slp = 2.4;
     f.status.frzImmune = 5;
     f.cast = f.channel = null;
@@ -1244,6 +1268,147 @@ function applyStatus(S: State, f: Fighter, kind: StatusKind) {
   else if (kind === "brn") f.status.brn = 4;
   else f.status.psn = 5;
   S.events.push({ t: "status", x: f.x, y: f.y, kind });
+  return true;
+}
+
+/* ------------------------------------------------------------------ abilities */
+
+/** Show the name of a fighter's ability above it, because it just did something (at most once in a while). */
+function abPop(S: State, f: Fighter) {
+  if (f.abx.t.pop > 0) return;
+  f.abx.t.pop = 1.1;
+  S.events.push({ t: "ability", id: f.id, x: f.x, y: f.y, name: abilityDef(f.abx.traced ?? f.ab).name });
+}
+
+/** Damage that does not come from an attack (a burn, a thorny skin, a bad dream...). Magic Guard is not hurt by it. */
+function hurtIndirect(S: State, f: Fighter, amt: number, by: Fighter | null, show: boolean) {
+  if (!f.alive || amt <= 0 || abFx(f).magicGuard) return;
+  f.hp -= amt;
+  if (show) {
+    f.flash = 0.1;
+    S.events.push({ t: "hit", id: f.id, x: f.x, y: f.y, dmg: Math.max(1, Math.round(amt)), crit: false, eff: 1, type: "Normal", toPlayer: f.isPlayer, byPlayer: false, dx: 0, dy: 0, heavy: false });
+  }
+  if (f.hp <= 0) kill(S, by, f);
+}
+
+const hasAnyStatus = (f: Fighter) => f.status.brn > 0 || f.status.psn > 0 || f.status.par > 0 || f.status.frz > 0 || f.status.cnf > 0 || f.status.slp > 0;
+
+/** What an ability does when its owner steps into the fight. */
+function abilityEnter(S: State, f: Fighter) {
+  const fx = abFx(f);
+  if (fx.trace) {
+    const foe = nearestFoe(S, f);
+    if (foe) {
+      f.abx.traced = foe.abx.traced ?? foe.ab;
+      abPop(S, f);
+      abilityEnterFx(S, f);
+    }
+    return;
+  }
+  abilityEnterFx(S, f);
+}
+function abilityEnterFx(S: State, f: Fighter) {
+  const fx = abFx(f);
+  if (fx.intimidate) {
+    let any = false;
+    for (const o of foesOf(S, f)) {
+      const ofx = abFx(o);
+      if (ofx.noIntimidate) continue;
+      giveGain(o, { dmg: 0.87, t: 12 });
+      if (ofx.onIntimidated) { giveGain(o, ofx.onIntimidated); abPop(S, o); }
+      any = true;
+    }
+    if (any) abPop(S, f);
+  }
+  if (fx.weather && S.field !== fx.weather) {
+    S.field = fx.weather;
+    S.events.push({ t: "field", kind: S.field });
+    abPop(S, f);
+  }
+  if (fx.enter) {
+    giveGain(f, fx.enter);
+    abPop(S, f);
+  }
+}
+
+/** Everything an ability does with the passing of time (called for every fighter every step). */
+function abilityTick(S: State, f: Fighter, dt: number) {
+  const fx = abFx(f);
+  const x = f.abx;
+  abTick(f, dt);
+  if (!x.entered) {
+    x.entered = true;
+    abilityEnter(S, f);
+  }
+  const heal = (amt: number) => {
+    if (f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + amt);
+  };
+  if (fx.regen) heal(f.maxHp * fx.regen * dt);
+  if (fx.regenField && S.field === fx.regenField.field && !fx.noField) heal(f.maxHp * fx.regenField.pct * dt);
+  if (fx.speedBoost && !(x.t.sb > 0)) {
+    x.t.sb = 3;
+    x.n = Math.min(7, x.n + 1);
+  }
+  if (fx.shed && hasAnyStatus(f) && !(x.t.shed > 0)) {
+    x.t.shed = 3;
+    if (Math.random() < fx.shed) {
+      f.status.brn = f.status.psn = f.status.par = f.status.cnf = f.status.slp = 0;
+      abPop(S, f);
+    }
+  }
+  if (fx.moody && !(x.t.moody > 0)) {
+    x.t.moody = 7;
+    giveGain(f, Math.random() < 0.5 ? { dmg: 1.25, t: 7 } : { spd: 1.2, t: 7 });
+    abPop(S, f);
+  }
+  if (fx.badDreams) for (const o of foesOf(S, f)) if (o.status.slp > 0) hurtIndirect(S, o, o.maxHp * 0.03 * dt, f, false);
+  if (fx.solar && S.field === "sun" && !fx.noField) hurtIndirect(S, f, f.maxHp * 0.015 * dt, null, false);
+  // statuses that wear off faster
+  if (fx.cure) {
+    const c = fx.cure;
+    const k = (c.all && (!c.field || (S.field === c.field && !fx.noField)) ? c.all : 1) - 1;
+    if (k > 0) for (const s of ["brn", "psn", "par", "frz", "cnf", "slp"] as const) if (f.status[s] > 0) f.status[s] = Math.max(0, f.status[s] - dt * k);
+    if (c.slp && f.status.slp > 0) f.status.slp = Math.max(0, f.status.slp - dt * (c.slp - 1));
+  }
+}
+
+/** What a hit does to the one who is hit, through its ability (a thorny skin, a surge of anger...). */
+function abilityReact(S: State, src: Fighter, dst: Fighter, crit: boolean, type: string, mv: MoveDef | undefined, contact: boolean) {
+  const fx = abFx(dst);
+  if (fx.contact && (contact || fx.contact.anyHit) && src.alive && src !== dst) {
+    const c = fx.contact;
+    if (c.chip) hurtIndirect(S, src, src.maxHp * c.chip, dst, true);
+    if (c.status && Math.random() < c.p && applyStatus(S, src, c.status)) abPop(S, dst);
+    else if (c.chip) abPop(S, dst);
+  }
+  if (fx.onHit) {
+    const h = fx.onHit;
+    if ((!h.type || h.type.includes(type)) && (!h.crit || crit) && (!h.contact || contact) && Math.random() < (h.p ?? 1)) {
+      giveGain(dst, h.gain);
+      abPop(S, dst);
+    }
+  }
+  if (fx.sandSpit && !(dst.abx.t.sand > 0)) {
+    dst.abx.t.sand = 20;
+    if (S.field !== "sand") {
+      S.field = "sand";
+      S.events.push({ t: "field", kind: "sand" });
+      abPop(S, dst);
+    }
+  }
+  if (fx.toxicDebris && contact && !(dst.abx.t.debris > 0) && dst.alive) {
+    dst.abx.t.debris = 12;
+    layHazard(S, dst, "toxicspikes");
+    abPop(S, dst);
+  }
+  if (fx.pressure && src.alive) src.gcd = Math.max(src.gcd, 0.22);
+}
+
+/** Lay a field hazard (Spikes and so on) on the floor where a fighter stands. */
+function layHazard(S: State, f: Fighter, id: string) {
+  const mv = MOVES[id];
+  if (!mv) return;
+  S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x: f.x, y: f.y, x2: f.x, y2: f.y, r: 96, delay: 0.05, total: 0.05, life: mv.linger ?? 12, dmg: baseDamage(f, mv) * 0.5, type: mv.type, status: mv.status, kb: 0, struck: false, mv, player: f.isPlayer, tick: 0.5 });
 }
 
 /** One hit lands (or does not): dodged, shielded, resisted, critical… returns the damage dealt. */
@@ -1263,14 +1428,52 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     }
     return 0;
   }
-  const eff = typeMult(type, dst.types);
+  const sab = abFx(src);
+  const dab = abFx(dst);
+  const mvd = o.mv ? MOVES[o.mv] : undefined;
+  const pierce = !!sab.pierce; // Mold Breaker and friends: its moves ignore the target's ability
+  if (!pierce) {
+    // an ability that makes the hit do nothing (Levitate, Flash Fire, Volt Absorb, Bulletproof...)
+    const blk = abBlock(dst, type, mvd);
+    if (blk) {
+      abPop(S, dst);
+      if (blk.heal > 0 && dst.hp < dst.maxHp) {
+        const amt = Math.min(dst.maxHp - dst.hp, dst.maxHp * blk.heal);
+        dst.hp += amt;
+        dst.ghost = Math.max(dst.ghost, dst.hp);
+        S.events.push({ t: "heal", x: dst.x, y: dst.y, amt: Math.round(amt), fx: dst.x, fy: dst.y, id: dst.id });
+      }
+      if (blk.gain) giveGain(dst, blk.gain);
+      return 0;
+    }
+    // Disguise: the first hit only busts the disguise
+    if (dab.disguise && !(dst.abx.t.disg > 0)) {
+      dst.abx.t.disg = 1e9;
+      abPop(S, dst);
+      return 0;
+    }
+  }
+  let eff = typeMult(type, dst.types);
+  if (sab.scrappy && eff === 0 && (type === "Normal" || type === "Fighting")) eff = typeMult(type, dst.types.filter((ty) => ty !== "Ghost"));
   const orig = src.sp.types.includes(type);
   // a Terastallized Pokémon gets a bigger same-type bonus for its Tera type, and keeps a little of its old one
   const stab = src.tera ? (src.tera.type === type ? (orig ? 2 : 1.5) : orig ? 1.2 : 1) : src.types.includes(type) ? STAB : 1;
-  const crit = Math.random() < src.critChance;
+  const stabF = sab.protean && stab < STAB ? STAB : stab;
+  const crit = !(dab.noCrit && !pierce) && Math.random() < src.critChance + (sab.crit ?? 0);
+  // Dark Aura and Fairy Aura: a type hits harder for everyone while its owner is in the fight
+  const auras: { type: string; mul: number }[] = [];
+  let auraBroken = false;
+  for (const a of S.fighters) {
+    if (!a.alive) continue;
+    const ax = abFx(a);
+    if (ax.aura) auras.push(ax.aura);
+    if (ax.auraBreak) auraBroken = true;
+  }
+  const abM =
+    abStrikeOut(src, dst, type, eff, mvd, stabF > 1, S.field, auraBroken ? auras.map((a) => ({ ...a, mul: 0.75 })) : auras) * abStrikeIn(dst, type, eff, mvd, S.field, pierce);
   const comboMul = src.isPlayer ? 1 + Math.min(0.5, 0.1 * Math.max(0, src.combo.n - 1)) : 1;
   const focusMul = src.isPlayer && src.focus > 0 ? 1.5 : 1;
-  let dmg = dmgBase * fieldMul(S, type) * eff * stab * (crit ? 1.6 : 1) * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + (dst.defence * (dst.mega > 0 ? dst.megaD : 1) * defBoost(dst, o.mv)) / 9));
+  let dmg = dmgBase * (sab.noField || dab.noField ? 1 : fieldMul(S, type)) * eff * stabF * (crit ? (sab.critX ?? 1.6) : 1) * abM * comboMul * focusMul * rnd(0.93, 1.07) * dst.takeMul * (13 / (6 + (dst.defence * (dst.mega > 0 ? dst.megaD : 1) * defBoost(dst, o.mv)) / 9));
   if (dst.shield > 0) dmg *= 0.12;
   if (dst.crystal > 0) {
     const soak = Math.min(dst.crystal, dmg);
@@ -1278,6 +1481,12 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     dmg -= soak;
   }
   dmg = dmg > 0.5 ? Math.max(1, Math.round(dmg)) : 0;
+  // Sturdy: a killing blow from full life leaves 1 HP (once in a while)
+  if (!pierce && dab.sturdy && dst.hp >= dst.maxHp * 0.999 && dmg >= dst.hp && !(dst.abx.t.sturdy > 0)) {
+    dmg = Math.max(0, Math.floor(dst.hp) - 1);
+    dst.abx.t.sturdy = 25;
+    abPop(S, dst);
+  }
   const hpBefore = Math.max(0, dst.hp);
   dst.hp -= dmg;
   dst.flash = 0.12;
@@ -1297,12 +1506,23 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   const heavy = dmg >= dst.maxHp * 0.12 || crit;
   const [nx, ny] = norm(o.kx, o.ky);
   if (!dst.boss && dst.dyna <= 0) {
-    dst.kx += nx * o.kb * (heavy ? 1.3 : 1);
-    dst.ky += ny * o.kb * (heavy ? 1.3 : 1);
+    const kbm = !pierce && dab.kb ? dab.kb : 1;
+    dst.kx += nx * o.kb * kbm * (heavy ? 1.3 : 1);
+    dst.ky += ny * o.kb * kbm * (heavy ? 1.3 : 1);
   }
   if (heavy) S.freeze = Math.max(S.freeze, src.isPlayer || dst.isPlayer ? 0.07 : 0.03);
   if (dst.status.slp > 0 && dmg > 0) dst.status.slp = Math.max(0, dst.status.slp - 1.1); // a hit shakes them awake
-  if (o.status && Math.random() < o.status.chance) applyStatus(S, dst, o.status.kind);
+  if (o.status && !sab.sheer && Math.random() < o.status.chance) {
+    const took = applyStatus(S, dst, o.status.kind);
+    // Synchronize: what it catches it passes on
+    if (took && dab.sync && (o.status.kind === "brn" || o.status.kind === "psn" || o.status.kind === "par") && src.alive) {
+      abPop(S, dst);
+      applyStatus(S, src, o.status.kind);
+    }
+  }
+  if (sab.stun && dmg > 0 && Math.random() < sab.stun && !dst.boss) dst.stun = Math.max(dst.stun, 0.35);
+  const contact = !!mvd && (mvd.kind === "dash" || mvd.kind === "grab" || mvd.kind === "burrow");
+  if (dmg > 0) abilityReact(S, src, dst, crit, type, mvd, contact);
   S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy, mv: o.mv });
   if (type === "Ice" && S.pools.length) freezeWater(S, dst.x, dst.y, 46);
   else if (type === "Fire" && S.frozen.length) meltIce(S, dst.x, dst.y, 40);
@@ -1317,7 +1537,14 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     dst.ky *= 0.3;
     dst.cast = dst.channel = null;
   }
-  if (dst.hp <= 0) kill(S, src, dst);
+  if (dst.hp <= 0) {
+    // Aftermath: the one who landed the finishing close-range blow pays for it
+    if (dab.aftermath && contact && src.alive && src !== dst) {
+      abPop(S, dst);
+      hurtIndirect(S, src, src.maxHp * dab.aftermath, dst, true);
+    }
+    kill(S, src, dst);
+  }
   return dmg;
 }
 
@@ -1330,6 +1557,15 @@ function kill(S: State, src: Fighter | null, dst: Fighter) {
   dst.lev = 0;
   if (src) src.kos++;
   if (src) gainUlt(src, 15);
+  // Moxie, Soul-Heart, Battle Bond: a KO makes the winner stronger for a while
+  for (const a of S.fighters) {
+    if (!a.alive || a === dst) continue;
+    const k = abFx(a).onKo;
+    if (!k || !(a === src || k.any) || a.abx.ko >= k.cap) continue;
+    a.abx.ko++;
+    giveGain(a, { dmg: k.dmg, t: k.t });
+    abPop(S, a);
+  }
   if (src?.isPlayer) S.score += 100 * Math.max(1, S.wave) * (dst.boss ? 5 : 1);
   S.events.push({ t: "ko", x: dst.x, y: dst.y, id: dst.id, id2: dst.sp.id, type: dst.types[0] ?? "Normal", byPlayer: !!src?.isPlayer, player: dst.isPlayer, boss: dst.boss });
   S.freeze = Math.max(S.freeze, 0.12);
@@ -1462,7 +1698,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       const k = d > range ? range / d : 1;
       const x = clamp(f.x + (tx - f.x) * k, MARGIN, W - MARGIN);
       const y = clamp(f.y + (ty - f.y) * k, MARGIN, H - MARGIN);
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id === "gmaxblast" ? 108 : mv.linger ? 84 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: mv.linger ?? 0.35, dmg: baseDamage(f, mv) * (mv.linger ? 0.5 : 1), type: mv.type, status: mv.status, kb: mv.linger ? 120 : 260, struck: false, mv, player: f.isPlayer, tick: 0.5 });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id === "gmaxblast" ? 108 : mv.hazard ? 96 : mv.linger ? 84 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: mv.linger ?? 0.35, dmg: baseDamage(f, mv) * (mv.linger ? 0.5 : 1), type: mv.type, status: mv.status, kb: mv.linger ? 120 : 260, struck: false, mv, player: f.isPlayer, tick: 0.5 });
       break;
     }
     case "bolt": {
@@ -2298,6 +2534,7 @@ function moveFighter(S: State, f: Fighter, dt: number) {
     if (f.awaken > 0) k *= 1.25;
     if (f.mega > 0) k *= f.megaS;
     k *= f.boost.spe;
+    k *= abSpeed(f, S.field);
     if (f.dyna > 0) k *= 0.92;
     if (f.haste > 0) k *= 1.3;
     if (f.status.par > 0) k *= 0.55;
@@ -2422,6 +2659,7 @@ export function predictMove(S: State, f: Fighter, dt: number) {
  * human, by fighter id.
  */
 export function step(S: State, input: Input, realDt: number, others?: Map<number, Input>) {
+  curField = S.field;
   const dt0 = Math.min(realDt, 0.05);
   // Nobody may freeze or slow down the others in a multiplayer fight
   if (S.mp) {
@@ -2554,10 +2792,12 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     }
     f.ghost = f.ghost > f.hp ? Math.max(f.hp, f.ghost - Math.max(f.maxHp * 0.25, (f.ghost - f.hp) * 1.6) * dt * (f.flash > 0 ? 0 : 1)) : f.hp;
 
+    abilityTick(S, f, dt);
     // sandstorm and hail wear down whoever they are not made for
     if (S.field === "sand" || S.field === "hail") {
       const chip = FIELDS[S.field].chip;
-      if (!f.types.some((ty) => chip.includes(ty))) {
+      const afx = abFx(f);
+      if (!f.types.some((ty) => chip.includes(ty)) && !afx.noChip && !afx.magicGuard && !afx.noField) {
         f.hp -= f.maxHp * 0.01 * dt;
         if (f.hp <= 0) {
           kill(S, null, f);
@@ -2569,7 +2809,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     for (const k of ["brn", "psn"] as const) {
       if (f.status[k] > 0) {
         f.status[k] -= dt;
-        f.hp -= f.maxHp * (k === "brn" ? 0.022 : 0.028) * dt;
+        if (!abFx(f).magicGuard) f.hp -= f.maxHp * (k === "brn" ? 0.022 : 0.028) * dt;
         if (f.hp <= 0) {
           kill(S, null, f);
           break;
@@ -2629,6 +2869,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
         const lift = DIVE_DASH[f.dash.mv.id];
         if (lift) f.air = Math.sin(Math.PI * Math.min(1, f.dash.t / f.dash.total)) * lift;
         for (const o of foesOf(S, f)) {
+          if (!f.dash) break; // a hit can end the dash (a status, a counter-effect)
           if (!f.dash.hit.has(o.id) && len(o.x - f.x, o.y - f.y) <= f.r + o.r + 6) {
             f.dash.hit.add(o.id);
             strike(S, f, o, baseDamage(f, f.dash.mv), f.dash.mv.type, { kx: f.dash.dx, ky: f.dash.dy, kb: 330, status: f.dash.mv.status, mv: f.dash.mv.id });
@@ -2789,7 +3030,8 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
             if (o.hp <= 0) kill(S, null, o);
           }
         }
-        if (src) {
+        // a field hazard does nothing when it lands: it only hurts what walks over it afterwards
+        if (src && !z.mv.hazard) {
           for (const o of S.fighters) {
             if (!o.alive || o.team === z.team) continue;
             let inside = false;
@@ -2813,12 +3055,13 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       if (z.mv.linger && z.life > 0 && z.shape === "circle") {
         z.tick = (z.tick ?? 0.5) - dt;
         if (z.tick <= 0) {
-          z.tick = 0.5;
+          z.tick = z.mv.hazard ? 0.6 : 0.5;
           const src = S.fighters.find((f) => f.id === z.owner);
           if (src) {
             for (const o of S.fighters) {
               if (!o.alive || o.team === z.team || len(o.x - z.x, o.y - z.y) > z.r + o.r) continue;
-              strike(S, src, o, z.dmg * 0.55, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: 30, status: z.status, mv: z.mv.id });
+              if (z.mv.hazard && (o.canFly || abFx(o).levitate || abFx(o).magicGuard)) continue; // flyers, floaters and the unhurtable do not feel the ground
+              strike(S, src, o, z.mv.hazard ? z.dmg : z.dmg * 0.55, z.type, { kx: o.x - z.x, ky: o.y - z.y, kb: z.mv.hazard ? 0 : 30, status: z.status, mv: z.mv.id });
             }
           }
         }
@@ -2963,7 +3206,7 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
 
 /* ------------------------------------------------------------- Quick Battle (3v3) */
 
-export type QuickPick = { species: string; moves?: string[]; gimmick?: GimmickKind; mega?: string; tera?: string };
+export type QuickPick = { species: string; moves?: string[]; ability?: string; gimmick?: GimmickKind; mega?: string; tera?: string };
 export const ARENAS: StageKind[] = ["grass", "stone", "dirt", "crystal", "ice", "lava", "coast", "meadow", "glacier", "ocean"];
 const LEVEL_SCALE: Record<Level, { hp: number; dmg: number; cd: number }> = {
   easy: { hp: 0.8, dmg: 0.7, cd: 1.3 },
@@ -2988,6 +3231,7 @@ export function newQuickGame(picks: QuickPick[], arena: StageKind | "random", le
     if (f.gimmick === "mega" && !f.megaForm) f.gimmick = "awaken";
     if (pk.tera && TERA_TYPES.includes(pk.tera)) f.teraType = pk.tera;
     f.loadout = cleanMoves(pk.species, pk.moves);
+    chooseAbility(f, pk.ability);
     f.face = 0;
     return f;
   });

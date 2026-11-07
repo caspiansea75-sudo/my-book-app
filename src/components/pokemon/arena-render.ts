@@ -7,9 +7,11 @@ import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
 import { cloudSprite, texPat, typeTex } from "./arena-tex";
 import { Z_TINT, drawZScene, setZSky, zFinale } from "./arena-zmove";
-import { OWN_SHOT_ART, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./arena-vfx";
+import { OWN_SHOT_ART, sigOf, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./arena-vfx";
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
+import { IDENT_IDS, identBoom } from "./arena-ident";
+import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
 import { Scars } from "./arena-scars";
 import { CROWD_FRAMES, crowdFrames } from "./arena-crowd";
 import { drawIceSheet, drawOcean } from "./arena-water";
@@ -1284,6 +1286,11 @@ export class ArenaRenderer {
           this.pop(e.x, e.y - 20, { brn: "BURNED!", psn: "POISONED!", par: "PARALYZED!", frz: "FROZEN!", cnf: "CONFUSED!", slp: "ASLEEP!" }[e.kind], { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 13, 900);
           this.ring(e.x, e.y, { brn: "#ff8a3d", psn: "#c070e0", par: "#ffe14d", frz: "#8ee8ff", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 50, 0.4);
           break;
+        case "ability":
+          // an ability just did something: its name floats up over the Pokémon, in gold
+          this.pop(e.x, e.y - 34, e.name.toUpperCase() + "!", "#ffd45a", 12, 800);
+          this.ring(e.x, e.y, "#ffd45a", 34, 0.3);
+          break;
         case "ailment":
           this.pop(e.x, e.y - 24, { par: "CAN'T MOVE!", cnf: "HURT ITSELF!", slp: "ZZZ" }[e.kind], { par: "#ffe14d", cnf: "#ff9be6", slp: "#9fb4ff" }[e.kind], 12, 700);
           break;
@@ -1350,6 +1357,10 @@ export class ArenaRenderer {
     if (e.fx && SPEC_ART.has(e.fx)) {
       specBoom(e.fx, x, y, r, this.sctx);
       return;
+    }
+    if (e.mv && e.fx && e.mv !== e.fx && e.fx !== "levitate" && e.fx !== "clones" && IDENT_IDS.has(e.mv)) {
+      const pal = sigOf({ id: e.mv, type: e.type, kind: "lob" } as MoveDef).pal;
+      if (identBoom(e.mv, pal, x, y, r, this.sctx)) return;
     }
     switch (e.fx) {
       case "fireblast":
@@ -3088,6 +3099,10 @@ export class ArenaRenderer {
           const first = !this.specSeen.has(z.id);
           if (first) { this.specSeen.add(z.id); if (this.specSeen.size > 300) this.specSeen.clear(); }
           specStrike(g, z.mv.id, z, a, this.t, first, this.sctx, this.v3 ? (x, y, draw) => this.stand(g, x, y, draw) : undefined);
+        } else if (z.shape === "line" && BEAM_STYLE.has(z.mv.id)) {
+          // each of these big beams has its own body (arena-beams.ts); in the player views a raised copy is queued as well
+          const pal = BEAM_PAL[z.type] ?? BEAM_PAL.Normal!;
+          if (this.v3) { this.beamQ.push({ z, a }); drawBeamStyle(g, z.mv.id, z, a * 0.4, this.t, pal); } else drawBeamStyle(g, z.mv.id, z, a, this.t, pal);
         } else if ((z.mv.fx ?? z.mv.id) === "laser" && z.shape === "line") {
           // a thin bright laser with a glowing source
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
@@ -4065,6 +4080,7 @@ export class ArenaRenderer {
 
   private drawFancyBeam(g: CanvasRenderingContext2D, z: State["zones"][number], a: number) {
     if (z.type === "Dragon" && this.drawDragonBeam(g, z, a)) return;
+    if (drawBeamStyle(g, z.mv.id, z, a, this.t, BEAM_PAL[z.type] ?? BEAM_PAL.Normal!)) return;
     const pal = BEAM_PAL;
     const [c0, c1, c2] = pal[z.type] ?? pal.Normal!;
     const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);

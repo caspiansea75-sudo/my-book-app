@@ -243,6 +243,16 @@ export function identHit(id: string, pal: Pal, x: number, y: number, heavy: bool
   return true;
 }
 
+/** The blast of a move that used to borrow another move's explosion: its own hit layers, bigger and wider to fit the blast radius. */
+export function identBoom(id: string, pal: Pal, x: number, y: number, r: number, c: SpecCtx): boolean {
+  const e = IDENT.get(id);
+  if (!e || !e.h.length) return false;
+  const k = Math.min(2.2, Math.max(1, r / 70));
+  for (const L of e.h) lay(c, { ...L, n: Math.round(L.n * 1.3), spd: L.spd * k, size: L.size * Math.min(1.6, k) }, x, y, 0, pal, thin(c));
+  c.shake(Math.min(8, 2 + r / 30), 0.2);
+  return true;
+}
+
 export const hasWake = (id: string) => (IDENT.get(id)?.w.length ?? 0) > 0;
 
 /** The wake behind a dash or a shot, or false when this move has no signature look. */

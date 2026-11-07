@@ -398,3 +398,13 @@
 .ab-ph-th { width: 38px; height: 24px; border-radius: 5px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.4); }
 .ab-ph-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @media (max-width: 700px) { .ab-ph-row small { display: none; } .ab-ph-row input[type="range"] { width: 70px; } }
+/* ability picker */
+.ab-abil { margin: 8px 0 6px; padding: 8px 10px; border: 1px solid rgba(255, 212, 90, 0.22); border-radius: 12px; background: rgba(255, 212, 90, 0.05); }
+.ab-abil-h { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; margin-bottom: 6px; }
+.ab-abil-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.ab-abil-b { appearance: none; cursor: pointer; font: inherit; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; color: inherit; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.18); transition: background 0.15s, border-color 0.15s, transform 0.1s; }
+.ab-abil-b small { opacity: 0.65; }
+.ab-abil-b:hover { background: rgba(255, 255, 255, 0.12); }
+.ab-abil-b.on { background: rgba(255, 212, 90, 0.26); border-color: #ffd45a; box-shadow: 0 0 0 1px #ffd45a, 0 0 12px rgba(255, 212, 90, 0.35); font-weight: 700; }
+.ab-abil-d { margin: 7px 0 0; font-size: 12.5px; line-height: 1.4; opacity: 0.88; }
+.ab-abn { display: block; font-size: 10.5px; letter-spacing: 0.03em; color: #ffd45a; opacity: 0.92; line-height: 1.2; }

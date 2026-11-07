@@ -8,6 +8,8 @@ import { RosterPicker } from "@/components/pokemon/roster-picker";
 import { MovePicker, loadMoves, saveMoves } from "@/components/pokemon/move-picker";
 import { TrainPanel, type TrainHud } from "@/components/pokemon/arena-train";
 import { PhotoMode } from "@/components/pokemon/arena-photo";
+import { AbilityPicker, loadAbility, saveAbility } from "@/components/pokemon/ability-picker";
+import { abilityDef } from "@/lib/pokemon/arena-abilities";
 import { TypeIcon } from "@/components/pokemon/type-icons";
 import { Sprite, useT } from "@/components/pokemon/ui";
 import { mobilityOf } from "@/lib/pokemon/arena-mobility";
@@ -57,7 +59,7 @@ const keepSave = (s: Save) => {
 };
 const clampZoom = (z: number) => Math.max(0.8, Math.min(2.2, Math.round(z * 100) / 100));
 
-type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; mov: number; movLeft: number; movName: string; movIcon: string; movType: string; movDesc: string; movOn: boolean; movAlt: { icon: string; name: string; type: string } | null; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: TrainHud };
+type Hud = { fin: number; pill: "prep" | "ult" | "finish" | "recharge" | null; gimmick: GimmickKind; origin?: string | false; gimmickT: number; formName: string | null; moves: { id: string; name: string; type: string }[]; hp: number; ghost: number; max: number; cds: number[]; cdLeft: number[]; dodge: number; dodgeLeft: number; mov: number; movLeft: number; movName: string; movIcon: string; movType: string; movDesc: string; movOn: boolean; movAlt: { icon: string; name: string; type: string } | null; ult: number; awaken: number; combo: number; wave: number; score: number; foes: number; field: FieldKind; name: string; ability: string; squad?: { name: string; hp: number; max: number; alive: boolean; active: boolean }[]; foeSquad?: { hp: number; max: number; alive: boolean; active: boolean }[]; swapCd?: number; level?: Level; arena?: StageKind; train?: TrainHud };
 const ARENA_NAME: Record<StageKind, [string, string]> = { grass: ["বনের মাঠ", "Forest Pitch"], stone: ["পাথরের আখড়া", "Stone Arena"], dirt: ["খাদের মাঠ", "Canyon Floor"], crystal: ["ক্রিস্টাল গুহা", "Crystal Cave"], ice: ["ফ্রস্টপিক শিখর", "Frostpeak Summit"], lava: ["সিন্ডার ক্রেটার", "Cinder Crater"], coast: ["অ্যাজুর উপকূল", "Azure Coast"], meadow: ["খোলা তৃণভূমি", "Open Meadow"], glacier: ["বরফের চাদর", "Glacier Sheet"], ocean: ["খোলা সাগর", "Open Ocean"] };
 const ARENA_INFO: Record<StageKind, string> = { grass: "Forest, a pond to wade through", stone: "Pillars to hide behind", dirt: "Cacti, rocks and canyon walls", crystal: "A bottomless pit", ice: "Wind gusts shove you around", lava: "Lava vents erupt", coast: "Tides swell and shrink the water", meadow: "All grass, nothing in the way", glacier: "All ice — slippery, nothing in the way", ocean: "All water — ice moves freeze it over" };
 const LEVEL_NAME: Record<Level, [string, string]> = { easy: ["সহজ", "Easy"], normal: ["সাধারণ", "Normal"], hard: ["কঠিন", "Hard"] };
@@ -104,6 +106,7 @@ export function ArenaBrawl() {
   const [gimmick, setGimmick] = useState<GimmickKind>("awaken");
   const [megaId, setMegaId] = useState("");
   const [moves, setMoves] = useState<string[]>(() => [...speciesOf("charizard").moves]);
+  const [ability, setAbility] = useState("");
   const [teraType, setTeraType] = useState("Fire");
   const [save, setSave] = useState<Save>({ bestWave: 0, bestScore: 0, royaleWins: 0, royalePlays: 0 });
   const [hud, setHud] = useState<Hud | null>(null);
@@ -150,6 +153,7 @@ export function ArenaBrawl() {
     setMegaId(saved ? saved.m : (MEGAS[pick] ?? [])[0]?.id ?? "");
     setTeraType(saved ? saved.t : speciesOf(pick).types[0] ?? "Normal");
     setMoves(loadMoves(pick));
+    setAbility(loadAbility(pick));
   }, [pick]);
   useEffect(() => {
     cfgRef.current[pick] = { g: gimmick, m: megaId, t: teraType };
@@ -286,12 +290,12 @@ export function ArenaBrawl() {
         team.map((id) => {
           const c = cfgRef.current[id];
           const g = c && gimmicksFor(id).includes(c.g) ? c.g : "awaken";
-          return { species: id, moves: id === pick ? moves : loadMoves(id), gimmick: g, mega: c?.m ?? (MEGAS[id] ?? [])[0]?.id ?? "", tera: c?.t ?? speciesOf(id).types[0] };
+          return { species: id, moves: id === pick ? moves : loadMoves(id), ability: loadAbility(id), gimmick: g, mega: c?.m ?? (MEGAS[id] ?? [])[0]?.id ?? "", tera: c?.t ?? speciesOf(id).types[0] };
         }),
         arena,
         level,
       );
-    } else S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves, arena: arena === "random" ? ARENAS[Math.floor(Math.random() * ARENAS.length)] : arena });
+    } else S = newGame(mode, pick, { gimmick, mega: megaId, tera: teraType, moves, ability: loadAbility(pick), arena: arena === "random" ? ARENAS[Math.floor(Math.random() * ARENAS.length)] : arena });
     begin(S);
     const r = rt.current;
     r.S = S;
@@ -492,6 +496,7 @@ export function ArenaBrawl() {
           origin: p.megaForm?.alt ?? false,
           gimmickT: left,
           formName: p.form?.name ?? null,
+          ability: abilityDef(p.abx.traced ?? p.ab).name,
           moves,
           hp: p.hp,
           ghost: p.ghost,
@@ -840,6 +845,7 @@ export function ArenaBrawl() {
             {sp.id === "garchomp" || sp.id === "excadrill" ? <> · <span>⛏️</span> {t("গড়ানোর সময় মাটির নিচে ঢোকে", "Burrows when it rolls")}</> : null}
           </div>
           <MovePicker species={pick} moves={moves} onChange={(m) => { setMoves(m); saveMoves(pick, m); }} />
+          <AbilityPicker species={pick} value={ability} onChange={(id) => { sfx.pick(); setAbility(id); saveAbility(pick, id); }} />
           <div className="ab-mvlist">
             {moves.map((id, i) => {
               const mv = MOVES[id]!;
@@ -960,6 +966,7 @@ export function ArenaBrawl() {
           <div className="ab-hud">
             <div className="ab-me">
               <b>{hud.formName ?? hud.name}</b>
+              <small className="ab-abn">{hud.ability}</small>
               <small>{Math.ceil(hud.hp)} / {hud.max}</small>
               <div className="ab-bar">
                 <i className="ghost" style={{ width: `${Math.max(0, (hud.ghost / hud.max) * 100)}%` }} />
