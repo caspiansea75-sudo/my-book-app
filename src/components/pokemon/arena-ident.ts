@@ -173,6 +173,95 @@ scald|pf c 6 160 9 .5 4|pf u 8 90 10 .8 4,bu u 6 100 4 .7 2 -20,gr o 1 100 5 .4 
 venoshock||bu r 8 110 5 .6 1,sm o 4 40 10 .8 1,gr o 1 90 5 .35 1|bu b 1 40 5 .5 1|
 waterfall|bu u 6 120 5 .6 2|bu u 10 150 5 .7 2,gr o 1 140 6 .5 2,pf o 6 110 9 .6 4|bu b 1 90 5 .5 2,pf b 1 50 8 .3 4|
 flareblitz|fl c 8 220 9 .4 1,gl r 1 100 18 .4 1|fl r 12 220 9 .6 1,gr o 1 160 7 .5 1,fl u 6 160 9 .6 3|fl b 2 80 8 .5 1,sp b 1 100 2 .3 3|S
+fireblast|fl i 8 0 8 .4 1,gl r 1 110 16 .4 1|fl o 14 200 10 .6 1,sk r 10 280 10 .25 3,gr o 1 200 8 .5 1||S
+sleeppowder|pf c 6 90 8 .6 2|pf u 8 40 10 1 2 -10,dt u 8 30 3 1 4 -20||
+stunspore|sp c 8 120 2 .5 3,dt c 6 100 3 .6 3|sp o 12 70 2 .8 3,bo r 3 40 0 .2 3,dt o 8 60 3 .9 3||
+thunder|gl r 1 90 12 .3 3|bo r 6 70 0 .25 3,sp r 12 320 2 .4 3,gr o 1 170 6 .5 3,gl r 1 150 22 .3 4||S
+sludgebomb|bu c 6 160 6 .5 1,sm c 4 90 10 .5 0|bu o 10 130 7 .7 1 160,sm r 5 60 12 .9 5,gr o 1 120 6 .45 1||
+rockslide|pl b 3 120 4 .4 1|pl d 12 420 6 .6 1 900,sm o 6 80 14 .8 0,gr o 1 170 7 .5 1||S
+moonblast|st c 6 200 4 .5 2,gl r 1 100 14 .4 1|st o 8 110 6 .7 2,ar o 3 0 9 .6 4,gr o 1 150 6 .5 1||
+dracometeor|gl r 1 120 18 .5 1,fl u 6 120 7 .5 1|fl r 12 240 9 .6 1,sh r 10 300 4 .6 1 500,st d 8 420 5 .5 3,gr o 1 220 9 .6 1||S
+leafstorm|lf s 10 140 5 .8 1|lf s 14 200 5 .9 1,lf u 6 150 4 1 2 -30,gr o 1 150 6 .5 1||
+firespin|fl s 8 140 8 .6 1|fl s 12 120 9 .8 1,sp u 6 100 2 .8 3||
+whirlpool|bu s 10 120 5 .7 2|bu s 12 100 5 .9 2,gr o 1 120 5 .6 2||
+sandtomb|pf o 8 70 9 .7 0|pf s 10 90 10 .8 0,pl u 4 160 3 .6 1 500||
+waterspout|bu u 8 120 5 .6 2|bu u 14 180 5 .8 2 -40,pf o 8 140 10 .6 4,gr o 1 190 8 .6 2||
+seedbomb|lf c 4 160 4 .4 2,dt c 6 140 4 .4 3|lf r 8 160 4 .7 2,dt r 12 230 4 .6 3 500,gr o 1 110 5 .4 2||
+frenzyplant|lf i 8 0 5 .5 2|lf u 10 120 5 .8 2 -40,pl u 6 200 4 .7 1 600,gr o 1 150 6 .5 2||S
+iciclecrash|fk c 6 140 4 .5 2|sh r 12 280 5 .7 2 800,fk r 8 100 4 .8 4,gr o 1 150 6 .5 2||S
+focusblast|gl r 1 100 18 .35 1,dt i 8 0 4 .4 3|ar o 5 0 9 .5 3,gr o 1 190 7 .5 1,sp r 10 260 3 .4 3||S
+gunkshot|bu c 6 180 6 .5 1,dt c 4 150 4 .4 5|bu r 10 220 6 .7 1 300,sm o 5 60 12 .9 5,dt r 8 200 4 .6 1 500||
+hurricane|ar s 6 120 7 .5 4|ar s 10 200 8 .6 2,sk o 8 220 12 .3 4,pf r 5 160 9 .6 4||
+photongeyser|gl r 1 110 18 .4 3,dt i 8 0 4 .4 2|gl r 1 140 24 .5 2,st u 12 300 5 .7 3,gr o 1 160 6 .5 3||
+rocktomb|pl d 3 300 4 .3 1 800|pl d 8 340 5 .5 1 900,gr o 1 120 6 .45 1,sm o 4 50 12 .8 0||
+lightofruin|gl r 1 120 20 .5 3,st i 8 0 5 .5 3|gl r 1 200 28 .6 3,st r 12 220 6 .7 3,sk r 12 260 14 .4 4,gr o 1 220 9 .6 3||S
+waterpulse|ar o 3 0 7 .4 2|bu r 8 100 5 .5 2,gr o 1 110 5 .4 2|bu b 1 40 4 .4 2|
+willowisp|fl i 6 0 6 .4 1|fl u 6 70 8 .8 1 -20,gr o 1 90 5 .5 1|fl b 1 20 6 .6 1|
+hiddenpower|st o 6 90 5 .5 3|st r 10 200 5 .6 3,dt r 8 140 3 .6 2,gr o 1 120 5 .45 3|st b 1 40 4 .5 3|
+confuseray|ar o 4 0 8 .4 3|ar o 5 0 10 .6 3,dt s 8 60 3 .8 3|dt b 1 20 3 .5 3|
+supersonic|ar c 4 200 8 .4 4|ar o 3 0 10 .5 4,gr o 1 150 5 .5 4|ar b 1 90 7 .4 4|
+sing|st c 5 100 5 .7 4,dt u 3 60 3 .9 3|st u 6 70 5 1 3 -30|st b 1 30 4 .7 2|
+hypnosis|ar i 3 0 9 .4 2,gr o 1 90 5 .4 2|ar o 4 0 9 .6 2,st s 6 50 4 .9 3|ar b 1 40 7 .5 2|
+spore|pf c 6 100 8 .6 1,dt c 6 120 3 .6 3|pf u 8 40 10 1 1 -10,dt u 8 40 3 1 3 -20|pf b 1 30 8 .6 1|
+toxic|bu c 4 140 5 .5 1|bu u 8 60 5 .9 1 -30,sm u 4 40 11 .9 5,gr o 1 90 5 .4 1|bu b 1 30 5 .6 1|
+powdersnow|fk c 8 160 3 .6 4|fk r 10 80 3 .9 4,gr o 1 90 5 .4 4|fk b 1 40 3 .7 4|
+thundershock|bo c 3 40 0 .15 3,sp c 6 220 2 .3 3|bo r 4 40 0 .15 3,sp r 8 180 2 .3 3|sp b 2 80 2 .3 3|
+shadowball|dt i 8 0 5 .4 1|dt r 10 160 5 .6 1 100,sm r 5 60 13 .8 5,gr o 1 140 6 .5 1|sm b 1 20 9 .6 5|
+dragonpulse|ar c 4 180 9 .4 1,gl r 1 90 12 .3 1|ar o 4 0 12 .6 1,sh r 8 220 4 .5 1,gr o 1 160 7 .5 1|ar b 1 50 8 .4 1|
+psybeam|gr o 1 100 5 .4 2,ar c 3 0 6 .4 2|st s 8 120 4 .6 2,gr o 1 120 5 .45 2|ar b 1 30 6 .4 2|
+psystrike|gl r 1 100 16 .4 2,dt i 10 0 4 .4 2|gl r 1 160 22 .5 2,ar o 5 0 10 .6 2,sh r 8 240 4 .5 2,gr o 1 190 7 .6 2||S
+flashcannon|sp c 8 260 2 .3 4,gl r 1 90 12 .3 4|sh r 10 240 3 .5 4,gr o 1 150 6 .45 4,cr r 1 0 40 .2 4|sp b 1 90 2 .3 4|
+energyball|lf i 6 0 4 .4 2,gl r 1 90 12 .3 3|lf r 8 150 4 .7 2,dt r 8 160 3 .6 3,gr o 1 120 5 .4 2|lf b 1 40 4 .6 2|
+signalbeam|sp c 6 220 2 .3 3,st c 3 180 4 .4 4|st r 8 180 4 .5 3,sk r 6 230 10 .25 2,gr o 1 120 5 .4 3|st b 1 60 3 .4 3|
+dragonbreath|fl c 8 230 8 .4 1,sp c 4 200 2 .4 3|fl c 8 160 8 .6 1,sp r 8 220 2 .4 3|fl b 1 80 6 .4 1|
+surf|bu o 10 200 6 .6 2,pf o 4 150 12 .5 4|gr o 1 230 10 .7 2,pf o 8 140 12 .6 4||
+closecombat|sk x 8 300 12 .25 4,st r 6 160 4 .4 3|sk r 14 320 14 .22 4,cr r 1 0 50 .2 3,gr o 1 150 6 .4 1||S
+earthquake|cx o 10 90 0 1.3 5,pl u 6 220 5 .7 1 900|gr o 1 230 10 .7 1,gr o 1 150 7 .5 1,cx o 8 110 0 1.3 5,pf o 8 90 12 .8 0||S
+psychic|ar o 4 0 12 .6 2,dt o 12 70 4 .8 2|gr o 1 200 7 .6 2,ar o 3 0 14 .6 2||
+xscissor|sk x 8 280 14 .25 2,sh x 4 220 3 .4 2|sk x 10 300 16 .25 2,cr r 1 0 60 .2 4||
+outrage|fl o 8 160 9 .5 1,sh r 8 200 4 .4 1|fl r 14 260 9 .6 1,sk r 10 280 12 .25 3,gr o 1 220 9 .6 1||S
+blizzard|fk o 12 160 4 .8 4|fk r 16 200 4 1 4,sh r 8 220 4 .6 2,gr o 1 230 10 .7 2||
+dynamicpunch|gl r 1 100 14 .3 1,dt i 8 0 4 .3 3|cr r 1 0 70 .25 3,sk r 8 300 12 .22 1,gr o 1 170 7 .5 1,pf o 6 120 12 .5 0||S
+heatwave|fl o 8 120 8 .5 1|fl o 14 180 9 .8 1,sk o 8 200 14 .4 3,gr o 1 240 10 .8 1||
+sludgewave|bu o 8 160 6 .6 1|bu o 12 170 7 .8 1 200,gr o 1 220 9 .7 1,sm o 6 90 13 .9 5||
+diamondstorm|sh o 8 200 4 .5 4|sh r 14 280 4 .8 4 400,st r 8 160 5 .6 4,gr o 1 200 8 .6 4||S
+clangingscales|ar o 4 0 8 .4 4,st o 6 140 5 .4 3|ar o 6 0 11 .6 4,cr r 1 0 60 .2 3,gr o 1 200 8 .5 3||
+hypervoice|ar o 3 0 8 .4 4|ar o 4 0 11 .6 4,gr o 1 200 7 .6 4,sk o 8 260 10 .25 4||
+thunderwave|ar o 3 0 8 .4 3|bo o 6 80 0 .2 3,gr o 1 190 7 .5 3,sp o 12 160 2 .4 3||
+shockwave|bo c 3 40 0 .15 3|bo r 5 50 0 .2 3,sp r 8 220 2 .3 3|sp b 2 60 2 .3 3|
+aurasphere|gl r 1 100 14 .3 2,dt i 6 0 4 .3 2|ar o 3 0 8 .5 2,st r 8 170 4 .5 2,gr o 1 140 6 .45 2|st b 1 40 3 .4 2|
+gigadrain|lf i 8 0 4 .4 2|st u 8 80 5 .8 2 -30,lf r 6 110 4 .7 2,gr o 1 110 5 .4 2|lf b 1 40 4 .6 2|
+nuzzle|sp c 6 90 2 .3 3|sp r 10 150 2 .4 3,st o 4 60 4 .5 3,gr o 1 100 5 .4 3|sp b 2 50 2 .3 3|
+thunderpunch|bo c 3 40 0 .15 3|bo r 4 50 0 .2 3,cr r 1 0 40 .2 3,sp r 8 240 2 .3 3||
+strength|pl b 4 120 4 .4 1 400|cr r 1 0 60 .2 4,gr o 1 160 7 .5 1,pl r 8 200 4 .6 1 700||S
+dragonrush|fl c 8 220 8 .4 1|ar o 3 0 10 .5 1,fl r 10 220 9 .6 1,gr o 1 190 8 .6 1|fl b 2 80 8 .5 1|S
+shadowclaw|sk x 6 250 12 .25 5|sk x 8 280 14 .25 5,dt r 8 120 4 .5 1,gr o 1 120 5 .4 1|dt b 1 40 4 .5 1|
+spark|sp c 6 220 2 .3 3|bo r 4 50 0 .2 3,sp r 10 220 2 .3 3|sp b 2 70 2 .3 3|
+drainpunch|st i 6 0 4 .4 2|st u 8 90 5 .8 2 -30,cr r 1 0 40 .2 4,gr o 1 100 5 .4 2|st b 1 40 3 .5 2|
+drillrun|sh c 6 220 3 .4 1,pl c 3 200 3 .4 1 400|sh s 10 240 3 .6 1 500,pl u 6 200 4 .6 1 700,gr o 1 150 6 .45 1|sh b 2 100 3 .4 1 300|
+dragonascent|ar u 4 200 8 .5 2,st u 6 220 4 .6 2|ar o 4 0 11 .6 2,sk u 10 340 14 .3 4,gr o 1 200 8 .6 2|ar b 1 40 8 .5 2|S
+skyattack|gl r 1 100 14 .4 3,sk c 8 300 12 .25 4|sk r 12 320 14 .25 3,cr r 1 0 80 .25 4,gr o 1 200 8 .6 3|sk b 3 150 10 .25 4|S
+poltergeist|dt i 8 0 4 .4 1|st r 8 150 4 .5 1,sh r 6 200 3 .6 1 500,sm o 4 50 12 .8 5,gr o 1 120 6 .45 1|dt b 2 50 4 .5 1|
+shadowforce|gl r 1 100 14 .4 5,dt i 10 0 4 .4 1|gl r 1 160 22 .6 5,gr o 1 200 8 .7 1,dt r 12 160 4 .7 1|sm b 1 40 12 .5 5|S
+dragonclaw|sk x 6 250 12 .25 2|sk x 8 290 14 .25 2,sh r 8 220 4 .5 1,gr o 1 150 6 .45 1|sh b 1 70 3 .4 1|
+dragontail|ar c 3 200 10 .3 1|ar o 3 0 12 .5 1,sh r 10 250 4 .5 1,gr o 1 190 8 .6 1|ar b 1 60 9 .4 1|S
+razorleaf|lf c 6 240 4 .5 2|lf f 8 220 4 .7 2,gr o 1 110 5 .4 2|lf b 2 60 4 .5 2|
+darkpulse|ar c 3 0 9 .4 5,dt i 6 0 4 .3 1|ar o 4 0 11 .6 1,dt r 8 130 4 .6 1,sm o 4 50 12 .8 5|dt b 1 40 4 .5 1|
+stoneedge|pl c 4 240 4 .3 1 300|pl r 10 280 5 .6 1 800,cr r 1 0 60 .2 4,gr o 1 160 7 .5 1||S
+airslash|ar f 4 280 9 .3 4|ar o 3 0 11 .4 4,sk r 8 260 12 .25 4|ar b 1 70 8 .3 4|
+originpulse|gl r 1 100 14 .3 2,ar f 4 200 8 .4 2|ar o 4 0 12 .6 2,bu r 10 180 6 .7 2 -20,gr o 1 200 8 .6 2||S
+hyperbeam|gl r 1 100 16 .3 4|sh r 10 280 4 .6 4,gr o 1 220 9 .6 4,cr r 1 0 90 .25 4||S
+overheat|fl i 8 0 8 .4 1|fl r 12 240 9 .7 1,gl r 1 120 16 .4 1,gr o 1 200 8 .6 1||S
+hydrocannon|bu c 8 220 6 .5 2|bu r 12 220 6 .7 2,pf o 6 160 12 .6 4,gr o 1 220 9 .6 2||S
+spacialrend|ar i 4 0 10 .5 2|cx o 8 120 0 1.2 5,sk x 8 300 14 .3 2,gr o 1 200 8 .6 2||S
+roaroftime|gl r 1 100 18 .4 3|ar o 5 0 10 .6 3,st o 8 120 4 .8 3,gr o 1 230 10 .7 3||S
+coreenforcer|dt i 8 0 4 .4 1|sh r 10 260 4 .6 1,cr r 1 0 70 .25 3,gr o 1 200 8 .6 1||S
+eternabeam|gl r 1 120 22 .5 3,dt i 8 0 4 .5 3|gl r 1 200 28 .7 3,st d 10 300 5 .7 3,ar o 4 0 12 .7 3,gr o 1 240 10 .7 3||S
+dig|pl u 8 240 4 .6 1 800,sm o 6 80 12 .8 0,cx o 6 80 0 1.2 5,gr o 1 180 8 .6 1|pl b 2 80 4 .5 1 400|S
+spikes|sh d 8 260 3 .5 4 400,gr o 1 90 5 .4 1||
+toxicspikes|bu d 6 80 5 .6 1,gr o 1 100 6 .5 1||
+stealthrock|pl d 6 300 4 .4 1 800,gr o 1 110 6 .45 1||
+rest|dt i 6 0 3 .5 3,st u 6 40 5 1.2 4 -15|||
 `;
 
 const IDENT = new Map<string, Ident>();

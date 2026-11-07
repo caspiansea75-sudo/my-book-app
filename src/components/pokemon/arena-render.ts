@@ -11,6 +11,7 @@ import { OWN_SHOT_ART, sigOf, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } fr
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { IDENT_IDS, identBoom } from "./arena-ident";
+import { FALL_IDS, drawFall } from "./arena-fall";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
 import { Scars } from "./arena-scars";
 import { CROWD_FRAMES, crowdFrames } from "./arena-crowd";
@@ -54,7 +55,7 @@ const withA = (c: string, a: number) => {
   return c;
 };
 const hsh = (n: number) => { const v = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return v - Math.floor(v); };
-const ORB_LOBS = new Set(["sludgebomb", "seedbomb", "gunkshot", "moonblast", "focusblast", "iciclecrash", "photongeyser", "lightofruin"]);
+const ORB_LOBS = new Set<string>();
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const easeOutBack = (k: number) => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
 const smooth = (a: number, b: number, x: number) => {
@@ -194,6 +195,8 @@ export class ArenaRenderer {
     /** the picture it is changing from, and how much of that change is left (a cross-fade between its front and back views) */
     fade?: number;
     fadeIm?: Pic;
+    /** eased ground speed, so starting and stopping blend instead of snapping between standing and walking */
+    sm?: number;
     lastIm?: Pic;
   }>();
   private dtr = 0;
@@ -1352,12 +1355,47 @@ export class ArenaRenderer {
   }
 
   /** Extra art for particular moves, taken from how they look in the video: embers, cracks, waves, lightning from the sky. */
+  /** The three big fire finishers, each with a blast of its own: a lava fountain, a ground-hugging ring of fire, a white-gold sun. */
+  private fireBoom(id: "eruption" | "blastburn" | "fusionflare", x: number, y: number, r: number) {
+    const P = (o: Partial<Parti> & { kind: Parti["kind"]; color: string }) => this.parts.push({ x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: 3, grow: 0, ...o } as Parti);
+    const R = Math.max(r, 90);
+    if (id === "eruption") {
+      // the floor splits and a column of lava is thrown high: fat glowing bombs on arcs, a crater ring left glowing, a tall black plume
+      P({ kind: "glow", size: R * 0.35, grow: R * 0.55, life: 0.6, max: 0.6, color: "#ff5a1a" });
+      for (let i = 0; i < 30; i++) { const a = rnd(0, Math.PI * 2), v = rnd(30, 120); P({ kind: "dot", x: x + Math.cos(a) * R * 0.15, y: y + Math.sin(a) * R * 0.1, vx: Math.cos(a) * v, vy: rnd(-620, -260), g: 760, life: rnd(1.0, 1.7), max: 1.7, size: rnd(6, 13), color: i % 3 ? "#ff7a1a" : "#ffd84d" }); }
+      for (let i = 0; i < 14; i++) P({ kind: "flame", x: x + rnd(-R * 0.3, R * 0.3), y, vx: rnd(-30, 30), vy: rnd(-420, -200), g: 400, life: rnd(0.8, 1.3), max: 1.3, size: rnd(14, 26), grow: -10, color: i % 2 ? "#e63a1e" : "#ff9a2e", seed: i });
+      for (let i = 0; i < 10; i++) P({ kind: "plank", x: x + rnd(-30, 30), y, vx: rnd(-150, 150), vy: rnd(-520, -260), g: 900, life: 1.2, max: 1.2, size: rnd(5, 9), color: "#2a1a14", rot: rnd(0, 6), vr: rnd(-9, 9) });
+      for (let i = 0; i < 9; i++) P({ kind: "smoke", x: x + rnd(-25, 25), y: y - i * 14, vx: rnd(-20, 20), vy: rnd(-200, -90), g: 0, life: rnd(1.4, 2.2), max: 2.2, size: rnd(20, 34), grow: 40, color: i % 2 ? "#3a2c28" : "#1f1715" });
+      for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; P({ kind: "flame", x: x + Math.cos(a) * R * 0.75, y: y + Math.sin(a) * R * 0.5, vx: 0, vy: rnd(-40, -15), g: 0, life: 1.5, max: 1.5, size: 9, grow: -3, color: "#ff8a1f", seed: 90 + i }); }
+      this.shake = Math.max(this.shake, 9); this.shakeT = Math.max(this.shakeT, 0.35); this.flashT = Math.max(this.flashT, 0.08);
+    } else if (id === "blastburn") {
+      // a huge flat ring of fire races out along the floor, thrown up as a wall of flame, a scorched star left behind
+      this.waves.push({ x, y, r: R * 1.5, t: 0, life: 0.9, kind: "heatwave" });
+      for (let k = 0; k < 3; k++) for (let i = 0; i < 24; i++) { const a = (i / 24) * Math.PI * 2 + k * 0.1; P({ kind: "flame", x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 8, vx: Math.cos(a) * R * (1.6 + k * 0.5), vy: Math.sin(a) * R * (1.0 + k * 0.3) - 30, g: 0, life: 0.7 + k * 0.15, max: 1, size: 16 - k * 3, grow: -8, color: k === 0 ? "#fff0a0" : k === 1 ? "#ff9a2e" : "#c8300a", seed: i + k * 30 }); }
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; P({ kind: "glow", x: x + Math.cos(a) * R * 0.3, y: y + Math.sin(a) * R * 0.2, size: 20, grow: 60, life: 0.5, max: 0.5, color: "#ffb040" }); }
+      P({ kind: "glow", size: R * 0.5, grow: R * 1.6, life: 0.55, max: 0.55, color: "#fff2c0" });
+      for (let i = 0; i < 26; i++) { const a = rnd(0, Math.PI * 2), v = rnd(100, R * 3); P({ kind: "spark", vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - rnd(80, 300), g: 420, life: rnd(0.6, 1.2), max: 1.2, size: rnd(1.8, 3.6), color: i % 2 ? "#ffd84d" : "#ff6a2a" }); }
+      this.shake = Math.max(this.shake, 10); this.shakeT = Math.max(this.shakeT, 0.4);
+    } else {
+      // a small sun: a white-gold flash that swells, long rays shot out of it, and a pillar of light with rising stars
+      this.flashT = Math.max(this.flashT, 0.18);
+      P({ kind: "glow", size: R * 0.4, grow: R * 2.2, life: 0.6, max: 0.6, color: "#ffffff" });
+      P({ kind: "glow", size: R * 0.6, grow: R * 1.6, life: 0.9, max: 0.9, color: "#ffb84a" });
+      for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2; P({ kind: "spark", vx: Math.cos(a) * R * 4, vy: Math.sin(a) * R * 2.8, life: 0.35, max: 0.35, size: 3.4, color: i % 2 ? "#fff4c0" : "#ffd070" }); P({ kind: "spark", vx: Math.cos(a) * R * 2.2, vy: Math.sin(a) * R * 1.5, life: 0.55, max: 0.55, size: 2.4, color: "#ffffff" }); }
+      for (let i = 0; i < 14; i++) P({ kind: "star", x: x + rnd(-14, 14), y, vx: rnd(-30, 30), vy: rnd(-380, -160), g: 40, life: rnd(0.8, 1.4), max: 1.4, size: rnd(5, 9), color: i % 2 ? "#fff0a0" : "#ffffff", rot: rnd(0, 6), vr: rnd(-6, 6) });
+      for (let i = 0; i < 8; i++) P({ kind: "bolt", x: x + rnd(-R * 0.3, R * 0.3), y: y - 330, life: 0.25, max: 0.25, color: "#fff4c0", x2: x + rnd(-14, 14), y2: y, seed: i * 17 });
+      for (let i = 0; i < 10; i++) { const a = rnd(0, Math.PI * 2); P({ kind: "flame", x: x + Math.cos(a) * R * 0.4, y: y + Math.sin(a) * R * 0.3, vx: Math.cos(a) * 60, vy: rnd(-120, -40), g: -20, life: rnd(0.8, 1.2), max: 1.2, size: rnd(9, 16), grow: -5, color: "#ffd070", seed: i }); }
+      this.shake = Math.max(this.shake, 7); this.shakeT = Math.max(this.shakeT, 0.3);
+    }
+  }
+
   private moveFx(e: Extract<Ev, { t: "explode" }>) {
     const { x, y, r } = e;
     if (e.fx && SPEC_ART.has(e.fx)) {
       specBoom(e.fx, x, y, r, this.sctx);
       return;
     }
+    if (e.mv === "eruption" || e.mv === "blastburn" || e.mv === "fusionflare") { this.fireBoom(e.mv, x, y, r); return; }
     if (e.mv && e.fx && e.mv !== e.fx && e.fx !== "levitate" && e.fx !== "clones" && IDENT_IDS.has(e.mv)) {
       const pal = sigOf({ id: e.mv, type: e.type, kind: "lob" } as MoveDef).pal;
       if (identBoom(e.mv, pal, x, y, r, this.sctx)) return;
@@ -2918,6 +2956,7 @@ export class ArenaRenderer {
             z.player ? `${c}33` : sky ? `rgba(255,225,70,${0.1 + prog * 0.22})` : `rgba(255,70,60,${0.1 + prog * 0.22})`,
             typeTex(z.type), this.t, z.id);
           if (z.team !== -1 && z.mv.kind === "lob" && !z.mv.linger && ORB_LOBS.has(z.mv.id)) this.sky(g, z.x, z.y, (g) => this.orbFall(g, z, prog));
+          if (z.team !== -1 && z.mv.kind === "lob" && FALL_IDS.has(z.mv.id)) this.sky(g, z.x, z.y, (g) => drawFall(g, z.mv.id, z, prog, this.t, c));
           if (z.team !== -1 && SPEC_ART.has(z.mv.id)) {
             if (this.v3 && z.mv.id === "rockwrecker") {
               // the stone falls through the air, so it is drawn upright; only its shadow lies on the floor
@@ -2925,7 +2964,7 @@ export class ArenaRenderer {
               this.sky(g, z.x, z.y, (g) => specWindup(g, z.mv.id, z, prog, this.t, "air"));
             } else specWindup(g, z.mv.id, z, prog, this.t);
           }
-          if ((z.mv.fx ?? z.mv.id) === "fireblast") this.sky(g, z.x, z.y, (g) => {
+          if (z.mv.id === "fireblast") this.sky(g, z.x, z.y, (g) => {
             // the big blast comes down as a burning "大" of five flames, as in the video
             const sy = z.y - (1 - prog) * 320 - 20;
             const sz = z.r * (0.6 + prog * 0.5);
@@ -2978,20 +3017,20 @@ export class ArenaRenderer {
             g.restore();
           });
           // meteors, boulders and lightning fall toward the circle before they land
-          if ((z.mv.fx ?? z.mv.id) === "dracometeor" || (z.mv.fx ?? z.mv.id) === "rockslide") this.sky(g, z.x, z.y, (g) => {
+          if (z.mv.id === "dracometeor" || z.mv.id === "rockslide") this.sky(g, z.x, z.y, (g) => {
             for (let i = 0; i < 5; i++) {
               const mx = z.x + (i - 2) * z.r * 0.42;
               const my = z.y - (1 - prog) * 420 - i * 34 + 10;
               g.save();
               g.globalCompositeOperation = "lighter";
-              g.strokeStyle = (z.mv.fx ?? z.mv.id) === "dracometeor" ? "rgba(255,150,60,.6)" : "rgba(200,205,215,.5)";
+              g.strokeStyle = z.mv.id === "dracometeor" ? "rgba(255,150,60,.6)" : "rgba(200,205,215,.5)";
               g.lineWidth = 6;
               g.beginPath();
               g.moveTo(mx, my);
               g.lineTo(mx - (this.v3 ? 0 : 10), my - 46);
               g.stroke();
               g.restore();
-              if ((z.mv.fx ?? z.mv.id) === "dracometeor") {
+              if (z.mv.id === "dracometeor") {
                 // a comet: violet tail, orange fire, white-hot head
                 const rr = 10 + (i % 2) * 4;
                 g.save();
@@ -3083,7 +3122,7 @@ export class ArenaRenderer {
             }
             g.globalCompositeOperation = "lighter";
           }
-          if ((z.mv.fx ?? z.mv.id) === "fireblast") {
+          if (z.mv.id === "fireblast") {
             // flames spiking out of the ground in a star
             g.fillStyle = "#ff8a1f";
             g.beginPath();
@@ -5712,7 +5751,7 @@ export class ArenaRenderer {
   private drawFighter(g: CanvasRenderingContext2D, f: Fighter, S: State, isYou: boolean) {
     const t = this.t;
     const under = !!f.dash?.under || (!!f.mov && MOBILITY[f.mov.id]?.kind === "dig");
-    const speed = Math.hypot(f.mvx, f.mvy);
+    let speed = Math.hypot(f.mvx, f.mvy);
     const moving = speed > 30;
     const morph = this.morphs.get(f.id);
     const mt = morph ? morph.t : 99;
@@ -5737,7 +5776,11 @@ export class ArenaRenderer {
     // the moving picture: a Showdown animation, front or back view by where it faces; the still one stays as the fallback
     const ps = this.poses.get(f.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
     this.poses.set(f.id, ps);
-    ps.clock += this.dtr * (moving ? 1 + Math.min(1.3, speed / 240) : 0.85);
+    // eased speed: the walk cycle speeds up and slows down with it instead of switching on and off
+    ps.sm = ps.sm === undefined ? speed : ps.sm + (speed - ps.sm) * (1 - Math.exp(-this.dtr * 9));
+    if (!moving && ps.sm < 8) ps.sm = 0;
+    speed = ps.sm;
+    ps.clock += this.dtr * (1 + Math.min(1.3, ps.sm / 240) * (moving ? 1 : 0.6) - (moving ? 0 : 0.15));
     ps.atk = Math.max(0, ps.atk - this.dtr);
     ps.hurt = Math.max(0, ps.hurt - this.dtr);
     if (ps.fade) ps.fade = Math.max(0, ps.fade - this.dtr / 0.22);
@@ -6054,12 +6097,7 @@ export class ArenaRenderer {
         this.body(g, im, usedId, f.x + Math.cos(an) * f.r * 2.3, f.y + Math.sin(an) * f.r * 1.1 - f.r * 0.6 - lift + bob, size * 0.92, faceN, sx, sy, rot, "#9dffb0", 0.3 * fade);
       }
     }
-    if (im && !under && f.loco !== "slither" && ((f.dash && !f.dash.under) || (rolling && !this.v3))) {
-      for (const idx of [3, 6, 9]) {
-        const h = hist[idx];
-        if (h) this.body(g, im, usedId, h.x, h.y - f.r * 0.6 - lift, size, faceN, sx, sy, rot + spin, c, 0.34 - idx * 0.02);
-      }
-    }
+    // (no ghost copies behind a rush or a roll any more: the speed shows in the stretch and the streaks, and a second faint picture only read as a smear)
     // underground: only a moving mound of earth shows
     if (under) {
       g.save();
@@ -6192,8 +6230,9 @@ export class ArenaRenderer {
       const imMain = im;
       // one look at it, facing `dirv` (1 left, -1 right, or anything between), drawn at `am` strength
       const view = (gg: CanvasRenderingContext2D, dirv: number, am: number) => {
-        if (ps.fade && ps.fadeIm && ps.fadeIm !== imMain) this.body(gg, ps.fadeIm, usedId, px, py, size, dirv, sxx, syy, rotMain, undefined, ps.fade * am, wk, rigA);
-        this.body(gg, imMain, usedId, px, py, size, dirv, sxx, syy, rotMain, undefined, (ps.fade ? 1 - ps.fade * 0.6 : 1) * am, wk, rigA);
+        // switching between the front and back picture: one picture at a time, squeezed a little for a moment, never two blended
+        const sq = ps.fade ? 1 - 0.28 * Math.sin(Math.min(1, ps.fade) * Math.PI) : 1;
+        this.body(gg, imMain, usedId, px, py, size, dirv, sxx * sq, syy, rotMain, undefined, am, wk, rigA);
       };
       // Turning round (in every view): a single picture that narrows to its edge and widens on the other side. It used to blend with its
       // mirror image in the player views, and a Pokémon that keeps changing direction (walking in a circle) then always showed a faint
