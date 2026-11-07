@@ -22,6 +22,26 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 
+const BEAM_PAL: Record<string, [string, string, string]> = {
+  Grass: ["#7be04a", "#fff3a0", "#ffffff"],
+  Water: ["#3aa0ff", "#bfe8ff", "#ffffff"],
+  Fire: ["#ff6a1a", "#ffd24d", "#fff7d0"],
+  Ice: ["#7fd8ff", "#dff6ff", "#ffffff"],
+  Dragon: ["#7a5cff", "#4fe3ff", "#ffffff"],
+  Fairy: ["#ff8fd8", "#ffd6f2", "#ffffff"],
+  Steel: ["#9fb4c4", "#e4eef5", "#ffffff"],
+  Ghost: ["#9a4fe0", "#d9b3ff", "#ffffff"],
+  Dark: ["#6a3ab0", "#b58cff", "#ffffff"],
+  Psychic: ["#ff6fd0", "#ffd0f2", "#ffffff"],
+  Flying: ["#9ad6ff", "#e8f7ff", "#ffffff"],
+  Normal: ["#ffd86b", "#fff3c9", "#ffffff"],
+  Poison: ["#b04fe0", "#e6b3ff", "#ffffff"],
+  Bug: ["#9ad03a", "#e5ffa8", "#ffffff"],
+  Rock: ["#b89a68", "#efe0b8", "#ffffff"],
+  Ground: ["#c8a050", "#f0dca0", "#ffffff"],
+  Fighting: ["#ff6a4a", "#ffd0b8", "#ffffff"],
+};
+
 type Parti = { baked?: boolean; /** comes down from the sky in the player views: straight down onto its spot, standing upright */ sky?: boolean; ox?: number; oy?: number; oy2?: number; ax?: number; ay?: number; /** height above the floor (the player views lift it on screen) */ z?: number; vz?: number; gz?: number; kind: "plume" | "pillar" | "dome" | "orbit" | "dot" | "streak" | "ring" | "gring" | "glow" | "smoke" | "text" | "puff" | "plank" | "crack" | "bolt" | "shard" | "star" | "arc" | "cross" | "spark" | "flame" | "leaf" | "bubble" | "flake" | "splat"; x2?: number; y2?: number; seed?: number; rot?: number; vr?: number; edge?: string; x: number; y: number; vx: number; vy: number; g: number; life: number; max: number; size: number; grow: number; color: string; text?: string; weight?: number };
 
 const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
@@ -1807,6 +1827,7 @@ export class ArenaRenderer {
     // whatever hangs or falls in the air, upright and on top of the fighters
     for (const q of this.skyQ) this.at(g, q.x, q.y, "bb", () => q.draw(g));
     this.skyQ.length = 0;
+    this.drawLiftedBeams(g);
     this.drawProjs(g, S);
     if (!T && !this.clean) this.drawAim(g);
 
@@ -2865,6 +2886,7 @@ export class ArenaRenderer {
   private drawZones(g: CanvasRenderingContext2D, S: State) {
     this.skyQ.length = 0;
     this.standQ.length = 0;
+    this.beamQ.length = 0;
     for (const z of S.zones) {
       const c = col(z.type);
       if (z.struck && z.team !== -1 && !SPEC_ART.has(z.mv.id) && !this.vfxSeen.has(z.id)) {
@@ -3065,7 +3087,7 @@ export class ArenaRenderer {
         } else if (SPEC_ART.has(z.mv.id) && z.shape === "line") {
           const first = !this.specSeen.has(z.id);
           if (first) { this.specSeen.add(z.id); if (this.specSeen.size > 300) this.specSeen.clear(); }
-          specStrike(g, z.mv.id, z, a, this.t, first, this.sctx);
+          specStrike(g, z.mv.id, z, a, this.t, first, this.sctx, this.v3 ? (x, y, draw) => this.stand(g, x, y, draw) : undefined);
         } else if ((z.mv.fx ?? z.mv.id) === "laser" && z.shape === "line") {
           // a thin bright laser with a glowing source
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
@@ -3092,7 +3114,8 @@ export class ArenaRenderer {
         } else if (z.type === "Electric") {
           drawLightning(g, z.x, z.y, z.x2, z.y2, "#ffe14d", a, z.id + Math.floor(this.t * 20), 5);
         } else if (z.shape === "line") {
-          this.drawFancyBeam(g, z, a);
+          // in the player views the beam stands in the air at the attacker's mouth (a flat ribbon on the floor is edge-on and almost invisible)
+          if (this.v3) { this.beamQ.push({ z, a }); this.drawFancyBeam(g, z, a * 0.4); } else this.drawFancyBeam(g, z, a);
         } else {
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
           const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
@@ -3988,27 +4011,61 @@ export class ArenaRenderer {
   }
 
   /** A fancy beam for the big line attacks: pulsing glow, twin spiralling strands, travelling pulses, sparkles, a charge orb at the source and a flare where it lands. */
+  /** Line strikes (Hydro Cannon, Overheat, Solar Beam...) in the player views: a tube of the beam hangs at mouth height. A flat ribbon is
+   *  edge-on from behind, so the beam is also drawn as a run of glowing rings facing the camera, far ones first, which read from any angle. */
+  private beamQ: { z: State["zones"][number]; a: number }[] = [];
+  private drawLiftedBeams(g: CanvasRenderingContext2D) {
+    for (const { z, a } of this.beamQ) {
+      const big = z.mv.id === "hydrocannon" || z.mv.id === "overheat" || (z.mv.power ?? 0) >= 2.5;
+      const zz = { ...z, r: z.r * (big ? 1.7 : 1.2) };
+      const L = Math.hypot(z.x2 - z.x, z.y2 - z.y) || 1;
+      const ux = (z.x2 - z.x) / L, uy = (z.y2 - z.y) / L, nx = -uy, ny = ux;
+      const [c0, c1, c2] = BEAM_PAL[z.type] ?? BEAM_PAL.Normal!;
+      const n = Math.max(2, Math.min(8, Math.ceil(L / 60)));
+      // the ribbon at three heights, so it has some body from the side
+      for (let i = 0; i < n; i++) {
+        const d0 = i === 0 ? -60 : (L * i) / n - 2, d1 = i === n - 1 ? L + 60 : (L * (i + 1)) / n + 2, dm = (L * (i + 0.5)) / n;
+        for (const [lf, al] of [[16, 0.5], [34, 1], [52, 0.5]] as const) {
+          this.at(g, z.x + ux * dm, z.y + uy * dm, "fl", () => {
+            g.save();
+            g.beginPath();
+            g.moveTo(z.x + ux * d0 + nx * 200, z.y + uy * d0 + ny * 200); g.lineTo(z.x + ux * d1 + nx * 200, z.y + uy * d1 + ny * 200);
+            g.lineTo(z.x + ux * d1 - nx * 200, z.y + uy * d1 - ny * 200); g.lineTo(z.x + ux * d0 - nx * 200, z.y + uy * d0 - ny * 200);
+            g.closePath(); g.clip();
+            g.globalCompositeOperation = "lighter";
+            this.drawFancyBeam(g, zz, a * al);
+            g.restore();
+          }, "p", lf);
+        }
+      }
+      // rings facing the camera, far to near
+      const m = Math.max(3, Math.min(16, Math.floor(L / 34)));
+      const pts: { d: number; x: number; y: number; dep: number }[] = [];
+      for (let k = 0; k < m; k++) { const d = 90 + ((L - 90) * k) / m + ((this.t * 260) % ((L - 90) / m)); const x = z.x + ux * d, y = z.y + uy * d; pts.push({ d, x, y, dep: this.proj3(x, y)?.depth ?? 0 }); }
+      pts.sort((p, q) => q.dep - p.dep);
+      for (const p of pts) {
+        const wob = 1 + Math.sin(this.t * 22 + p.d * 0.05) * 0.08;
+        this.at(g, p.x, p.y, "bb", () => {
+          const R = z.r * (big ? 1.05 : 0.8) * wob;
+          g.save();
+          g.globalCompositeOperation = "lighter";
+          g.globalAlpha = a;
+          const gr = g.createRadialGradient(0, 0, 0, 0, 0, R * 1.5);
+          gr.addColorStop(0, c2); gr.addColorStop(0.35, c1); gr.addColorStop(0.7, c0); gr.addColorStop(1, "rgba(0,0,0,0)");
+          g.translate(p.x, p.y);
+          g.fillStyle = gr; g.globalAlpha = a * 0.5; g.beginPath(); g.arc(0, 0, R * 1.5, 0, Math.PI * 2); g.fill();
+          g.globalAlpha = a * 0.9; g.strokeStyle = c1; g.lineWidth = 3.5; g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.stroke();
+          g.strokeStyle = c2; g.lineWidth = 1.6; g.beginPath(); g.arc(0, 0, R * 0.72, this.t * 9 + p.d, this.t * 9 + p.d + 4.2); g.stroke();
+          g.restore();
+        }, "p", 34);
+      }
+    }
+    this.beamQ.length = 0;
+  }
+
   private drawFancyBeam(g: CanvasRenderingContext2D, z: State["zones"][number], a: number) {
     if (z.type === "Dragon" && this.drawDragonBeam(g, z, a)) return;
-    const pal: Record<string, [string, string, string]> = {
-      Grass: ["#7be04a", "#fff3a0", "#ffffff"],
-      Water: ["#3aa0ff", "#bfe8ff", "#ffffff"],
-      Fire: ["#ff6a1a", "#ffd24d", "#fff7d0"],
-      Ice: ["#7fd8ff", "#dff6ff", "#ffffff"],
-      Dragon: ["#7a5cff", "#4fe3ff", "#ffffff"],
-      Fairy: ["#ff8fd8", "#ffd6f2", "#ffffff"],
-      Steel: ["#9fb4c4", "#e4eef5", "#ffffff"],
-      Ghost: ["#9a4fe0", "#d9b3ff", "#ffffff"],
-      Dark: ["#6a3ab0", "#b58cff", "#ffffff"],
-      Psychic: ["#ff6fd0", "#ffd0f2", "#ffffff"],
-      Flying: ["#9ad6ff", "#e8f7ff", "#ffffff"],
-      Normal: ["#ffd86b", "#fff3c9", "#ffffff"],
-      Poison: ["#b04fe0", "#e6b3ff", "#ffffff"],
-      Bug: ["#9ad03a", "#e5ffa8", "#ffffff"],
-      Rock: ["#b89a68", "#efe0b8", "#ffffff"],
-      Ground: ["#c8a050", "#f0dca0", "#ffffff"],
-      Fighting: ["#ff6a4a", "#ffd0b8", "#ffffff"],
-    };
+    const pal = BEAM_PAL;
     const [c0, c1, c2] = pal[z.type] ?? pal.Normal!;
     const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
     const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
@@ -4258,16 +4315,22 @@ export class ArenaRenderer {
     } else if (id === "dragontail") {
       // the tail sweeps round the body: a glowing crescent with a spiked tip
       g.translate(f.x, f.y - f.r * 0.2);
-      const head = ang - 1.5 + p * 3.4;
+      const head = ang - 1.6 + p * 3.6;
+      // a long, thick sweep that fades behind the tip, glowing, with a wide soft halo under it
+      const TR = f.r * 2.4;
+      g.globalCompositeOperation = "lighter"; g.lineCap = "round";
+      g.globalAlpha = (1 - p * 0.5) * 0.35; g.strokeStyle = "#7a5cff"; g.lineWidth = 30;
+      g.beginPath(); g.arc(0, 0, TR, head - 1.15, head); g.stroke();
       for (let k = 0; k < 5; k++) {
-        g.globalAlpha = (1 - k * 0.2) * (1 - p * 0.4);
+        g.globalAlpha = (1 - k * 0.17) * (1 - p * 0.4);
         g.strokeStyle = k === 0 ? "#ffffff" : k < 3 ? "#4fe3ff" : "#7a5cff";
-        g.lineWidth = 11 - k * 2;
-        g.beginPath(); g.arc(0, 0, f.r * 2.2 + k * 1.5, head - 0.28 - k * 0.22, head - k * 0.22); g.stroke();
+        g.lineWidth = 17 - k * 3;
+        g.beginPath(); g.arc(0, 0, TR + k * 1.5, head - 0.95 - k * 0.1, head - k * 0.06); g.stroke();
       }
       g.globalAlpha = 1; g.fillStyle = "#ffffff";
-      const tx = Math.cos(head) * f.r * 2.2, ty = Math.sin(head) * f.r * 2.2;
+      const tx = Math.cos(head) * f.r * 2.4, ty = Math.sin(head) * f.r * 2.4;
       g.beginPath(); g.moveTo(tx + Math.cos(head) * 12, ty + Math.sin(head) * 12); g.lineTo(tx + Math.cos(head + 1.9) * 9, ty + Math.sin(head + 1.9) * 9); g.lineTo(tx + Math.cos(head - 1.9) * 9, ty + Math.sin(head - 1.9) * 9); g.closePath(); g.fill();
+      { const gr = g.createRadialGradient(tx, ty, 0, tx, ty, f.r * 0.6); gr.addColorStop(0, "rgba(255,255,255,.8)"); gr.addColorStop(1, "rgba(79,227,255,0)"); g.fillStyle = gr; g.beginPath(); g.arc(tx, ty, f.r * 0.6, 0, Math.PI * 2); g.fill(); }
       if (Math.random() < 0.6) this.parts.push({ kind: "star", x: f.x + tx, y: f.y + ty, vx: rnd(-60, 60), vy: rnd(-60, 60), g: 0, life: 0.35, max: 0.35, size: rnd(3, 6), grow: 0, color: Math.random() < 0.5 ? "#4fe3ff" : "#ffffff" });
     }
     g.restore();

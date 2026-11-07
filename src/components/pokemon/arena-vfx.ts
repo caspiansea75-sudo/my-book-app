@@ -12,6 +12,7 @@ import type { MoveDef } from "@/lib/pokemon/arena-data";
 import type { SpecCtx, SP } from "./arena-spec";
 import { texPat, typeTex, type TexKind } from "./arena-tex";
 import { layeredBurst, layeredCast, layeredHit } from "./arena-layers";
+import { hasWake, identCast, identHit, identWake } from "./arena-ident";
 
 export type Motif =
   | "orb" | "blade" | "claw" | "fist" | "kick" | "wave" | "vortex" | "beam" | "spike" | "cloud" | "bolt" | "flame"
@@ -130,6 +131,7 @@ export function vfxCast(mv: MoveDef, e: { x: number; y: number; dir: number; tx:
   const ux = Math.cos(e.dir), uy = Math.sin(e.dir);
   const nx = -uy, ny = ux;
   const x = e.x + ux * 14, y = e.y + uy * 14;
+  if (identCast(mv.id, sg.pal, x, y, e.dir, c)) return;
   const A = (p: SP) => add(c, p);
   // every move: a glow at the muzzle and a faint mark under the caster
   A({ kind: "glow", x, y, life: 0.28, size: 10, grow: 70, color: md });
@@ -218,6 +220,7 @@ export function vfxHit(mvId: string, mv: Pick<MoveDef, "id" | "type" | "kind">, 
   const A = (p: SP) => add(c, p);
   const k = heavy ? 1.5 : 1;
   const ang = Math.atan2(dy || 0.0001, dx || 0.0001);
+  if (identHit(mv.id, sg.pal, x, y, heavy, ang, c)) return;
   switch (sg.motif) {
     case "claw":
       for (let i = -1; i <= 1; i++) A({ kind: "streak", x: x + Math.cos(ang + 1.57) * i * 11 - Math.cos(ang) * 20, y: y + Math.sin(ang + 1.57) * i * 11 - Math.sin(ang) * 20, vx: Math.cos(ang) * 420, vy: Math.sin(ang) * 420, life: 0.2, size: 16, color: lt });
@@ -369,6 +372,7 @@ export function vfxDash(mv: MoveDef, f: { x: number; y: number; dash?: { dx: num
   const d = f.dash;
   if (!d || Math.random() > 0.75) return;
   const x = f.x, y = f.y + 4;
+  if (hasWake(mv.id)) { identWake(mv.id, sg.pal, x, y, Math.atan2(d.dy, d.dx), c); return; }
   const A = (p: SP) => add(c, p);
   switch (sg.motif) {
     case "claw": case "blade": A({ kind: "streak", x, y: y - 10, vx: -d.dx * 260, vy: -d.dy * 260, life: 0.26, size: rnd(12, 20), color: lt }); A({ kind: "spark", x, y, vx: rnd(-90, 90), vy: rnd(-90, 90), life: 0.3, size: 2, color: core }); break;
@@ -387,6 +391,7 @@ export function vfxDash(mv: MoveDef, f: { x: number; y: number; dash?: { dx: num
 export function vfxTrail(mv: MoveDef, p: { x: number; y: number; vx: number; vy: number }, c: Cx): boolean {
   const sg = sigOf(mv);
   const [dk, md, lt, core] = sg.pal;
+  if (hasWake(mv.id)) { if (Math.random() < 0.5) identWake(mv.id, sg.pal, p.x, p.y, Math.atan2(p.vy, p.vx), c); return true; }
   if (Math.random() > 0.8) return true;
   const A = (q: SP) => add(c, q);
   // on a fast device every shot also leaves a soft glowing wake

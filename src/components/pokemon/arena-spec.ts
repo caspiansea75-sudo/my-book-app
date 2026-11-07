@@ -479,7 +479,7 @@ export function specWindup(g: CanvasRenderingContext2D, id: string, z: { x: numb
 
 /* ------------------------------------------------------------------ the strike of the two line specialties */
 
-export function specStrike(g: CanvasRenderingContext2D, id: string, z: { x: number; y: number; x2: number; y2: number; r: number; id: number }, a: number, t: number, first: boolean, c: SpecCtx) {
+export function specStrike(g: CanvasRenderingContext2D, id: string, z: { x: number; y: number; x2: number; y2: number; r: number; id: number }, a: number, t: number, first: boolean, c: SpecCtx, stand?: (x: number, y: number, draw: (g: CanvasRenderingContext2D) => void) => void) {
   const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
   const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
   const ux = Math.cos(ang), uy = Math.sin(ang), nx = -uy, ny = ux;
@@ -533,19 +533,36 @@ export function specStrike(g: CanvasRenderingContext2D, id: string, z: { x: numb
     const reveal = Math.min(1, age / 0.13);
     const close = Math.min(1, a * 2.2);
     const steps = Math.max(2, Math.ceil((L * reveal) / 14));
-    const w = (d: number, side: number) => z.r * close * (0.8 + hash(z.id + d * 0.17 + side * 9) * 0.7) * (1 - Math.pow(Math.abs((d / L) * 2 - 1), 3) * 0.45) * 1.15;
+    const wide = stand ? 2.6 : 1;
+    const w = (d: number, side: number) => wide * z.r * close * (0.8 + hash(z.id + d * 0.17 + side * 9) * 0.7) * (1 - Math.pow(Math.abs((d / L) * 2 - 1), 3) * 0.45) * 1.15;
     const edge = (side: number) => { const pts: [number, number][] = []; for (let s = 0; s <= steps; s++) { const d = (s / steps) * L * reveal; pts.push([z.x + ux * d + nx * side * w(s, side), z.y + uy * d + ny * side * w(s, side)]); } return pts; };
     const E1 = edge(-1), E2 = edge(1).reverse();
     const path = () => { g.beginPath(); E1.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]))); E2.forEach((p) => g.lineTo(p[0], p[1])); g.closePath(); };
     path(); g.fillStyle = "rgba(10,5,2,.95)"; g.fill();
-    g.strokeStyle = texPat(g, "rock", 0, 0, 1); g.lineWidth = 10; g.stroke();
+    g.strokeStyle = texPat(g, "rock", 0, 0, 1); g.lineWidth = stand ? 5 : 10; g.stroke();
     g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 2; g.stroke();
     g.globalCompositeOperation = "lighter";
     g.save(); g.translate(z.x, z.y); g.rotate(ang);
     const gl = g.createLinearGradient(0, -z.r, 0, z.r);
-    gl.addColorStop(0, "rgba(255,120,30,0)"); gl.addColorStop(0.5, `rgba(255,150,50,${0.65 * a})`); gl.addColorStop(1, "rgba(255,120,30,0)");
+    gl.addColorStop(0, "rgba(255,120,30,0)"); gl.addColorStop(0.5, `rgba(255,150,50,${(stand ? 1 : 0.65) * a})`); gl.addColorStop(1, "rgba(255,120,30,0)");
     g.fillStyle = gl; g.fillRect(0, -z.r * 0.8, L * reveal, z.r * 1.6);
     g.restore();
+    if (stand) {
+      // in the player views the torn edges heave up: slabs of floor stand along both lips of the chasm, taller as it opens
+      const rise = reveal * close;
+      for (let d = 18, k = 0; d < L * reveal; d += 46, k++) for (const side of [-1, 1]) {
+        const hh = (10 + hash(z.id + k * 3 + side) * 22) * rise, ww = 9 + hash(z.id + k * 5 + side * 2) * 9, lean = (hash(k * 7 + side) - 0.5) * 8;
+        const bx = z.x + ux * d + nx * side * (w(Math.round((d / L) * steps), side) * 1.04), by = z.y + uy * d + ny * side * (w(Math.round((d / L) * steps), side) * 1.04);
+        stand(bx, by, (gg) => {
+          gg.save(); gg.globalCompositeOperation = "source-over";
+          gg.fillStyle = "#4b3d30"; gg.strokeStyle = "#1c130b"; gg.lineWidth = 2;
+          gg.beginPath(); gg.moveTo(-ww, 0); gg.lineTo(-ww * 0.7 + lean * 0.4, -hh * 0.6); gg.lineTo(lean, -hh); gg.lineTo(ww * 0.6 + lean * 0.4, -hh * 0.55); gg.lineTo(ww, 0); gg.closePath(); gg.fill(); gg.stroke();
+          gg.fillStyle = "#8a7660"; gg.beginPath(); gg.moveTo(-ww * 0.7 + lean * 0.4, -hh * 0.6); gg.lineTo(lean, -hh); gg.lineTo(lean * 0.6 - 1, -hh * 0.3); gg.closePath(); gg.fill();
+          gg.globalCompositeOperation = "lighter"; gg.fillStyle = `rgba(255,140,40,${0.5 * a})`; gg.fillRect(-ww, -3, ww * 2, 3);
+          gg.restore();
+        });
+      }
+    }
   }
   g.restore();
 }
