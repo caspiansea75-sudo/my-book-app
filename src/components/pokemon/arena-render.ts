@@ -6043,7 +6043,7 @@ export class ArenaRenderer {
         lift *= 2;
         sx = 1 + (sx - 1) * 1.8;
         sy = 1 + (sy - 1) * 1.8;
-        rot += Math.sin(phase) * 0.2; // weight shifting from foot to foot
+        rot += Math.sin(phase) * 0.07; // weight shifting from foot to foot
       } else if (f.loco === "fly") {
         sy *= 1 + Math.sin(t * 16 + f.id) * 0.07;
         sx *= 1 - Math.sin(t * 16 + f.id) * 0.05;

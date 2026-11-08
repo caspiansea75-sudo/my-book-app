@@ -106,6 +106,15 @@ export type RigOpts = {
   wk?: { p: number; a: number };
 };
 
+/** One foot's path through a step (ph 0..1): it stays on the ground and slides back at an even pace (stance), then lifts, swings
+ *  forward in an arc and plants again (swing). dx runs +1 .. -1 .. +1 and dy is the lift. */
+const footCycle = (ph: number): [number, number] => {
+  const q = ph - Math.floor(ph), STANCE = 0.58;
+  if (q < STANCE) return [1 - 2 * (q / STANCE), 0];
+  const k = (q - STANCE) / (1 - STANCE), e = k * k * (3 - 2 * k);
+  return [-1 + 2 * e, Math.pow(Math.sin(Math.PI * k), 0.85)];
+};
+
 const smooth = (a: number, b: number, x: number) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -146,6 +155,8 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
   const scaleY = clamp(1 + breath - thump - (lagY * 0.5) / h, 0.8, 1.2);
   g.save();
   g.translate(x0 + w / 2, y0 + h);
+  // the body rolls a little onto the planted foot as the weight passes from one side to the other
+  if (o.wk && !o.animated) g.rotate(Math.sin(o.wk.p) * 0.022 * (p.quad ? 0.6 : 1));
   g.transform(1, 0, -topDx / h, 1, 0, 0);
   g.scale(1, scaleY);
   const X0 = -w / 2;
@@ -180,6 +191,14 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
       wave = (u) => Math.sin(fp + (1 - u) * 5.2) * 0.034 * size * (1 - u * 0.55) * p.wave * amp;
     }
     const wk = o.wk;
+    if (!wave && !o.animated && o.q > 0.45 && o.loco !== "fly") {
+      // a living spine: while walking, the hips lead and the shoulders and head follow a beat behind; standing, a slow breathing sway
+      if (wk) wave = (u) => Math.sin(wk.p - u * 1.7 + p.phase * 0.1) * 0.012 * size * u * (0.5 + p.sway * 0.5);
+      else {
+        const fp = o.t * 1.1 * p.rate + p.phase + o.id;
+        wave = (u) => Math.sin(fp - u * 1.4) * 0.0055 * size * u;
+      }
+    }
     const bobTop = wk ? -Math.abs(Math.sin(wk.p)) * wk.a * size * 0.5 : 0;
     // rows above `waist` move as one body; the legs below it are the soft grid
     const waist = wk ? Math.floor(sh * 0.58) : sh;
@@ -200,9 +219,9 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
       const lift: number[] = [];
       const swing: number[] = [];
       for (const side of [0, 1]) {
-        const sn = Math.sin(wk.p + side * Math.PI);
-        lift.push(Math.max(0, sn) * wk.a * size * 1.2);
-        swing.push(sn * wk.a * size * 0.4);
+        const [fx, fy] = footCycle(wk.p / (Math.PI * 2) + side * 0.5);
+        lift.push(fy * wk.a * size * 1.2);
+        swing.push(fx * wk.a * size * 0.42);
       }
       const legH = sh - waist;
       for (let r = 0; r < R; r++) {
@@ -219,9 +238,9 @@ export function drawRigged(g: CanvasRenderingContext2D, src: Pic, sw: number, sh
           if (quad) {
             // four legs: the step travels along the body (hind legs first, then the front ones), so neighbouring legs are never in step
             // and each foot lifts and plants smoothly; the stride is shorter than a biped's
-            const sn = Math.sin(wk.p + ((c + 0.5) / C) * Math.PI * 1.5);
-            footDy = -Math.pow(Math.max(0, sn), 1.25) * wk.a * size * 0.95 + bobTop * 0.4;
-            footDx = sn * wk.a * size * 0.3;
+            const [fx, fy] = footCycle(wk.p / (Math.PI * 2) + ((c + 0.5) / C) * 0.75);
+            footDy = -fy * wk.a * size * 0.95 + bobTop * 0.4;
+            footDx = fx * wk.a * size * 0.32;
           }
           slice(g, src, sw, sh, X0, Y0, w, h, sx0, sy0, sx1 - sx0, sy1 - sy0, footDx * ramp, mix(bobTop, footDy, ramp), OV, r === R - 1 ? 0 : OV);
         }
