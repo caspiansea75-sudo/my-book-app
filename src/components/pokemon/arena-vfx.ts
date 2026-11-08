@@ -420,7 +420,7 @@ export function vfxTrail(mv: MoveDef, p: { x: number; y: number; vx: number; vy:
 export const OWN_SHOT_ART = new Set([
   "confuseray", "supersonic", "sing", "hypnosis", "spore", "toxic", "powdersnow", "hiddenpower", "shockwave", "energyball", "gigadrain", "signalbeam",
   "willowisp", "dragonpulse", "dragonbreath", "shadowball", "aurasphere", "razorleaf", "leafstorm", "stoneedge", "psybeam", "psystrike", "thundershock",
-  "electroball", "waterpulse", "flashcannon", "airslash", "darkpulse", "moonblast", "originpulse",
+  "electroball", "plasmaburst", "scorchedtwilight", "waterpulse", "flashcannon", "airslash", "darkpulse", "moonblast", "originpulse",
 ]);
 
 function shaded(g: CanvasRenderingContext2D, sg: Sig, r: number, t: number) {

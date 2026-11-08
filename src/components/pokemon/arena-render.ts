@@ -16,6 +16,7 @@ import { FALL_IDS, drawFall } from "./arena-fall";
 import { DUSK_BIG, DUSK_IDS, duskFlat, duskItems, duskIsGhost, type DuskSig } from "./arena-dusk";
 import { WYRM_BIG, WYRM_IDS, wyrmFlat, wyrmItems, type WyrmSig } from "./arena-wyrm";
 import { electroBoom } from "./arena-elec";
+import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./arena-fx13";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
@@ -221,6 +222,7 @@ export class ArenaRenderer {
   private hells: HellSig[] = [];
   private dusks: DuskSig[] = [];
   private wyrms: WyrmSig[] = [];
+  private fx13: F13[] = [];
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
@@ -1133,6 +1135,13 @@ export class ArenaRenderer {
             this.dusks.push({ x: e.x, y: e.y, r: Math.max(e.r, big ? 100 : 70), t: 0, life: big ? 2.8 : 1.9, seed: Math.random() * 90, mv: e.mv, ghost: duskIsGhost(e.type), big });
             if (this.dusks.length > 8) this.dusks.shift();
           }
+          if (e.mv && FX13_IDS.has(e.mv)) {
+            const f = newF13(e.mv, e.x, e.y, e.r);
+            this.fx13.push(f);
+            if (this.fx13.length > 8) this.fx13.shift();
+            boom13(f, (q) => this.parts.push(q as unknown as Parti));
+            this.shake = Math.max(this.shake, 5); this.shakeT = Math.max(this.shakeT, 0.22);
+          }
           if (e.mv && WYRM_IDS.has(e.mv)) {
             const big = WYRM_BIG.has(e.mv);
             this.wyrms.push({ x: e.x, y: e.y, r: Math.max(e.r, big ? 100 : 70), t: 0, life: big ? 2.8 : 2.0, seed: Math.random() * 90, mv: e.mv, big });
@@ -1885,6 +1894,12 @@ export class ArenaRenderer {
       if (d.t >= d.life) this.dusks.splice(i, 1);
       else duskFlat(G, d);
     }
+    for (let i = this.fx13.length - 1; i >= 0; i--) {
+      const d = this.fx13[i]!;
+      d.t += dt;
+      if (d.t >= d.life) this.fx13.splice(i, 1);
+      else { flat13(G, d); tick13(d, dt, (q) => this.parts.push(q as unknown as Parti)); }
+    }
     for (let i = this.wyrms.length - 1; i >= 0; i--) {
       const d = this.wyrms[i]!;
       d.t += dt;
@@ -1916,6 +1931,7 @@ export class ArenaRenderer {
       }
       things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => { const va = md?.kind === "vanish" && mv ? this.vanishAlpha(mv.t / mv.total) : this.dashAlpha(f); if (va <= 0.01) return; g.save(); g.globalAlpha *= va; this.drawFighter(g, f, S, f === you); g.restore(); }, "f") });
     }
+    for (const d of this.fx13) items13(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const h of this.hells) hellItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));

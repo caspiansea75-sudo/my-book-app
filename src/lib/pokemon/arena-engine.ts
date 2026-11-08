@@ -2721,8 +2721,9 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
       h.channel.dy = a.dy;
       h.face = Math.atan2(a.dy, a.dx);
     }
-    // face the aim
-    if (!h.cast && !h.channel && len(mx, my) < 0.1) {
+    // Standing still it keeps the way it was facing (where you turned it or stopped). It only turns on its own to follow an aim
+    // the player is actually holding; with no aim it no longer swings back round to the nearest foe.
+    if (!h.cast && !h.channel && len(mx, my) < 0.1 && inp.aim) {
       const a = aimOf(S, h, inp);
       h.face = Math.atan2(a.dy, a.dx);
     }

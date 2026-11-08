@@ -1,4 +1,5 @@
 import { drawElectroBall } from "./arena-elec";
+import { SHOT13, drawShot13 } from "./arena-fx13";
 /**
  * Pictures for Arena Brawl that are drawn in code: the four stage floors, crates, pillars, crystals, rocks,
  * water and pits, and the look of each kind of projectile (a fire stream is a chain of cartoon fireballs,
@@ -382,6 +383,7 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
   g.save();
   g.translate(p.x, p.y);
   const r = p.r;
+  if (!p.beam && p.mv && SHOT13.has(p.mv)) { drawShot13(g, p.mv, ang, r, age, t); g.restore(); return; }
   if (!p.beam && p.mv === "electroball") { drawElectroBall(g, ang, r, age, t); g.restore(); return; }
 
   if (p.beam) {
