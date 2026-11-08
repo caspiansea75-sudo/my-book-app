@@ -7,11 +7,16 @@ import { decodeGif, frameAt, type GifFrames } from "./gif-frames";
 import { MeleeFx } from "./arena-melee";
 import { cloudSprite, texPat, typeTex } from "./arena-tex";
 import { Z_TINT, drawZScene, setZSky, zFinale } from "./arena-zmove";
+import { DETAIL_STRENGTH, DETAIL_WORLD, detailTile } from "./arena-detail";
 import { OWN_SHOT_ART, sigOf, vfxCast, vfxDash, vfxHit, vfxStrike, vfxTrail } from "./arena-vfx";
 import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinger, specShotTrail, specStrike, specWindup, type Decal, type SpecCtx } from "./arena-spec";
 import { drawAmbient } from "./arena-scenery";
 import { IDENT_IDS, identBoom } from "./arena-ident";
 import { FALL_IDS, drawFall } from "./arena-fall";
+import { DUSK_BIG, DUSK_IDS, duskFlat, duskItems, duskIsGhost, type DuskSig } from "./arena-dusk";
+import { WYRM_BIG, WYRM_IDS, wyrmFlat, wyrmItems, type WyrmSig } from "./arena-wyrm";
+import { electroBoom } from "./arena-elec";
+import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
 import { Scars } from "./arena-scars";
@@ -213,6 +218,9 @@ export class ArenaRenderer {
   private waves: { x: number; y: number; r: number; t: number; life: number; kind: string }[] = [];
   /** Moves with a signature look (tornado, wave, storm) that are playing now. */
   private sigs: Sig[] = [];
+  private hells: HellSig[] = [];
+  private dusks: DuskSig[] = [];
+  private wyrms: WyrmSig[] = [];
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
@@ -511,14 +519,40 @@ export class ArenaRenderer {
     g.restore();
   }
   /** Lay a flat world-sized picture onto the tilted floor, row by row. */
-  private blit(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number) {
-    if (this.v3) return this.blit3(g, src, step);
+  /** The fine tile of detail for a stage as a pattern in arena units, or null on a slow device. */
+  private detailPattern(g: CanvasRenderingContext2D, kind: StageKind): CanvasPattern | null {
+    if (this.q < 0.6 || !DETAIL_STRENGTH[kind]) return null;
+    if (this.detPat?.kind !== kind) {
+      const pat = g.createPattern(detailTile(kind), "repeat");
+      if (!pat) return null;
+      pat.setTransform(new DOMMatrix().scale(DETAIL_WORLD / 256));
+      this.detPat = { kind, pat };
+    }
+    return this.detPat.pat;
+  }
+  /** The flat view from above: lay the fine detail over the floor (the stage's own marks, pools and so on are drawn over it afterwards). */
+  private detailFlat(g: CanvasRenderingContext2D, kind: StageKind) {
+    const pat = this.detailPattern(g, kind);
+    if (!pat) return;
+    g.save();
+    g.globalCompositeOperation = "overlay";
+    g.globalAlpha = DETAIL_STRENGTH[kind];
+    g.fillStyle = pat;
+    g.fillRect(-PAD.l, -PAD.t, ARENA.W + PAD.l + PAD.r, ARENA.H + PAD.t + PAD.b);
+    g.restore();
+  }
+  private padded(src: HTMLCanvasElement) {
+    return src === this.gc || src === this.floorCv;
+  }
+  private blit(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number, pat?: CanvasPattern | null) {
+    if (this.v3) return this.blit3(g, src, step, pat);
     const { s, c, tz } = this.tp;
     const Z = this.zoom * tz;
     // the picture covers the arena plus a margin (PAD) on every side; `ext` tells how much
-    const ext = src === this.gc ? PAD : { l: 0, r: 0, t: 0, b: 0 };
+    const ext = this.padded(src) ? PAD : { l: 0, r: 0, t: 0, b: 0 };
     const W = ARENA.W + ext.l + ext.r, H = ARENA.H + ext.t + ext.b;
     const kx = src.width / W;
+    const dAlpha = pat ? DETAIL_STRENGTH[this.stageNow] : 0;
     g.save();
     g.setTransform(this.scale, 0, 0, this.scale, 0, 0);
     for (let y = 0; y < H; y += step) {
@@ -529,14 +563,29 @@ export class ArenaRenderer {
       const y0 = Z * s * (d0 + (c * d0 * d0) / (2 * H));
       const y1 = Z * s * (d1 + (c * d1 * d1) / (2 * H));
       g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, this.cx + (-ext.l - this.camX) * Z * fm + this.shx, SCR.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
+      if (pat) {
+        // the fine detail on the same row, in the same perspective (it fades out with distance, where it would only shimmer)
+        const da = dAlpha * Math.max(0, Math.min(1, (fm - 0.5) / 0.35));
+        if (da > 0.04) {
+          const dd = (y1 - y0 + 0.8) / (yb - y);
+          g.save();
+          g.globalCompositeOperation = "overlay";
+          g.globalAlpha = da;
+          g.transform(Z * fm, 0, 0, dd, this.cx - this.camX * Z * fm + this.shx, SCR.CY + y0 + this.shy - (y - ext.t) * dd);
+          g.fillStyle = pat;
+          g.fillRect(-ext.l, y - ext.t, W, yb - y + 0.8 / dd);
+          g.restore();
+        }
+      }
     }
     g.restore();
   }
   /** Lay the flat floor picture onto the ground the player-view cameras see, one thin row of the screen at a time:
    *  each row looks at a straight line on the floor, which is drawn there turned the way the camera is turned. */
-  private blit3(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number) {
+  private blit3(g: CanvasRenderingContext2D, src: HTMLCanvasElement, step: number, pat?: CanvasPattern | null) {
     const c = this.c3;
-    const ext = src === this.gc ? PAD : { l: 0, r: 0, t: 0, b: 0 };
+    const ext = this.padded(src) ? PAD : { l: 0, r: 0, t: 0, b: 0 };
+    const dAlpha = pat ? DETAIL_STRENGTH[this.stageNow] : 0;
     const W = ARENA.W + ext.l + ext.r;
     const kx = src.width / W;
     const k = this.scale;
@@ -580,6 +629,16 @@ export class ArenaRenderer {
       const d = -c.fy * dd;
       g.setTransform(k * a, k * b, k * cc, k * d, k * (this.cx + this.shx - (ax * c.rx + ay * c.ry) / kk), k * (yc + this.shy + (ax * c.fx + ay * c.fy) * dd));
       g.drawImage(src, tx0, ty0, tx1 - tx0, ty1 - ty0, tx0 / kx - ext.l, ty0 / kx - ext.t, (tx1 - tx0) / kx, (ty1 - ty0) / kx);
+      if (pat) {
+        // the fine detail on the same strip of floor, at the screen's own sharpness, fading out with distance
+        const da = dAlpha * Math.max(0, Math.min(1, 1 - (depth - 230) / 1000));
+        if (da > 0.04) {
+          g.globalCompositeOperation = "overlay";
+          g.globalAlpha = da;
+          g.fillStyle = pat;
+          g.fillRect(tx0 / kx - ext.l, ty0 / kx - ext.t, (tx1 - tx0) / kx, (ty1 - ty0) / kx);
+        }
+      }
       g.restore();
     }
     g.restore();
@@ -682,6 +741,9 @@ export class ArenaRenderer {
   private finishGround(g: CanvasRenderingContext2D, G: CanvasRenderingContext2D) {
     void G;
     this.drawAim(this.gcx());
+    const floor = extendedGround(this.stageNow);
+    this.floorCv = floor;
+    this.blit(g, floor, this.v3 ? 3 : 2, this.detailPattern(g, this.stageNow));
     this.blit(g, this.gc!, this.v3 ? 3 : 2);
     const far = this.v3 ? { y: this.c3.hz } : this.proj(ARENA.CX, -PAD.t);
     const len = this.v3 ? 200 : 150 * this.tp.s * this.zoom;
@@ -1062,6 +1124,20 @@ export class ArenaRenderer {
             if (e.r < 36) { if (Math.random() < 0.45) this.scar(e.x, e.y + 4, Math.max(6, e.r * 0.3), e.type); }
             else if (e.r >= 100) { this.scars.web(e.x, e.y, e.r * 0.8); this.scars.rubble(e.x, e.y, e.r * 0.9, Math.round(e.r / 8)); }
           }
+          if (e.mv && HELL_IDS.has(e.mv)) {
+            this.hells.push({ x: e.x, y: e.y, r: Math.max(e.r, 90), t: 0, life: 2.4, seed: Math.random() * 90, mv: e.mv });
+            if (this.hells.length > 6) this.hells.shift();
+          }
+          if (e.mv && DUSK_IDS.has(e.mv)) {
+            const big = DUSK_BIG.has(e.mv);
+            this.dusks.push({ x: e.x, y: e.y, r: Math.max(e.r, big ? 100 : 70), t: 0, life: big ? 2.8 : 1.9, seed: Math.random() * 90, mv: e.mv, ghost: duskIsGhost(e.type), big });
+            if (this.dusks.length > 8) this.dusks.shift();
+          }
+          if (e.mv && WYRM_IDS.has(e.mv)) {
+            const big = WYRM_BIG.has(e.mv);
+            this.wyrms.push({ x: e.x, y: e.y, r: Math.max(e.r, big ? 100 : 70), t: 0, life: big ? 2.8 : 2.0, seed: Math.random() * 90, mv: e.mv, big });
+            if (this.wyrms.length > 8) this.wyrms.shift();
+          }
           const sigStyle = e.mv ? SIG_MOVES[e.mv] : undefined;
           if (sigStyle) {
             // a hurricane, a wave, a blizzard...: its own look replaces the generic burst
@@ -1412,6 +1488,7 @@ export class ArenaRenderer {
       specBoom(e.fx, x, y, r, this.sctx);
       return;
     }
+    if (e.mv === "electroball") { electroBoom((q) => this.parts.push(q as unknown as Parti), x, y, r); this.shake = Math.max(this.shake, 6); this.shakeT = Math.max(this.shakeT, 0.25); return; }
     if (e.mv === "eruption" || e.mv === "blastburn" || e.mv === "fusionflare") { this.fireBoom(e.mv, x, y, r); return; }
     if (e.mv && e.fx && e.mv !== e.fx && e.fx !== "levitate" && e.fx !== "clones" && IDENT_IDS.has(e.mv)) {
       const pal = sigOf({ id: e.mv, type: e.type, kind: "lob" } as MoveDef).pal;
@@ -1682,7 +1759,12 @@ export class ArenaRenderer {
       g.scale(zoom, zoom);
       g.translate(-this.camX + rnd(-k, k), -this.camY + rnd(-k, k));
     }
-    G.drawImage(extendedGround(S.stage), -PAD.l, -PAD.t);
+    this.stageNow = S.stage;
+    if (!T) {
+      G.drawImage(extendedGround(S.stage), -PAD.l, -PAD.t);
+      this.detailFlat(G, S.stage);
+    }
+    // (in the tilted views the floor is laid onto the ground straight from its own picture, in finishGround, with its fine detail)
     // the stands round the pitch: a crowd that cheers in a wave (a few baked frames, cycled)
     {
       const fr = crowdFrames(S.stage, PAD)[Math.floor(this.t * 5) % CROWD_FRAMES]!;
@@ -1791,6 +1873,24 @@ export class ArenaRenderer {
       if (sg.t >= sg.life) this.sigs.splice(i, 1);
       else sigFlat(G, sg);
     }
+    for (let i = this.hells.length - 1; i >= 0; i--) {
+      const h = this.hells[i]!;
+      h.t += dt;
+      if (h.t >= h.life) this.hells.splice(i, 1);
+      else hellFlat(G, h);
+    }
+    for (let i = this.dusks.length - 1; i >= 0; i--) {
+      const d = this.dusks[i]!;
+      d.t += dt;
+      if (d.t >= d.life) this.dusks.splice(i, 1);
+      else duskFlat(G, d);
+    }
+    for (let i = this.wyrms.length - 1; i >= 0; i--) {
+      const d = this.wyrms[i]!;
+      d.t += dt;
+      if (d.t >= d.life) this.wyrms.splice(i, 1);
+      else wyrmFlat(G, d);
+    }
     for (const [id, tr] of this.iceTrails) { drawPlates(G, tr.list, dt, this.t); if (!tr.list.length && !S.fighters.some((q) => q.id === id)) this.iceTrails.delete(id); }
     this.decals = drawDecals(G, this.decals, dt);
     this.drawRocks(G, dt);
@@ -1816,6 +1916,9 @@ export class ArenaRenderer {
       }
       things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => { const va = md?.kind === "vanish" && mv ? this.vanishAlpha(mv.t / mv.total) : this.dashAlpha(f); if (va <= 0.01) return; g.save(); g.globalAlpha *= va; this.drawFighter(g, f, S, f === you); g.restore(); }, "f") });
     }
+    for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    for (const h of this.hells) hellItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     // standing things (spikes, rocks, whirls) take their place among the fighters
     for (const q of this.standQ) things.push({ y: dk(q.x, q.y), draw: () => this.at(g, q.x, q.y, "bb", () => q.draw(g)) });
@@ -3429,6 +3532,10 @@ export class ArenaRenderer {
     }
   }
 
+  /** the floor picture being laid on the ground this frame, and the stage it belongs to */
+  private floorCv: HTMLCanvasElement | null = null;
+  private stageNow: StageKind = "grass";
+  private detPat: { kind: StageKind; pat: CanvasPattern } | null = null;
   /** Scratch pictures used by `shaded`. */
   private scratch: HTMLCanvasElement | null = null;
   private scratch2: HTMLCanvasElement | null = null;

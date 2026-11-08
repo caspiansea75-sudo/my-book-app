@@ -78,12 +78,15 @@ const GR = ramp.bind(null, ["#17421a", "#25602a", "#3b8338", "#68ab48", "#9ccb69
 const grass: Surface = (x, y) => {
   // soft patches of lush and dry grass, a mown-stripe sheen, tufts and a few clover / dirt flecks
   const patch = fbm(x / 170, y / 150, 4, 1);
-  const stripe = 0.5 + 0.5 * Math.sin(x / 60 * Math.PI) * 0.35;
+  // mown stripes: bands of grass laid the other way, so they catch the light differently, each one a little brighter on one edge
+  const band = Math.floor(x / 92);
+  const stripe = 0.5 + (band % 2 ? 0.5 : -0.5) * 0.46 + ((x % 92) / 92 - 0.5) * 0.1;
   const tuft = fbm(x / 5.2, y / 2.6, 3, 2); // blades are drawn a little longer than wide
   const fine = vn(x / 1.7, y / 1.2, 3);
-  let t = 0.28 + patch * 0.5 + (stripe - 0.5) * 0.14 + (tuft - 0.5) * 0.34 + (fine - 0.5) * 0.1;
+  let t = 0.28 + patch * 0.5 + (stripe - 0.5) * 0.3 + (tuft - 0.5) * 0.38 + (fine - 0.5) * 0.12;
   const rgb = GR(t);
-  const worn = clamp01((fbm(x / 120, y / 100, 3, 6) - 0.62) * 4); // bare earth where it is trodden
+  // bare earth where it is trodden: in patches, and a worn spot in the middle of the pitch
+  const worn = clamp01((fbm(x / 120, y / 100, 3, 6) - 0.62) * 4 + clamp01(1 - Math.hypot(x - CXF, y - CYF) / 150) * 0.7);
   const c = mix(rgb, hex("#6e5a37"), worn * 0.55 * (0.6 + fine * 0.6));
   const clover = vn(x / 9, y / 9, 8) > 0.86 ? 1 : 0;
   if (clover) { c[0] += 22; c[1] += 28; c[2] += 4; }
@@ -220,11 +223,16 @@ const SURF: Record<StageKind, Surface> = { grass, stone, dirt, crystal, ice, lav
 /** Light from the upper left; higher values lean the shading harder. */
 const RELIEF: Record<StageKind, number> = { grass: 0.9, stone: 1.5, dirt: 1.3, crystal: 1.7, ice: 0.8, lava: 1.4, coast: 1.1, meadow: 0.9, glacier: 0.8, ocean: 0.7 };
 
+/** The middle of the floor being painted (some surfaces wear thin there). */
+let CXF = 720, CYF = 450;
+
 const mkCanvas = (w: number, h: number) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
 
 /** Paint the stage's ground into the rectangle (x0, y0, w, h) of a canvas. */
 export function paintFloor(g: CanvasRenderingContext2D, kind: StageKind, x0: number, y0: number, w: number, h: number) {
   const surf = SURF[kind];
+  CXF = x0 + w / 2;
+  CYF = y0 + h / 2;
   // the relief is baked at half resolution (4x quicker, kind to slow phones) and drawn back up smoothly; fine grit is added at full size after
   const STEP = 2;
   const sw = Math.ceil(w / STEP), sh = Math.ceil(h / STEP);

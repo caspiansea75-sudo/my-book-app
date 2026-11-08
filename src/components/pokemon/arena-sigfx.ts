@@ -14,22 +14,22 @@ const hs = (n: number) => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; 
 const sm = (a: number, b: number, x: number) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a || 1))); return k * k * (3 - 2 * k); };
 const mix = (a: number, b: number, k: number) => a + (b - a) * k;
 
-export type SigStyle = "hurricane" | "waterspout" | "magmastorm" | "blizzard" | "diamondstorm" | "surf" | "heatwave" | "sludgewave" | "leafstorm";
+export type SigStyle = "hurricane" | "waterspout" | "magmastorm" | "blizzard" | "diamondstorm" | "surf" | "heatwave" | "sludgewave" | "leafstorm" | "sandstorm";
 
 /** Moves that get a signature look, by move id. */
 export const SIG_MOVES: Record<string, SigStyle> = {
   hurricane: "hurricane", waterspout: "waterspout", magmastorm: "magmastorm",
   blizzard: "blizzard", diamondstorm: "diamondstorm",
   surf: "surf", heatwave: "heatwave", sludgewave: "sludgewave",
-  leafstorm: "leafstorm", whirlpool: "waterspout",
+  leafstorm: "leafstorm", whirlpool: "waterspout", firespin: "magmastorm", whirlpoolprison: "waterspout", sandtomb: "sandstorm", hurricanegale: "hurricane",
 };
 
-export const isTall = (st: SigStyle) => st === "hurricane" || st === "waterspout" || st === "magmastorm" || st === "leafstorm";
+export const isTall = (st: SigStyle) => st === "hurricane" || st === "waterspout" || st === "magmastorm" || st === "leafstorm" || st === "sandstorm";
 
 export type Sig = { style: SigStyle; x: number; y: number; r: number; t: number; life: number; seed: number };
 
 export function newSig(style: SigStyle, x: number, y: number, r: number, life?: number): Sig {
-  const base: Record<SigStyle, number> = { hurricane: 1.9, waterspout: 1.9, magmastorm: 4, blizzard: 2.6, diamondstorm: 1.5, surf: 1.15, heatwave: 1.1, sludgewave: 1.15, leafstorm: 2.2 };
+  const base: Record<SigStyle, number> = { hurricane: 1.9, waterspout: 1.9, magmastorm: 4, blizzard: 2.6, diamondstorm: 1.5, surf: 1.15, heatwave: 1.1, sludgewave: 1.15, leafstorm: 2.2, sandstorm: 2.2 };
   return { style, x, y, r, t: 0, life: life ?? base[style], seed: Math.random() * 1000 };
 }
 
@@ -42,6 +42,7 @@ const PAL: Record<SigStyle, Pal> = {
   diamondstorm: { dk: "#6a86c8", md: "#a8d8ff", lt: "#eaf8ff", core: "#ffffff" },
   surf: { dk: "#124a98", md: "#2f86e0", lt: "#9fdcff", core: "#ffffff" },
   heatwave: { dk: "#8a1c08", md: "#ff6a1f", lt: "#ffc04a", core: "#fff3b0" },
+  sandstorm: { dk: "#7a5a2c", md: "#c89a50", lt: "#ecd29a", core: "#fff2cc" },
   leafstorm: { dk: "#1f5a22", md: "#4fb83a", lt: "#b8f07a", core: "#f4ffd8" },
   sludgewave: { dk: "#3a1458", md: "#8a3ac8", lt: "#c8ff6a", core: "#f0ffd0" },
 };
@@ -50,8 +51,10 @@ const PAL: Record<SigStyle, Pal> = {
 
 type G = CanvasRenderingContext2D;
 import { iceFlat, iceItems } from "./arena-ice";
+import { isVortex, vortexFlat, vortexItems } from "./arena-vortex";
 
 export function sigFlat(g: G, s: Sig) {
+  if (isVortex(s.style)) { vortexFlat(g, s); return; }
   if (s.style === "blizzard") { iceFlat(g, s); return; }
   const u = Math.min(1, s.t / s.life);
   const p = PAL[s.style];
@@ -128,6 +131,7 @@ export function sigFlat(g: G, s: Sig) {
 
 /** Called once a frame; `push(x, y, depth, draw)` hands out one upright piece standing at the world point (x, y). */
 export function sigItems(s: Sig, push: (x: number, y: number, dy: number, draw: (g: G) => void) => void) {
+  if (isVortex(s.style)) { vortexItems(s, push); return; }
   if (s.style === "blizzard") { iceItems(s, push); return; }
   if (isTall(s.style)) {
     push(s.x, s.y, -0.6, (g) => tornadoBack(g, s));

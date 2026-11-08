@@ -6,8 +6,10 @@
  */
 import type { Fighter } from "@/lib/pokemon/arena-engine";
 import { TYPE_COLOR } from "@/lib/pokemon/shared";
+import { drawWings } from "./arena-wings";
+import { drawFlux, fluxBurst } from "./arena-flux";
 
-type Style = "claws" | "blade" | "xslash" | "wing" | "fist" | "jaws" | "kick" | "stomp" | "tail" | "ram" | "speed" | "lance" | "drill" | "bird" | "hammer" | "spin" | "phantom";
+type Style = "claws" | "blade" | "xslash" | "wing" | "fist" | "jaws" | "kick" | "stomp" | "tail" | "ram" | "speed" | "lance" | "drill" | "bird" | "hammer" | "spin" | "phantom" | "flux";
 /** style, main colour, light colour, flavour (what the particles look like) */
 const T: Record<string, [Style, string, string, string]> = {
   slash: ["claws", "#dfe6f2", "#ffffff", "spark"],
@@ -16,6 +18,7 @@ const T: Record<string, [Style, string, string, string]> = {
   leafblade: ["blade", "#4cc24a", "#e6ffb0", "leaf"],
   sacredsword: ["xslash", "#ffd24d", "#ffffff", "holy"],
   behemothblade: ["blade", "#9fb3cc", "#ffffff", "steel"],
+  chaosflux: ["flux", "#ff2a4a", "#ffc0cc", "blood"],
   steelwing: ["wing", "#b8c4d4", "#ffffff", "steel"],
   wingattack: ["wing", "#dff0ff", "#ffffff", "wind"],
   firepunch: ["fist", "#ff7a2a", "#ffe08a", "fire"],
@@ -72,7 +75,7 @@ const T: Record<string, [Style, string, string, string]> = {
   poltergeist: ["phantom", "#8a5ad0", "#f0d8ff", "dark"],
   spectralthief: ["phantom", "#9a6ae0", "#ffffff", "dark"],
 };
-const LIFE: Record<Style, number> = { claws: 0.55, blade: 0.5, xslash: 0.45, wing: 0.55, fist: 0.5, jaws: 0.6, kick: 0.5, stomp: 0.75, tail: 0.55, ram: 0.55, speed: 0.4, lance: 0.55, drill: 0.55, bird: 0.6, hammer: 0.75, spin: 0.55, phantom: 0.65 };
+const LIFE: Record<Style, number> = { claws: 0.55, blade: 0.5, xslash: 0.45, wing: 0.55, fist: 0.5, jaws: 0.6, kick: 0.5, stomp: 0.75, tail: 0.55, ram: 0.55, speed: 0.4, lance: 0.55, drill: 0.55, bird: 0.6, hammer: 0.75, spin: 0.55, phantom: 0.65, flux: 0.7 };
 
 /** Moves drawn by the renderer itself. */
 export const MELEE_OWN = new Set(["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"]);
@@ -127,10 +130,8 @@ export class MeleeFx {
         case "blade": swing(g, e, cx, cy, f.r * 2.4, -1.35, 1.35, p, 15, emit, 0.5); break;
         case "kick": swing(g, e, cx, cy, f.r * 2.1, 1.1, -0.55, p, 22, emit, 0.4); impactAt(g, e, cx + Math.cos(e.ang - 0.5) * f.r * 2.1, cy + Math.sin(e.ang - 0.5) * f.r * 2.1, s, p, 0.75, emit, 0.7); break;
         case "tail": swing(g, e, cx, cy, f.r * 2.2, -2.7, 0.5, p, 18, emit, 0.45); break;
-        case "wing":
-          swing(g, e, cx, cy, f.r * 2.2, -0.2, -1.9, p, 20, emit, 0.4);
-          swing(g, e, cx, cy, f.r * 2.2, 0.2, 1.9, p, 20, emit, 0.4);
-          break;
+        case "flux": drawFlux(g, e.ang, cx, cy, f.r, p, t, emit); break;
+        case "wing": drawWings(g, e, cx, cy, f.r, p, t, emit); break;
         case "hammer": swing(g, e, cx, cy, f.r * 2.4, -2.3, 0.0, p, 28, emit, 0.45); stomp(g, e, tipx, tipy, s, p, 0.45, emit, shake); break;
         case "phantom": phantom(g, e, cx, cy, tipx, tipy, s, p, emit); break;
         case "xslash": xslash(g, e, tipx, tipy, s, p, emit); break;
@@ -151,6 +152,7 @@ export class MeleeFx {
         e.hit = true;
         const big = e.style === "stomp" || e.style === "hammer" || e.style === "ram" || e.style === "bird" || e.flav === "power" || e.flav === "star";
         contact(e, tipx, tipy, s, big, emit);
+        if (e.style === "flux") fluxBurst(emit, tipx, tipy, e.ang, s);
       }
       if (p < at + 0.25) trailSparks(e, cx, cy, f.r, p, emit);
     }
@@ -158,7 +160,7 @@ export class MeleeFx {
 }
 
 /** When (as a share of the move) each style makes contact. */
-const HIT_AT: Record<Style, number> = { claws: 0.2, blade: 0.3, xslash: 0.15, wing: 0.25, fist: 0.2, jaws: 0.42, kick: 0.4, stomp: 0.2, tail: 0.3, ram: 0.22, speed: 0.3, lance: 0.25, drill: 0.25, bird: 0.3, hammer: 0.5, spin: 0.2, phantom: 0.35 };
+const HIT_AT: Record<Style, number> = { claws: 0.2, blade: 0.3, xslash: 0.15, wing: 0.25, fist: 0.2, jaws: 0.42, kick: 0.4, stomp: 0.2, tail: 0.3, ram: 0.22, speed: 0.3, lance: 0.25, drill: 0.25, bird: 0.3, hammer: 0.5, spin: 0.2, phantom: 0.35, flux: 0.3 };
 
 /** A burst at the point of contact: sparks, streaks, a glow, rings, dust and bits of the element. */
 function contact(e: Fx, x: number, y: number, s: number, big: boolean, emit: Emit) {
@@ -209,6 +211,7 @@ function flavour(e: Fx, x: number, y: number, emit: Emit, n = 1) {
       case "steel": emit({ ...base, kind: "spark", g: 300, color: i % 2 ? "#ffffff" : "#c7d0dc" }); break;
       case "star": case "holy": case "power": case "fight": emit({ ...base, kind: "star", size: rnd(4, 7), rot: rnd(0, 3), vr: rnd(-8, 8), color: i % 2 ? e.c2 : e.c1 }); break;
       case "bug": emit({ ...base, kind: "spark", g: 160, color: i % 2 ? "#b6e04a" : "#7fbf2a" }); break;
+      case "blood": emit({ ...base, kind: "dot", g: 520, size: rnd(2.5, 5), color: i % 2 ? "#7a0d22" : "#d3213f" }); break;
       case "wind": emit({ ...base, kind: "streak", life: 0.3, max: 0.3, size: 6, color: "#ffffff" }); break;
       default: emit({ ...base, kind: "spark", g: 200 });
     }

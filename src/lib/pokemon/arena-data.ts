@@ -213,6 +213,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "freezedry", name: "Freeze-Dry", type: "Ice", kind: "beam", power: 0.46, cd: 3, n: 8, range: 280, status: { kind: "frz", chance: 0.15 }, desc: "A frosty stream." }),
     m({ id: "focusblast", name: "Focus Blast", type: "Fighting", kind: "lob", power: 2.1, cd: 5.4, range: 330, windup: 0.5, fx: "dynamicpunch", desc: "A focused blast that lands where you aim." }),
     m({ id: "drainpunch", name: "Drain Punch", type: "Fighting", kind: "dash", power: 1.3, cd: 2.6, range: 210, drain: 0.5, desc: "A punch that drains HP: you heal half of the damage it deals." }),
+    m({ id: "chaosflux", name: "Chaos Flux", type: "Fighting", kind: "dash", power: 1.8, cd: 4, range: 240, pierce: true, desc: "Drive a spinning crimson cone of chaos through everything in your path." }),
     m({ id: "superpower", name: "Superpower", type: "Fighting", kind: "dash", power: 1.9, cd: 4.4, range: 230, desc: "All your strength in one rush." }),
     m({ id: "sacredsword", name: "Sacred Sword", type: "Fighting", kind: "dash", power: 1.5, cd: 3, range: 220, desc: "Cut through with a holy sword." }),
     m({ id: "skyuppercut", name: "Sky Uppercut", type: "Fighting", kind: "dash", power: 1.3, cd: 2.8, range: 210, desc: "An upward punch." }),
