@@ -12,6 +12,7 @@ import { SPEC_ART, drawAura, drawDecals, specBoom, specCast, specDash, specLinge
 import { drawAmbient } from "./arena-scenery";
 import { IDENT_IDS, identBoom } from "./arena-ident";
 import { FALL_IDS, drawFall } from "./arena-fall";
+import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
 import { Scars } from "./arena-scars";
 import { CROWD_FRAMES, crowdFrames } from "./arena-crowd";
@@ -202,6 +203,8 @@ export class ArenaRenderer {
     lastIm?: Pic;
   }>();
   private dtr = 0;
+  /** the ice laid down behind a surfing Ice Pokémon, by fighter */
+  private iceTrails = new Map<number, { list: Plate[]; lx: number; ly: number }>();
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private meleeFx = new MeleeFx();
   private clones = new Map<number, number>();
@@ -1066,6 +1069,7 @@ export class ArenaRenderer {
             const tall = isTall(sigStyle);
             this.sigs.push(newSig(sigStyle, e.x, e.y, tall ? Math.max(e.r, 66) : e.r, lingers ? lingers + 0.4 : undefined));
             if (this.sigs.length > 14) this.sigs.shift();
+            if (sigStyle === "blizzard") this.iceBlast(e.x, e.y, e.r);
             this.shake = Math.max(this.shake, tall ? 5 : 7);
             this.shakeT = 0.25;
             break;
@@ -1357,6 +1361,17 @@ export class ArenaRenderer {
   }
 
   /** Extra art for particular moves, taken from how they look in the video: embers, cracks, waves, lightning from the sky. */
+  /** The flying parts of Blizzard: chips of ice, glinting frost, snow and a cold flash (the sigil, spikes and shockwave are drawn by arena-ice). */
+  private iceBlast(x: number, y: number, r: number) {
+    const R = Math.max(r, 100);
+    for (let i = 0; i < 34; i++) { const a = rnd(0, Math.PI * 2), v = rnd(120, R * 2.6); this.parts.push({ kind: "shard", x: x + Math.cos(a) * R * 0.5, y: y + Math.sin(a) * R * 0.4, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5 - rnd(160, 420), g: 760, life: rnd(0.9, 1.6), max: 1.6, size: rnd(3, 8), grow: 0, color: i % 3 ? "#d8f1ff" : "#8cc8f0", vr: rnd(-9, 9) }); }
+    for (let i = 0; i < 90; i++) { const a = rnd(0, Math.PI * 2), d = Math.sqrt(Math.random()) * R * 1.1; this.parts.push({ kind: "dot", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.8, vx: rnd(-18, 18), vy: rnd(-90, -20), g: -8, life: rnd(1.0, 2.2), max: 2.2, size: rnd(1.2, 3), grow: 0, color: i % 3 ? "#ffffff" : "#bfe6ff" }); }
+    for (let i = 0; i < 18; i++) { const a = rnd(0, Math.PI * 2); this.parts.push({ kind: "smoke", x: x + Math.cos(a) * R * 0.3, y: y + Math.sin(a) * R * 0.25, vx: Math.cos(a) * rnd(30, 90), vy: rnd(-24, -6), g: 0, life: rnd(1.4, 2.2), max: 2.2, size: rnd(R * 0.18, R * 0.3), grow: R * 0.25, color: "#d4ebfa" }); }
+    this.parts.push({ kind: "glow", x, y, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: R * 0.5, grow: R * 1.2, color: "#ffffff" });
+    this.flashT = Math.max(this.flashT, 0.12);
+    this.shake = Math.max(this.shake, 8); this.shakeT = Math.max(this.shakeT, 0.35);
+  }
+
   /** The three big fire finishers, each with a blast of its own: a lava fountain, a ground-hugging ring of fire, a white-gold sun. */
   private fireBoom(id: "eruption" | "blastburn" | "fusionflare", x: number, y: number, r: number) {
     const P = (o: Partial<Parti> & { kind: Parti["kind"]; color: string }) => this.parts.push({ x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: 3, grow: 0, ...o } as Parti);
@@ -1776,6 +1791,7 @@ export class ArenaRenderer {
       if (sg.t >= sg.life) this.sigs.splice(i, 1);
       else sigFlat(G, sg);
     }
+    for (const [id, tr] of this.iceTrails) { drawPlates(G, tr.list, dt, this.t); if (!tr.list.length && !S.fighters.some((q) => q.id === id)) this.iceTrails.delete(id); }
     this.decals = drawDecals(G, this.decals, dt);
     this.drawRocks(G, dt);
     this.drawTethers(G, S);
@@ -5990,31 +6006,20 @@ export class ArenaRenderer {
       const hh = this.hist.get(f.id) ?? [];
       const n = Math.min(hh.length, moving ? 15 : 5);
       g.save();
-      if (f.types.includes("Ice") && n > 2) {
-        g.lineCap = "round";
-        g.lineJoin = "round";
-        const path = () => {
-          g.beginPath();
-          g.moveTo(f.x, f.y + f.r * 0.45);
-          for (let i = 0; i < n; i += 2) g.lineTo(hh[i]!.x, hh[i]!.y + f.r * 0.45);
-          g.stroke();
-        };
-        g.strokeStyle = "rgba(170,215,255,.9)";
-        g.lineWidth = f.r * 2.1;
-        path();
-        g.strokeStyle = "rgba(232,247,255,.96)";
-        g.lineWidth = f.r * 1.7;
-        path();
-        g.strokeStyle = "rgba(255,255,255,.7)";
-        g.lineWidth = 1.5;
-        for (let i = 1; i < n; i += 3) {
-          const h = hh[i]!;
-          g.beginPath();
-          g.moveTo(h.x - f.r * 0.6, h.y + f.r * 0.35);
-          g.lineTo(h.x + f.r * 0.1, h.y + f.r * 0.6);
-          g.lineTo(h.x + f.r * 0.7, h.y + f.r * 0.4);
-          g.stroke();
+      if (f.types.includes("Ice") && f.alive) {
+        // a trail of real ice: a plate is laid down every stride, joined by a thin frozen sheet (drawn with the floor, see drawIceTrails)
+        const tr = this.iceTrails.get(f.id) ?? { list: [] as Plate[], lx: f.x, ly: f.y };
+        this.iceTrails.set(f.id, tr);
+        const stride = Math.max(9, f.r * 0.55);
+        if (moving && Math.hypot(f.x - tr.lx, f.y - tr.ly) > stride) {
+          const bx = speed ? -f.mvx / speed : 0, by = speed ? -f.mvy / speed : 0;
+          addPlate(tr.list, f.x + bx * f.r * 0.7, f.y + f.r * 0.5 + by * f.r * 0.5, f.r * rnd(1.05, 1.6), rnd(0, 6.28));
+          tr.lx = f.x; tr.ly = f.y;
+          // chips of ice thrown off, a puff of cold mist, a few bright flecks
+          for (let k = 0; k < 3; k++) this.parts.push({ kind: "shard", x: f.x + bx * f.r + rnd(-f.r, f.r) * 0.6, y: f.y + f.r * 0.5, vx: bx * 60 + rnd(-70, 70), vy: rnd(-150, -50), g: 520, life: rnd(0.5, 0.9), max: 0.9, size: rnd(1.6, 3.2), grow: 0, color: k % 2 ? "#eaf8ff" : "#9fd2f5", vr: rnd(-8, 8) });
+          this.parts.push({ kind: "smoke", x: f.x + bx * f.r * 1.2, y: f.y + f.r * 0.4, vx: bx * 25 + rnd(-12, 12), vy: rnd(-26, -10), g: 0, life: 1.1, max: 1.1, size: f.r * 0.5, grow: f.r * 0.6, color: "#dcefff" });
         }
+        if (moving && Math.random() < 0.5) this.parts.push({ kind: "dot", x: f.x + rnd(-f.r, f.r) * 1.2, y: f.y + f.r * 0.5 + rnd(-6, 6), vx: rnd(-10, 10), vy: rnd(-70, -25), g: -15, life: rnd(0.6, 1.2), max: 1.2, size: rnd(1.2, 2.4), grow: 0, color: "#ffffff" });
       }
       // ripple rings and quick white dashes on the water
       g.strokeStyle = "rgba(255,255,255,.55)";

@@ -29,7 +29,7 @@ export const isTall = (st: SigStyle) => st === "hurricane" || st === "waterspout
 export type Sig = { style: SigStyle; x: number; y: number; r: number; t: number; life: number; seed: number };
 
 export function newSig(style: SigStyle, x: number, y: number, r: number, life?: number): Sig {
-  const base: Record<SigStyle, number> = { hurricane: 1.9, waterspout: 1.9, magmastorm: 4, blizzard: 1.5, diamondstorm: 1.5, surf: 1.15, heatwave: 1.1, sludgewave: 1.15, leafstorm: 2.2 };
+  const base: Record<SigStyle, number> = { hurricane: 1.9, waterspout: 1.9, magmastorm: 4, blizzard: 2.6, diamondstorm: 1.5, surf: 1.15, heatwave: 1.1, sludgewave: 1.15, leafstorm: 2.2 };
   return { style, x, y, r, t: 0, life: life ?? base[style], seed: Math.random() * 1000 };
 }
 
@@ -49,8 +49,10 @@ const PAL: Record<SigStyle, Pal> = {
 /* ------------------------------------------------------------------ flat layer */
 
 type G = CanvasRenderingContext2D;
+import { iceFlat, iceItems } from "./arena-ice";
 
 export function sigFlat(g: G, s: Sig) {
+  if (s.style === "blizzard") { iceFlat(g, s); return; }
   const u = Math.min(1, s.t / s.life);
   const p = PAL[s.style];
   const fade = sm(0, 0.1, u) * (1 - sm(0.7, 1, u));
@@ -126,6 +128,7 @@ export function sigFlat(g: G, s: Sig) {
 
 /** Called once a frame; `push(x, y, depth, draw)` hands out one upright piece standing at the world point (x, y). */
 export function sigItems(s: Sig, push: (x: number, y: number, dy: number, draw: (g: G) => void) => void) {
+  if (s.style === "blizzard") { iceItems(s, push); return; }
   if (isTall(s.style)) {
     push(s.x, s.y, -0.6, (g) => tornadoBack(g, s));
     push(s.x, s.y, 0, (g) => tornadoBody(g, s));
