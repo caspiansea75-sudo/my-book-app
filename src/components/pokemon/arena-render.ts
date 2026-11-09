@@ -17,6 +17,7 @@ import { DUSK_BIG, DUSK_IDS, duskFlat, duskItems, duskIsGhost, type DuskSig } fr
 import { WYRM_BIG, WYRM_IDS, wyrmFlat, wyrmItems, type WyrmSig } from "./arena-wyrm";
 import { electroBoom } from "./arena-elec";
 import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./arena-fx13";
+import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
@@ -286,6 +287,23 @@ export class ArenaRenderer {
     if (this.recentScars.some((q) => Math.hypot(q.x - x, q.y - y) < 28)) return;
     this.recentScars.push({ x, y, t: this.t });
     this.scars.crater(x, y, r, type);
+  }
+  /** Lasting ground damage under a storm or tornado, in the look of its type: scorched and cracked, wet and rippled, gouged, leaf-strewn, sand-scoured. */
+  private vortexMarks(style: string, x: number, y: number, r: number, type: string, first: boolean) {
+    const S = this.scars;
+    const t = ({ magmastorm: "Fire", waterspout: "Water", hurricane: "Flying", leafstorm: "Grass", sandstorm: "Ground" } as Record<string, string>)[style] ?? type;
+    if (first) {
+      S.ring(x, y, r * 0.8);
+      this.scar(x, y, Math.max(12, r * 0.42), t);
+      if (style === "magmastorm" || style === "hurricane" || style === "sandstorm") S.web(x, y, r * 0.9);
+      S.rubble(x, y, r * 0.95, Math.round(4 + r / 12));
+      if (style === "magmastorm") { this.scorch.push({ x, y, r: Math.min(40, r * 0.5), seed: Math.random() * 100, t: 3, max: 3, type: "Fire" }); if (this.scorch.length > 28) this.scorch.shift(); }
+    } else if (style === "waterspout" || style === "leafstorm") {
+      S.ring(x, y, Math.max(10, r * 0.6));
+    } else {
+      this.scar(x, y, Math.max(7, r * 0.3), t);
+      S.rubble(x, y, r, 2);
+    }
   }
   private camX = ARENA.CX;
   private camY = ARENA.CY;
@@ -1154,6 +1172,7 @@ export class ArenaRenderer {
             const tall = isTall(sigStyle);
             this.sigs.push(newSig(sigStyle, e.x, e.y, tall ? Math.max(e.r, 66) : e.r, lingers ? lingers + 0.4 : undefined));
             if (this.sigs.length > 14) this.sigs.shift();
+            if (isVortex(sigStyle)) this.vortexMarks(sigStyle, e.x, e.y, e.r, e.type, true);
             if (sigStyle === "blizzard") this.iceBlast(e.x, e.y, e.r);
             this.shake = Math.max(this.shake, tall ? 5 : 7);
             this.shakeT = 0.25;
@@ -1881,7 +1900,15 @@ export class ArenaRenderer {
       const sg = this.sigs[i]!;
       sg.t += dt;
       if (sg.t >= sg.life) this.sigs.splice(i, 1);
-      else sigFlat(G, sg);
+      else {
+        // a storm that stays keeps wearing the ground it stands on
+        if (isVortex(sg.style) && sg.t > 0.3 && sg.t - (sg.mk ?? 0) > 0.45) {
+          sg.mk = sg.t;
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * sg.r * 0.85;
+          this.vortexMarks(sg.style, sg.x + Math.cos(a) * d, sg.y + Math.sin(a) * d * 0.8, sg.r * 0.4, "Normal", false);
+        }
+        sigFlat(G, sg);
+      }
     }
     for (let i = this.hells.length - 1; i >= 0; i--) {
       const h = this.hells[i]!;

@@ -26,7 +26,7 @@ export const SIG_MOVES: Record<string, SigStyle> = {
 
 export const isTall = (st: SigStyle) => st === "hurricane" || st === "waterspout" || st === "magmastorm" || st === "leafstorm" || st === "sandstorm";
 
-export type Sig = { style: SigStyle; x: number; y: number; r: number; t: number; life: number; seed: number };
+export type Sig = { style: SigStyle; x: number; y: number; r: number; t: number; life: number; seed: number; mk?: number };
 
 export function newSig(style: SigStyle, x: number, y: number, r: number, life?: number): Sig {
   const base: Record<SigStyle, number> = { hurricane: 1.9, waterspout: 1.9, magmastorm: 4, blizzard: 2.6, diamondstorm: 1.5, surf: 1.15, heatwave: 1.1, sludgewave: 1.15, leafstorm: 2.2, sandstorm: 2.2 };
