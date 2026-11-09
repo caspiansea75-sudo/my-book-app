@@ -4,15 +4,16 @@
  * Draws in absolute world coordinates (see `at` in the renderer).
  */
 import { decal } from "./arena-dusk";
+import { dragonHead, leg, meshBand, type Pt } from "./arena-drake";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const hs = (n: number) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
 export type WyrmSig = { x: number; y: number; r: number; t: number; life: number; seed: number; mv: string; big: boolean };
-export const WYRM_BIG = new Set(["dracometeor", "outrage", "roaroftime", "spacialrend", "eternabeam", "coreenforcer"]);
-export const WYRM_IDS = new Set([...WYRM_BIG, "dragonpulse", "clangingscales"]);
-const VIOLET = new Set(["spacialrend", "roaroftime", "outrage"]);
+export const WYRM_BIG = new Set(["dracometeor", "outrage", "draconicfury"]);
+export const WYRM_IDS = new Set([...WYRM_BIG, "clangingscales"]);
+const VIOLET = new Set(["outrage", "draconicfury"]);
 const pal = (s: WyrmSig) => (VIOLET.has(s.mv)
   ? { lt: "#f0d8ff", md: "#b070ff", body: "150,90,255", ice: "#d8c4ff", rune: { lt: "#e6d0ff", md: "#9a5cff" } }
   : { lt: "#d8fbff", md: "#40d8ff", body: "60,200,255", ice: "#bff4ff", rune: { lt: "#e0e8ff", md: "#8a78ff" } });
@@ -42,48 +43,37 @@ export function wyrmFlat(g: G, s: WyrmSig) {
   g.restore();
 }
 
-/** The dragon spirit: a coiling spine with a low-poly skin, glowing edge, horns, jaw and whiskers. */
+/** The dragon spirit: an S-shaped serpent of light, low-poly skin with a glowing edge, a row of spines, small clawed legs and a horned head with its jaw open. */
 function dragon(g: G, H: number, W: number, t: number, al: number, p: ReturnType<typeof pal>, seed: number) {
-  const N = 26, spine: { x: number; y: number; w: number }[] = [];
+  const N = 30, face = hs(seed) > 0.5 ? 1 : -1, pts: Pt[] = [];
   for (let i = 0; i <= N; i++) {
     const k = i / N;
-    spine.push({ x: Math.sin(k * 4.6 + t * 1.6 + seed) * W * (0.5 + 0.5 * k) * (1 - k * 0.25), y: -k * H, w: W * 0.22 * (0.25 + 0.75 * Math.sin(Math.min(1, k * 1.06) * Math.PI * 0.92 + 0.15)) });
+    let x = Math.sin(k * 4.4 + t * 1.4 + seed) * W * (0.45 + 0.55 * k) * (1 - k * 0.2), y = -k * H;
+    if (k > 0.86) { const c = (k - 0.86) / 0.14; x += face * W * 0.4 * c * c; y += H * 0.09 * c; } // the neck curls over and the head looks to one side
+    const w = Math.max(W * 0.05, W * 0.2 * (0.22 + 0.78 * Math.sin(Math.min(1, k * 1.05) * Math.PI * 0.9 + 0.12)));
+    pts.push({ x, y, w });
   }
-  const side = (sg: number) => spine.map((q, i) => {
-    const a = spine[Math.max(0, i - 1)]!, b = spine[Math.min(N, i + 1)]!;
-    const ang = Math.atan2(b.y - a.y, b.x - a.x) + sg * Math.PI / 2;
-    return { x: q.x + Math.cos(ang) * q.w, y: q.y + Math.sin(ang) * q.w };
-  });
-  const L = side(-1), Rr = side(1);
-  g.globalCompositeOperation = "lighter"; g.lineJoin = "round"; g.lineCap = "round";
-  // glowing body
-  g.beginPath(); L.forEach((q, i) => (i ? g.lineTo(q.x, q.y) : g.moveTo(q.x, q.y))); for (let i = N; i >= 0; i--) g.lineTo(Rr[i]!.x, Rr[i]!.y); g.closePath();
-  const bg = g.createLinearGradient(0, 0, 0, -H);
-  bg.addColorStop(0, `rgba(${p.body},.18)`); bg.addColorStop(0.6, `rgba(${p.body},.5)`); bg.addColorStop(1, `rgba(${p.body},.7)`);
-  g.globalAlpha = al; g.fillStyle = bg; g.fill();
-  g.shadowColor = p.md; g.shadowBlur = 14; g.strokeStyle = p.lt; g.lineWidth = 2; g.globalAlpha = al * 0.9; g.stroke();
-  g.shadowBlur = 0;
-  // low-poly facets: cross lines and diagonals between the two edges
-  g.lineWidth = 1; g.globalAlpha = al * 0.55; g.strokeStyle = p.lt;
-  g.beginPath();
-  for (let i = 0; i < N; i++) { g.moveTo(L[i]!.x, L[i]!.y); g.lineTo(Rr[i]!.x, Rr[i]!.y); g.moveTo(L[i]!.x, L[i]!.y); g.lineTo(Rr[i + 1]!.x, Rr[i + 1]!.y); }
-  g.stroke();
-  // spines along the back
-  g.lineWidth = 1.6; g.beginPath();
-  for (let i = 2; i < N - 1; i += 2) { const q = L[i]!, c = spine[i]!; g.moveTo(q.x, q.y); g.lineTo(q.x + (q.x - c.x) * 0.9, q.y + (q.y - c.y) * 0.9 - 4); }
-  g.stroke();
-  // the head, looking along the last stretch of the spine, jaw open
-  const h = spine[N]!, n = spine[N - 2]!, ang = Math.atan2(h.y - n.y, h.x - n.x);
-  g.save(); g.translate(h.x, h.y); g.rotate(ang);
-  const hl = W * 0.32;
-  g.globalAlpha = al; g.fillStyle = `rgba(${p.body},.55)`; g.strokeStyle = p.lt; g.lineWidth = 2; g.shadowColor = p.md; g.shadowBlur = 12;
-  g.beginPath(); g.moveTo(-hl * 0.2, -hl * 0.28); g.lineTo(hl * 0.8, -hl * 0.2); g.lineTo(hl * 1.15, -hl * 0.06); g.lineTo(hl * 0.8, hl * 0.02); g.lineTo(hl * 0.1, hl * 0.12); g.lineTo(-hl * 0.2, hl * 0.28); g.closePath(); g.fill(); g.stroke();
-  const open = 0.15 + 0.12 * Math.sin(t * 4);
-  g.beginPath(); g.moveTo(hl * 0.1, hl * 0.1); g.lineTo(hl * 0.95, hl * (0.12 + open)); g.lineTo(hl * 0.7, hl * 0.14); g.stroke();
-  g.beginPath(); g.moveTo(-hl * 0.1, -hl * 0.24); g.lineTo(-hl * 0.75, -hl * 0.65); g.moveTo(0, -hl * 0.2); g.lineTo(-hl * 0.55, -hl * 0.45); g.stroke();
-  g.shadowBlur = 0;
-  g.fillStyle = "#fff"; g.beginPath(); g.arc(hl * 0.35, -hl * 0.1, hl * 0.06, 0, TAU); g.fill();
-  g.lineWidth = 1.2; g.beginPath(); g.moveTo(hl * 1.05, -hl * 0.04); g.quadraticCurveTo(hl * 1.5, hl * 0.2 + Math.sin(t * 5) * 4, hl * 1.7, hl * 0.05); g.stroke();
+  g.globalCompositeOperation = "lighter";
+  // an inner glow so the body reads as light
+  for (let i = 3; i < N - 2; i += 5) {
+    const q = pts[i]!, rr = q.w * 2.6, eg = g.createRadialGradient(q.x, q.y, 0, q.x, q.y, rr);
+    eg.addColorStop(0, `rgba(${p.body},.45)`); eg.addColorStop(1, `rgba(${p.body},0)`);
+    g.globalAlpha = al * 0.7; g.fillStyle = eg; g.beginPath(); g.arc(q.x, q.y, rr, 0, TAU); g.fill();
+  }
+  // two pairs of small clawed legs, one pair on each side of the coil
+  for (const [f, sd] of [[0.3, 1], [0.58, -1]] as const) {
+    const q = pts[Math.round(N * f)]!;
+    leg(g, q.x, q.y, W * 0.5, sd > 0 ? 0.7 : Math.PI - 0.7, sd * (0.7 + Math.sin(t * 2 + f * 9) * 0.25), p, al * 0.9, 0.9);
+  }
+  meshBand(g, pts, p, al, Math.floor(seed), true, 1.2);
+  // the tail ends in a tuft
+  const t0 = pts[0]!;
+  g.beginPath(); g.moveTo(t0.x, t0.y); g.lineTo(t0.x + W * 0.1, t0.y + W * 0.12); g.lineTo(t0.x - W * 0.08, t0.y + W * 0.05); g.closePath();
+  g.globalAlpha = al * 0.8; g.fillStyle = `rgba(${p.body},.8)`; g.fill(); g.strokeStyle = p.lt; g.lineWidth = 1; g.stroke();
+  // the head
+  const h = pts[N]!;
+  g.save(); g.translate(h.x, h.y); g.scale(face, 1); g.rotate(0.15 + Math.sin(t * 2) * 0.05);
+  dragonHead(g, Math.max(34, W * 0.42), t, p, al);
   g.restore();
 }
 
@@ -130,7 +120,7 @@ export function wyrmItems(s: WyrmSig, push: (x: number, y: number, dy: number, d
     dragon(g, H, W, s.t, fade * Math.min(1, grow * 2), p, s.seed);
     g.globalCompositeOperation = "lighter"; g.lineCap = "round";
     for (let k = 0; k < 2; k++) {
-      g.beginPath(); g.strokeStyle = p.lt; g.shadowColor = p.md; g.shadowBlur = 10; g.lineWidth = 2.2 - k * 0.8; g.globalAlpha = fade * 0.75;
+      g.beginPath(); g.strokeStyle = p.lt; g.lineWidth = 2.2 - k * 0.8; g.globalAlpha = fade * 0.75;
       for (let i = 0; i <= 40; i++) { const q = i / 40, a = q * 11 + s.t * 2.6 + k * Math.PI, r = R * (0.5 + 0.25 * Math.sin(q * 3 + s.t)); const x = Math.cos(a) * r, y = -q * H * 1.05 + Math.sin(a) * r * 0.25; i ? g.lineTo(x, y) : g.moveTo(x, y); }
       g.stroke();
     }
@@ -143,7 +133,7 @@ export function wyrmItems(s: WyrmSig, push: (x: number, y: number, dy: number, d
     const rad = R * (0.3 + 0.55 * hs(i + 20)), px = s.x + Math.cos(ang) * rad, py = s.y + Math.sin(ang) * rad * 0.4, hgt = 8 + ph * R * 1.4;
     push(px, py, Math.sin(ang) > 0 ? 0.7 : -0.7, (g) => {
       g.save(); g.translate(px, py - hgt); g.rotate(s.t * 3 + i); g.globalCompositeOperation = "lighter";
-      const sz = (2.5 + 3.5 * hs(i + 8)) * (1 - ph * 0.4); g.globalAlpha = ma * Math.sin(ph * Math.PI); g.fillStyle = p.ice; g.shadowColor = p.md; g.shadowBlur = 8;
+      const sz = (2.5 + 3.5 * hs(i + 8)) * (1 - ph * 0.4); g.globalAlpha = ma * Math.sin(ph * Math.PI); g.fillStyle = p.ice;
       g.beginPath(); g.moveTo(0, -sz * 1.8); g.lineTo(sz * 0.8, 0); g.lineTo(0, sz * 1.8); g.lineTo(-sz * 0.8, 0); g.closePath(); g.fill(); g.restore();
     });
   }

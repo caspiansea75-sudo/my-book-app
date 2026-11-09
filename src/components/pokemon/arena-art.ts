@@ -1,4 +1,5 @@
 import { drawElectroBall } from "./arena-elec";
+import { DRAKE_SHOTS, drawDrakeShot } from "./arena-drake";
 import { SHOT13, drawShot13 } from "./arena-fx13";
 /**
  * Pictures for Arena Brawl that are drawn in code: the four stage floors, crates, pillars, crystals, rocks,
@@ -374,6 +375,7 @@ function leaf(g: CanvasRenderingContext2D, size: number) {
 
 /** Draws one projectile the way that move looks. `t` is the time on the clock, `age` how long the shot has flown. */
 export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: number) {
+  if (!p.beam && DRAKE_SHOTS.has(p.mv)) { g.save(); g.translate(p.x, p.y); drawDrakeShot(g, p.mv, Math.atan2(p.vy, p.vx), age, t); g.restore(); return; }
   if (!p.beam && PULSE_MOVES.has(p.mv)) {
     drawPulse(g, p.mv, p, t);
     return;

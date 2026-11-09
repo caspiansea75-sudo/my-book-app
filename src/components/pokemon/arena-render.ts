@@ -19,6 +19,8 @@ import { electroBoom } from "./arena-elec";
 import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./arena-fx13";
 import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
+import { DRAKE_BOLTS, drakeFlat, drakeItems, type DrakeSig } from "./arena-drake";
+import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
 import { Scars } from "./arena-scars";
@@ -221,6 +223,8 @@ export class ArenaRenderer {
   /** Moves with a signature look (tornado, wave, storm) that are playing now. */
   private sigs: Sig[] = [];
   private hells: HellSig[] = [];
+  private psys: PsySig[] = [];
+  private drakes: DrakeSig[] = [];
   private dusks: DuskSig[] = [];
   private wyrms: WyrmSig[] = [];
   private fx13: F13[] = [];
@@ -1092,6 +1096,12 @@ export class ArenaRenderer {
           this.poses.set(e.id, ps);
           this.specialCast(e);
           this.beamTrench(e);
+          if (DRAKE_BOLTS.has(e.mv)) {
+            // the dragon runs the whole line the moment the beam strikes (after its wind-up)
+            const md = MOVES[e.mv];
+            this.drakes.push({ x: e.x, y: e.y, dir: e.dir, len: (md?.range ?? 520) * 0.95, t: -(md?.windup ?? 0.6) * (e.byPlayer ? 0.35 : 1), life: 2.0, seed: Math.random() * 90, mv: e.mv });
+            if (this.drakes.length > 4) this.drakes.shift();
+          }
           if (SPEC_ART.has(e.mv)) {
             specCast(e.mv, e, MOVES[e.mv]?.range ?? 260, this.sctx);
             if (e.mv === "ironfortress") this.auras.set(e.id, { kind: e.mv, start: this.t, until: this.t + 1.15 });
@@ -1157,6 +1167,10 @@ export class ArenaRenderer {
           if (e.mv && HELL_IDS.has(e.mv)) {
             this.hells.push({ x: e.x, y: e.y, r: Math.max(e.r, 90), t: 0, life: 2.4, seed: Math.random() * 90, mv: e.mv });
             if (this.hells.length > 6) this.hells.shift();
+          }
+          if (e.mv && PSY_IDS.has(e.mv)) {
+            this.psys.push({ x: e.x, y: e.y, r: Math.max(e.r, 90), t: 0, life: psyLife(e.mv), seed: Math.random() * 90, mv: e.mv });
+            if (this.psys.length > 6) this.psys.shift();
           }
           if (e.mv && DUSK_IDS.has(e.mv)) {
             const big = DUSK_BIG.has(e.mv);
@@ -1920,6 +1934,18 @@ export class ArenaRenderer {
         sigFlat(G, sg);
       }
     }
+    for (let i = this.drakes.length - 1; i >= 0; i--) {
+      const h = this.drakes[i]!;
+      h.t += dt;
+      if (h.t >= h.life) this.drakes.splice(i, 1);
+      else drakeFlat(G, h);
+    }
+    for (let i = this.psys.length - 1; i >= 0; i--) {
+      const h = this.psys[i]!;
+      h.t += dt;
+      if (h.t >= h.life) this.psys.splice(i, 1);
+      else psyFlat(G, h);
+    }
     for (let i = this.hells.length - 1; i >= 0; i--) {
       const h = this.hells[i]!;
       h.t += dt;
@@ -1972,6 +1998,8 @@ export class ArenaRenderer {
     for (const d of this.fx13) items13(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    for (const h of this.drakes) drakeItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    for (const h of this.psys) psyItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const h of this.hells) hellItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     // standing things (spikes, rocks, whirls) take their place among the fighters
