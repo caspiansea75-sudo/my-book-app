@@ -25,6 +25,29 @@ const TONES: Partial<Record<StageKind, Tone>> = {
   coast: { pit: "#6a5a3c", deep: "#3a2f1d", rim: "rgba(230,210,160,.5)", dust: "rgba(140,120,80,.3)", chip: ["#c9b98a", "#a89a70", "#8d8260", "#d8caa0"] },
   stone: { pit: "#2a2c33", deep: "#14151a", rim: "rgba(160,165,180,.45)", dust: "rgba(60,62,72,.34)", chip: ["#7d828d", "#5b606b", "#9aa0ab", "#464a54"] },
 };
+/** What a blast of each type does to the ground: the colours of the pit, its floor, its lit lip and the stain around it */
+type TPal = { pit: string; deep: string; rim: string; stain: string };
+const TPAL: Record<string, TPal> = {
+  Fire: { pit: "#1a0f0a", deep: "#080504", rim: "rgba(255,120,40,.5)", stain: "rgba(8,6,6,.36)" },
+  Electric: { pit: "#17140a", deep: "#080703", rim: "rgba(255,225,80,.55)", stain: "rgba(10,9,5,.34)" },
+  Water: { pit: "#2b3f52", deep: "#15222e", rim: "rgba(150,210,245,.55)", stain: "rgba(60,100,130,.3)" },
+  Ice: { pit: "#7fa6c4", deep: "#4a6f8c", rim: "rgba(240,250,255,.75)", stain: "rgba(190,220,240,.35)" },
+  Grass: { pit: "#2e3a1c", deep: "#161f0c", rim: "rgba(130,190,80,.5)", stain: "rgba(50,80,30,.32)" },
+  Bug: { pit: "#323a16", deep: "#181d08", rim: "rgba(180,210,60,.45)", stain: "rgba(70,84,24,.3)" },
+  Poison: { pit: "#2f1a3a", deep: "#170c20", rim: "rgba(190,100,220,.55)", stain: "rgba(100,40,130,.32)" },
+  Rock: { pit: "#3d3a36", deep: "#1c1a18", rim: "rgba(170,165,150,.5)", stain: "rgba(80,76,70,.34)" },
+  Ground: { pit: "#4a3320", deep: "#241709", rim: "rgba(190,150,100,.55)", stain: "rgba(110,80,46,.36)" },
+  Fighting: { pit: "#40261c", deep: "#1f110b", rim: "rgba(200,120,90,.5)", stain: "rgba(100,56,40,.3)" },
+  Steel: { pit: "#3a3f48", deep: "#1a1d22", rim: "rgba(205,214,228,.6)", stain: "rgba(110,118,132,.3)" },
+  Flying: { pit: "#554f46", deep: "#2a2722", rim: "rgba(225,232,245,.5)", stain: "rgba(150,150,150,.25)" },
+  Psychic: { pit: "#3a1c44", deep: "#1c0c24", rim: "rgba(240,120,210,.55)", stain: "rgba(130,50,130,.3)" },
+  Fairy: { pit: "#4a2a48", deep: "#241226", rim: "rgba(255,170,230,.6)", stain: "rgba(200,110,190,.28)" },
+  Dragon: { pit: "#1f1038", deep: "#0c0618", rim: "rgba(150,80,220,.55)", stain: "rgba(40,18,80,.36)" },
+  Dark: { pit: "#120c1a", deep: "#06040a", rim: "rgba(110,80,150,.45)", stain: "rgba(10,6,16,.4)" },
+  Ghost: { pit: "#1e1236", deep: "#0a0616", rim: "rgba(130,90,210,.5)", stain: "rgba(40,20,80,.36)" },
+};
+const WEBBED = new Set(["Fire", "Electric", "Rock", "Ground", "Fighting", "Steel", "Dragon", "Dark", "Ghost", "Ice"]);
+const STREWN = new Set(["Rock", "Ground", "Fighting", "Steel", "Ice", "Normal", "Dragon", "Fire"]);
 /** types whose blasts burn the ground rather than dig it */
 const BURNS = new Set(["Fire", "Electric", "Dragon", "Dark", "Ghost", "Psychic", "Poison"]);
 /** How a beam of each type marks the ground: the colours of the cut and its lit lip, and what kind of mark it is */
@@ -69,14 +92,14 @@ export class Scars {
     const g = this.g;
     if (!g || this.stage === "ocean") return; // nothing marks open water
     // a long fight never runs out of room: when the floor is crowded with marks the old ones fade a little, so new ones always show
-    if (this.n >= 240 && this.cv) {
+    if (this.n >= 420 && this.cv) {
       g.save();
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalCompositeOperation = "destination-out";
       g.globalAlpha = 0.35;
       g.fillRect(0, 0, this.cv.width, this.cv.height);
       g.restore();
-      this.n = 150;
+      this.n = 260;
     }
     g.save();
     g.setTransform(SC, 0, 0, SC, 0, 0);
@@ -111,6 +134,7 @@ export class Scars {
     const R = rng(seed);
     const t = this.tone;
     const burn = BURNS.has(type) && this.stage !== "lava";
+    const P: TPal = TPAL[type] ?? { pit: t.pit, deep: t.deep, rim: t.rim, stain: t.dust };
     r *= 1.25;
     this.with((g) => {
       g.translate(x, y);
@@ -126,17 +150,17 @@ export class Scars {
         g.beginPath(); g.ellipse(Math.cos(a) * d, Math.sin(a) * d * 0.8, 1 + R() * 2.2, 0.8 + R() * 1.6, R() * 3, 0, TAU); g.fill();
       }
       // the stain around it
-      g.fillStyle = burn ? "rgba(8,6,6,.34)" : t.dust;
+      g.fillStyle = P.stain;
       this.splat(g, r * 1.35, R, 6 + Math.floor(R() * 3), 1);
       g.fill();
       // the hole: lip, floor, deep centre
-      g.fillStyle = burn ? "#17110f" : t.pit;
+      g.fillStyle = P.pit;
       this.splat(g, r, R, 6 + Math.floor(R() * 3));
       g.fill();
       g.lineWidth = 1.6;
-      g.strokeStyle = t.rim;
+      g.strokeStyle = P.rim;
       g.stroke();
-      g.fillStyle = burn ? "#0a0706" : t.deep;
+      g.fillStyle = P.deep;
       g.globalAlpha = 0.85;
       this.splat(g, r * 0.58, R, 5 + Math.floor(R() * 3));
       g.fill();
@@ -231,24 +255,24 @@ export class Scars {
   }
 
   /** a web of cracks spreading from a point (a quake, a stomp, something heavy landing) */
-  web(x: number, y: number, r: number, seed = Math.random() * 999) {
+  web(x: number, y: number, r: number, seed = Math.random() * 999, cap = 75, arms = 0) {
     const R = rng(seed);
-    const n = 5 + Math.floor(R() * 2);
+    const n = arms || 5 + Math.floor(R() * 2);
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + R() * 0.5;
-      const L = Math.min(75, r * (0.35 + R() * 0.4));
+      const L = Math.min(cap, r * (0.35 + R() * 0.4));
       this.crack(x + Math.cos(a) * 4, y + Math.sin(a) * 3, x + Math.cos(a) * L, y + Math.sin(a) * L * 0.8, seed + i * 3.1, 1.1, 1);
     }
   }
 
   /** a ring of dust left where a wave went out: a pale rim around darker ground, with a few broken arcs */
-  ring(x: number, y: number, r: number, seed = Math.random() * 999) {
+  ring(x: number, y: number, r: number, seed = Math.random() * 999, tint?: string) {
     const R = rng(seed);
     const t = this.tone;
     this.with((g) => {
       g.translate(x, y);
       g.scale(1, 0.84);
-      g.fillStyle = t.dust;
+      g.fillStyle = tint ?? t.dust;
       g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
       g.strokeStyle = "rgba(226,206,160,.45)";
       g.lineWidth = 2.4;
@@ -260,6 +284,135 @@ export class Scars {
       g.lineWidth = 1.4;
       g.beginPath(); g.arc(0, 0, r * 0.62, 0, TAU); g.stroke();
     });
+  }
+
+  /** What one blast does to the ground, by type: a crater in the type's colours, a ring, cracks or rubble where it fits, and the type's own touches (arcs, frost, sludge, leaves, scratches...) */
+  impact(x: number, y: number, r: number, type: string, seed = Math.random() * 999) {
+    const R = rng(seed);
+    const P = TPAL[type];
+    const big = r >= 90;
+    this.ring(x, y, r * 0.78, seed + 1, P?.stain);
+    this.crater(x, y, Math.max(9, r * 0.4), type, seed + 2);
+    if (WEBBED.has(type) && r >= 40) this.web(x, y, r * 0.9, seed + 3);
+    if (STREWN.has(type)) this.rubble(x, y, r * 0.95, Math.round(3 + r / 14), seed + 4);
+    const spec = (fn: (g: CanvasRenderingContext2D) => void) => this.with((g) => { g.translate(x, y); fn(g); });
+    const arm = (i: number, n: number) => (i / n) * TAU + R() * 0.5;
+    const touch = (r: number) => {
+    switch (type) {
+      case "Electric":
+        spec((g) => {
+          g.lineCap = "round"; g.lineJoin = "round";
+          for (let i = 0; i < 6; i++) {
+            const a = arm(i, 6), L = r * (0.9 + R() * 0.8);
+            const pts: [number, number][] = [[Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.26]];
+            for (let k = 1; k <= 6; k++) { const d = r * 0.3 + ((L - r * 0.3) * k) / 6, j = (R() - 0.5) * 9; pts.push([Math.cos(a) * d - Math.sin(a) * j, (Math.sin(a) * d + Math.cos(a) * j) * 0.82]); }
+            const path = () => { g.beginPath(); pts.forEach((q, k) => (k ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); };
+            g.strokeStyle = "rgba(255,225,80,.16)"; g.lineWidth = 5; path(); g.stroke();
+            g.strokeStyle = "rgba(255,240,150,.7)"; g.lineWidth = 1.3; path(); g.stroke();
+          }
+        });
+        break;
+      case "Fire":
+        spec((g) => { for (let i = 0; i < 12; i++) { const a = R() * TAU, d = r * (0.5 + R() * 0.9); g.fillStyle = `rgba(255,${110 + R() * 70},40,${0.4 + R() * 0.4})`; g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d * 0.8, 0.8 + R() * 1.6, 0, TAU); g.fill(); } });
+        break;
+      case "Water":
+        spec((g) => {
+          g.scale(1, 0.82);
+          g.fillStyle = "rgba(110,185,235,.22)"; g.beginPath(); g.arc(0, 0, r * 1.05, 0, TAU); g.fill();
+          g.strokeStyle = "rgba(235,248,255,.35)"; g.lineWidth = 1.4;
+          for (let i = 0; i < 3; i++) { const a = R() * TAU; g.beginPath(); g.arc(0, 0, r * (0.5 + i * 0.22), a, a + 1.4 + R()); g.stroke(); }
+        });
+        break;
+      case "Ice":
+        spec((g) => {
+          g.fillStyle = "rgba(225,245,255,.28)"; g.beginPath(); g.ellipse(0, 0, r * 1.15, r * 0.95, 0, 0, TAU); g.fill();
+          for (let i = 0; i < 11; i++) {
+            const a = arm(i, 11), d = r * (0.5 + R() * 0.9), w = 2 + R() * 3.4;
+            g.save(); g.translate(Math.cos(a) * d, Math.sin(a) * d * 0.82); g.rotate(a);
+            g.fillStyle = R() < 0.5 ? "rgba(240,252,255,.9)" : "rgba(170,215,240,.85)";
+            g.beginPath(); g.moveTo(w * 1.8, 0); g.lineTo(0, -w * 0.5); g.lineTo(-w * 0.7, 0); g.lineTo(0, w * 0.5); g.closePath(); g.fill(); g.restore();
+          }
+        });
+        break;
+      case "Grass":
+      case "Bug":
+        spec((g) => {
+          for (let i = 0; i < 14; i++) {
+            const a = R() * TAU, d = r * (0.4 + R() * 1.1);
+            g.save(); g.translate(Math.cos(a) * d, Math.sin(a) * d * 0.8); g.rotate(R() * TAU);
+            g.fillStyle = type === "Bug" ? (R() < 0.5 ? "#9bb82e" : "#5d7a1c") : (R() < 0.5 ? "#6fbf4a" : "#3f8a2c");
+            g.globalAlpha = 0.85; g.beginPath(); g.ellipse(0, 0, 3 + R() * 3.4, 1.3 + R() * 1.1, 0, 0, TAU); g.fill(); g.restore();
+          }
+        });
+        break;
+      case "Poison":
+        spec((g) => {
+          g.scale(1, 0.82);
+          g.fillStyle = "rgba(120,50,160,.4)"; g.beginPath(); g.arc(0, 0, r * 0.95, 0, TAU); g.fill();
+          for (let i = 0; i < 6; i++) {
+            const a = R() * TAU, d = R() * r * 0.8, b = 1.6 + R() * 3.2;
+            g.fillStyle = "rgba(210,130,240,.6)"; g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, b, 0, TAU); g.fill();
+            g.fillStyle = "rgba(255,255,255,.55)"; g.beginPath(); g.arc(Math.cos(a) * d - b * 0.3, Math.sin(a) * d - b * 0.3, b * 0.28, 0, TAU); g.fill();
+          }
+        });
+        break;
+      case "Psychic":
+      case "Fairy":
+        spec((g) => {
+          for (let i = 0; i < 12; i++) {
+            const a = R() * TAU, d = r * (0.4 + R() * 1.1), sz = 1.6 + R() * 2.6;
+            g.save(); g.translate(Math.cos(a) * d, Math.sin(a) * d * 0.8);
+            g.fillStyle = R() < 0.5 ? "rgba(255,200,240,.85)" : "rgba(255,255,255,.8)";
+            g.beginPath(); g.moveTo(0, -sz * 2); g.lineTo(sz * 0.4, -sz * 0.4); g.lineTo(sz * 2, 0); g.lineTo(sz * 0.4, sz * 0.4); g.lineTo(0, sz * 2); g.lineTo(-sz * 0.4, sz * 0.4); g.lineTo(-sz * 2, 0); g.lineTo(-sz * 0.4, -sz * 0.4); g.closePath(); g.fill(); g.restore();
+          }
+        });
+        break;
+      case "Steel":
+        spec((g) => {
+          g.lineCap = "round";
+          for (let i = 0; i < 9; i++) {
+            const a = arm(i, 9), d0 = r * (0.45 + R() * 0.3), d1 = d0 + r * (0.3 + R() * 0.4);
+            g.strokeStyle = "rgba(20,22,26,.55)"; g.lineWidth = 1.6; g.beginPath(); g.moveTo(Math.cos(a) * d0, Math.sin(a) * d0 * 0.82); g.lineTo(Math.cos(a) * d1, Math.sin(a) * d1 * 0.82); g.stroke();
+            g.strokeStyle = "rgba(220,228,240,.5)"; g.lineWidth = 0.8; g.beginPath(); g.moveTo(Math.cos(a) * d0 + 1, Math.sin(a) * d0 * 0.82 - 1); g.lineTo(Math.cos(a) * d1 + 1, Math.sin(a) * d1 * 0.82 - 1); g.stroke();
+          }
+        });
+        break;
+      case "Dragon":
+      case "Dark":
+      case "Ghost":
+        spec((g) => {
+          g.lineCap = "round";
+          const c = type === "Dark" ? "rgba(120,90,170," : type === "Ghost" ? "rgba(140,100,220," : "rgba(160,90,230,";
+          for (let i = 0; i < 7; i++) {
+            const a = arm(i, 7), d0 = r * 0.4, d1 = r * (0.95 + R() * 0.35);
+            g.strokeStyle = c + ".16)"; g.lineWidth = 4.5; g.beginPath(); g.moveTo(Math.cos(a) * d0, Math.sin(a) * d0 * 0.82); g.lineTo(Math.cos(a + 0.1) * d1, Math.sin(a + 0.1) * d1 * 0.82); g.stroke();
+            g.strokeStyle = c + ".6)"; g.lineWidth = 1; g.stroke();
+          }
+        });
+        break;
+    }
+    };
+    touch(r);
+    // a big blast: a wide blast zone, a ring of smaller craters thrown out round it, long cracks, a second skirt of debris, and the type's touches again at twice the reach
+    if (big) {
+      this.with((g) => {
+        g.translate(x, y); g.scale(1, 0.84);
+        const bz = g.createRadialGradient(0, 0, r * 0.3, 0, 0, r * 1.7);
+        bz.addColorStop(0, P?.stain ?? "rgba(30,20,12,.3)"); bz.addColorStop(1, "rgba(0,0,0,0)");
+        g.fillStyle = bz; g.beginPath(); g.arc(0, 0, r * 1.7, 0, TAU); g.fill();
+      });
+      this.ring(x, y, r * 1.25, seed + 9, P?.stain);
+      const nSat = 5 + Math.floor(r / 40);
+      for (let i = 0; i < nSat; i++) {
+        const a = (i / nSat) * TAU + R() * 0.7, d = r * (0.85 + R() * 0.6);
+        const sx = x + Math.cos(a) * d, sy = y + Math.sin(a) * d * 0.8;
+        this.crater(sx, sy, Math.max(6, r * (0.065 + R() * 0.06)), type, seed + 20 + i);
+        if (STREWN.has(type)) this.rubble(sx, sy, r * 0.3, 2, seed + 40 + i);
+      }
+      if (WEBBED.has(type)) this.web(x, y, r * 1.5, seed + 60, 150, 8);
+      this.rubble(x, y, r * 1.5, Math.round(6 + r / 9), seed + 70);
+      touch(r * 1.55);
+    }
   }
 
   /** a long, wide mark on the ground left by a beam, in the look of its type: a wet channel, a charred seam, a fused line, frost, a torn furrow... */

@@ -288,6 +288,13 @@ export class ArenaRenderer {
     this.recentScars.push({ x, y, t: this.t });
     this.scars.crater(x, y, r, type);
   }
+  /** a blast of a given type marks the ground in that type's way (see Scars.impact); skipped if another layer just marked the same spot */
+  private impactMarks(x: number, y: number, r: number, type: string) {
+    this.recentScars = this.recentScars.filter((q) => this.t - q.t < 0.5);
+    if (this.recentScars.some((q) => Math.hypot(q.x - x, q.y - y) < 28)) return;
+    this.recentScars.push({ x, y, t: this.t });
+    this.scars.impact(x, y, Math.min(r, 140), type);
+  }
   /** Lasting ground damage under a storm or tornado, in the look of its type: scorched and cracked, wet and rippled, gouged, leaf-strewn, sand-scoured. */
   private vortexMarks(style: string, x: number, y: number, r: number, type: string, first: boolean) {
     const S = this.scars;
@@ -1141,8 +1148,11 @@ export class ArenaRenderer {
           const c = col(e.type);
           // every blast marks the ground for good: small ones pit it, big ones dig a crater, throw rubble and crack it
           {
-            if (e.r < 36) { if (Math.random() < 0.45) this.scar(e.x, e.y + 4, Math.max(6, e.r * 0.3), e.type); }
-            else if (e.r >= 100) { this.scars.web(e.x, e.y, e.r * 0.8); this.scars.rubble(e.x, e.y, e.r * 0.9, Math.round(e.r / 8)); }
+            const vs = e.mv ? SIG_MOVES[e.mv] : undefined;
+            if (!(vs && isVortex(vs))) {
+              if (e.r < 36) { if (Math.random() < 0.45) this.scar(e.x, e.y + 4, Math.max(6, e.r * 0.3), e.type); }
+              else this.impactMarks(e.x, e.y, e.r, e.type);
+            }
           }
           if (e.mv && HELL_IDS.has(e.mv)) {
             this.hells.push({ x: e.x, y: e.y, r: Math.max(e.r, 90), t: 0, life: 2.4, seed: Math.random() * 90, mv: e.mv });
