@@ -1505,17 +1505,18 @@ export class ArenaRenderer {
     }
     switch (e.fx) {
       case "fireblast":
-        // a ring of fire puffs and embers
-        for (let i = 0; i < 22; i++) {
-          const a = (i / 22) * Math.PI * 2;
+        // a ring of fire puffs and embers (counts scale down on a slow device)
+        const nq = (k: number) => Math.max(3, Math.round(k * (0.45 + 0.55 * this.q)));
+        for (let i = 0; i < nq(22); i++) {
+          const a = (i / nq(22)) * Math.PI * 2;
           this.parts.push({ kind: "puff", x: x + Math.cos(a) * 8, y: y + Math.sin(a) * 8, vx: Math.cos(a) * r * 2.4, vy: Math.sin(a) * r * 2.4, g: 0, life: 0.65, max: 0.65, size: 9, grow: 8, color: "#ff9a2e", edge: "#b8360d", seed: i });
         }
         this.parts.push({ kind: "puff", x, y, vx: 0, vy: 0, g: 0, life: 0.6, max: 0.6, size: r * 0.5, grow: 40, color: "#ffd84d", edge: "#ff8a1f", seed: 4 });
         // a roaring pillar of flame, embers thrown into the air and small fires left burning on the floor
-        for (let i = 0; i < 26; i++) this.parts.push({ kind: "flame", x: x + rnd(-r * 0.45, r * 0.45), y: y + rnd(-r * 0.2, r * 0.2), vx: rnd(-40, 40), vy: rnd(-300, -110), g: 60, life: rnd(0.6, 1.1), max: 1.1, size: rnd(9, 20), grow: -6, color: i % 3 === 0 ? "#ffd84d" : i % 3 === 1 ? "#ff8a1f" : "#e63a1e", seed: i });
-        for (let i = 0; i < 34; i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 3.4); this.parts.push({ kind: "spark", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - rnd(120, 340), g: 420, life: rnd(0.7, 1.4), max: 1.4, size: rnd(1.6, 3.4), grow: 0, color: i % 2 ? "#ffd84d" : "#ff7a2a" }); }
-        for (let i = 0; i < 14; i++) { const a = rnd(0, Math.PI * 2), d = rnd(0, r * 0.95); this.parts.push({ kind: "flame", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, vx: rnd(-8, 8), vy: rnd(-50, -20), g: -10, life: rnd(1.0, 1.7), max: 1.7, size: rnd(6, 11), grow: -3, color: i % 2 ? "#ff6a1a" : "#ff9a2e", seed: 40 + i }); }
-        for (let i = 0; i < 7; i++) this.parts.push({ kind: "smoke", x: x + rnd(-r * 0.4, r * 0.4), y: y - rnd(0, 20), vx: rnd(-25, 25), vy: rnd(-120, -60), g: 0, life: rnd(1.0, 1.6), max: 1.6, size: rnd(14, 22), grow: 34, color: i % 2 ? "#4a3a34" : "#2b211e" });
+        for (let i = 0; i < nq(26); i++) this.parts.push({ kind: "flame", x: x + rnd(-r * 0.45, r * 0.45), y: y + rnd(-r * 0.2, r * 0.2), vx: rnd(-40, 40), vy: rnd(-300, -110), g: 60, life: rnd(0.6, 1.1), max: 1.1, size: rnd(9, 20), grow: -6, color: i % 3 === 0 ? "#ffd84d" : i % 3 === 1 ? "#ff8a1f" : "#e63a1e", seed: i });
+        for (let i = 0; i < nq(34); i++) { const a = rnd(0, Math.PI * 2), v = rnd(80, r * 3.4); this.parts.push({ kind: "spark", x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - rnd(120, 340), g: 420, life: rnd(0.7, 1.4), max: 1.4, size: rnd(1.6, 3.4), grow: 0, color: i % 2 ? "#ffd84d" : "#ff7a2a" }); }
+        for (let i = 0; i < nq(14); i++) { const a = rnd(0, Math.PI * 2), d = rnd(0, r * 0.95); this.parts.push({ kind: "flame", x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.7, vx: rnd(-8, 8), vy: rnd(-50, -20), g: -10, life: rnd(1.0, 1.7), max: 1.7, size: rnd(6, 11), grow: -3, color: i % 2 ? "#ff6a1a" : "#ff9a2e", seed: 40 + i }); }
+        for (let i = 0; i < nq(7); i++) this.parts.push({ kind: "smoke", x: x + rnd(-r * 0.4, r * 0.4), y: y - rnd(0, 20), vx: rnd(-25, 25), vy: rnd(-120, -60), g: 0, life: rnd(1.0, 1.6), max: 1.6, size: rnd(14, 22), grow: 34, color: i % 2 ? "#4a3a34" : "#2b211e" });
         this.flashT = Math.max(this.flashT, 0.1);
         this.shake = Math.max(this.shake, 6);
         this.shakeT = Math.max(this.shakeT, 0.25);

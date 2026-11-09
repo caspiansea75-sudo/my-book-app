@@ -34,7 +34,10 @@ function rune(g: G, i: number, size: number) {
   else if (k === 2) { g.moveTo(-a * 0.6, -a); g.lineTo(a * 0.6, -a); g.moveTo(0, -a); g.lineTo(0, a); g.moveTo(-a * 0.5, a * 0.3); g.lineTo(a * 0.5, a * 0.3); }
   else if (k === 3) { g.arc(0, -a * 0.3, a * 0.55, Math.PI * 0.9, Math.PI * 2.1); g.moveTo(0, a * 0.25); g.lineTo(0, a); g.moveTo(-a * 0.4, a * 0.6); g.lineTo(a * 0.4, a * 0.6); }
   else { g.moveTo(-a * 0.6, a); g.lineTo(0, -a); g.lineTo(a * 0.6, a); g.moveTo(-a * 0.3, a * 0.2); g.lineTo(a * 0.3, a * 0.2); }
-  g.stroke();
+  // a cheap glow: a wide faint stroke under the sharp one (canvas shadowBlur is very slow on the big floor layer)
+  const lw = g.lineWidth, ga = g.globalAlpha;
+  g.lineWidth = lw * 3.2; g.globalAlpha = ga * 0.28; g.stroke();
+  g.lineWidth = lw; g.globalAlpha = ga; g.stroke();
 }
 
 /** On the floor: the scorched cracked decal, the shield barrier, the runes turning round it, shimmering heat. */
@@ -80,7 +83,6 @@ export function hellFlat(g: G, s: HellSig) {
   g.save();
   g.globalAlpha = ringA;
   g.strokeStyle = L.lt; g.fillStyle = L.core;
-  g.shadowColor = L.md; g.shadowBlur = 10;
   g.lineWidth = 3; g.beginPath(); g.arc(0, 0, R * 0.82, 0, TAU); g.stroke();
   g.lineWidth = 1.6; g.beginPath(); g.arc(0, 0, R * 0.75, 0, TAU); g.stroke();
   g.lineWidth = 2; g.beginPath(); g.arc(0, 0, R * 0.46, 0, TAU); g.stroke();
@@ -108,7 +110,7 @@ export function hellFlat(g: G, s: HellSig) {
   // runes running round the barrier, each one glowing and flickering
   g.save();
   g.rotate(s.t * 0.9);
-  g.strokeStyle = L.lt; g.lineWidth = 1.8; g.shadowColor = L.md; g.shadowBlur = 8;
+  g.strokeStyle = L.lt; g.lineWidth = 1.8;
   for (let i = 0; i < L.runes + 4; i++) {
     const a = (i / (L.runes + 4)) * TAU;
     g.save(); g.translate(Math.cos(a) * R * 0.66, Math.sin(a) * R * 0.66); g.rotate(a + Math.PI / 2);
@@ -119,7 +121,6 @@ export function hellFlat(g: G, s: HellSig) {
   g.restore();
 
   // heat shimmer: wide pale rings rising off the floor and thinning out
-  g.shadowBlur = 0;
   g.globalCompositeOperation = "lighter";
   for (let i = 0; i < 3; i++) {
     const p = (s.t * 0.7 + i / 3) % 1;
@@ -202,7 +203,7 @@ export function hellItems(s: HellSig, push: (x: number, y: number, dy: number, d
       const px = s.x + Math.cos(ang) * rad, py = s.y + Math.sin(ang) * rad * 0.45;
       push(px, py, Math.sin(ang) > 0 ? 0.5 : -0.5, (g) => {
         g.save(); g.translate(px, py - hgt); g.globalCompositeOperation = "lighter";
-        g.strokeStyle = L.lt; g.shadowColor = L.md; g.shadowBlur = 8; g.lineWidth = 1.8;
+        g.strokeStyle = L.lt; g.lineWidth = 1.8;
         g.globalAlpha = ra * (0.5 + 0.5 * Math.sin(s.t * 8 + i)) * (Math.sin(ang) > 0 ? 1 : 0.6);
         rune(g, i + Math.floor(s.seed), 7); g.restore();
       });
