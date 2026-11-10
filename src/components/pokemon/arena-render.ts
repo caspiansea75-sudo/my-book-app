@@ -6044,7 +6044,7 @@ export class ArenaRenderer {
     }
     const size0 = f.r * 4.1 * grow;
     // PMD frames sit on a square canvas bigger than the walk frame, and the sprites are small: draw them larger than the Showdown ones
-    const size = pf ? size0 * pf.k * 1.5 : size0;
+    const size = pf ? size0 * pf.k : size0;
     const c = col(f.types[0] ?? "Normal");
     const cf = Math.cos(fa);
     const faceLeft = ps.left === undefined ? cf < 0 : ps.left ? cf < 0.14 : cf < -0.14;
@@ -6435,6 +6435,7 @@ export class ArenaRenderer {
       g.fill();
       g.restore();
     }
+    const pyB = pf ? py + pf.oy * size0 : py;
     if (under) {
       // nothing above ground
     } else if (im) {
@@ -6452,7 +6453,7 @@ export class ArenaRenderer {
       const view = (gg: CanvasRenderingContext2D, dirv: number, am: number) => {
         // one picture at a time, never two blended; a turn gives it a small squash
         const sq = ps.tp ? 1 - 0.1 * Math.sin(Math.min(1, ps.tp) * Math.PI) : 1;
-        this.body(gg, imMain, usedId, px, py, size, dirv, sxx * sq, syy, rotMain, undefined, am, wk, rigA);
+        this.body(gg, imMain, usedId, px, pyB, size, dirv, sxx * sq, syy, rotMain, undefined, am, wk, rigA);
       };
       // Turning round (in every view): a single picture that narrows to its edge and widens on the other side. It used to blend with its
       // mirror image in the player views, and a Pokémon that keeps changing direction (walking in a circle) then always showed a faint
@@ -6463,20 +6464,20 @@ export class ArenaRenderer {
       if (this.v3 && this.q > 0.7) {
         const side = Math.abs(cf);
         const T = this.q > 0.88 && side > 0.35 ? clamp(size * 0.05, 2.5, 6) * side * Math.min(1, Math.abs(faceN)) ** 3 : 0;
-        this.shaded(g, px, py, size * 1.1 + 34, drawMain, T ? [-Math.sign(cf) * T, T * 0.25] : undefined);
+        this.shaded(g, px, pyB, size * 1.1 + 34, drawMain, T ? [-Math.sign(cf) * T, T * 0.25] : undefined);
       } else drawMain(g);
-      if (f.flash > 0) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
-      else if (f.status.frz > 0) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
-      else if (f.tera) this.body(g, im, usedId, px, py, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
+      if (f.flash > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
+      else if (f.status.frz > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
+      else if (f.tera) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
       // held by a mind attack: a glowing outline all round
       if (ps.aura) {
         const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);
-        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, py + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
+        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
       }
       // a form whose picture is not there: the plain body, outlined and shimmering so the change still shows
       if (formMissing && !morph) {
         const pulse = 0.55 + Math.sin(t * 5) * 0.25;
-        for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, py + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse);
+        for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse);
       }
       // while it changes: a white (or red, or crystal) silhouette that builds, then fades into the new body
       if (morph) {
@@ -6484,10 +6485,10 @@ export class ArenaRenderer {
         let whiteAmt = mt < sw ? smooth(0.05, sw, mt) : 1 - smooth(sw, sw + 0.5, mt);
         if (morph.kind === "awaken") whiteAmt = 1 - smooth(0, 0.5, mt);
         const tintC = morph.kind === "mega" ? (morph.z ? "#fff1b8" : "#ffffff") : morph.kind === "dyna" ? "#ff3355" : morph.kind === "tera" ? morph.color : "#fff2a8";
-        this.body(g, im, usedId, px, py, size * (1 + Math.sin(mt * 28) * 0.02 * whiteAmt), pmd ? 1 : faceLeft, sxx, syy, rot + spin, tintC, clamp(whiteAmt, 0, 1) * 0.95);
+        this.body(g, im, usedId, px, pyB, size * (1 + Math.sin(mt * 28) * 0.02 * whiteAmt), pmd ? 1 : faceLeft, sxx, syy, rot + spin, tintC, clamp(whiteAmt, 0, 1) * 0.95);
         if (morph.kind !== "tera") {
           const flashAmt = smooth(sw - 0.08, sw, mt) * (1 - smooth(sw, sw + 0.16, mt));
-          if (flashAmt > 0) this.body(g, im, usedId, px, py, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, "#ffffff", flashAmt);
+          if (flashAmt > 0) this.body(g, im, usedId, px, pyB, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, "#ffffff", flashAmt);
         }
       }
     } else {

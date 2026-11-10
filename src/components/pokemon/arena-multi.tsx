@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/members/avatar";
 import { ArenaRenderer, type View } from "@/components/pokemon/arena-render";
+import { pmdEnabled, pmdSetEnabled } from "@/components/pokemon/arena-pmd";
 import { sfx } from "@/components/pokemon/arena-sfx";
 import { MusicControl } from "@/components/pokemon/arena-music-control";
 import { aimHandlers, currentAim } from "@/components/pokemon/aim-pad";
@@ -547,6 +548,9 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
   useEffect(() => setTiltState(readTilt()), []);
   const [view, setViewState] = useState<View>("top");
   useEffect(() => setViewState(readView()), []);
+  const [pmdOn, setPmdOn] = useState(true);
+  useEffect(() => setPmdOn(pmdEnabled()), []);
+  const togglePmd = () => { const n = !pmdOn; pmdSetEnabled(n); setPmdOn(n); };
   const canvas = useRef<HTMLCanvasElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const joyEl = useRef<HTMLDivElement>(null);
@@ -1207,6 +1211,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             <div className="ab-tools">
               <button type="button" className="ab-ic tilt" onClick={() => cycleView()} aria-label="View: top-down / third person / first person" title="V">{view === "top" ? "Top" : view === "third" ? "3rd" : "1st"}</button>
               {view === "top" ? <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label="Camera angle" title="T">{tilt}°</button> : null}
+              <button type="button" className="ab-ic tilt" onClick={togglePmd} aria-label="Sprites: PMD / earlier animation" title="Switch sprites">{pmdOn ? "PMD" : "Old"}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label="Zoom in">+</button>
               <button type="button" className="ab-ic" onClick={() => { if (fs) leaveFs(); else { setFs(true); void goNative(); } }} aria-label="Full screen">⛶</button>
