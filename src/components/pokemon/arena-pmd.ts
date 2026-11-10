@@ -16,14 +16,14 @@ export type PmdFrame = { el: HTMLCanvasElement; k: number; oy: number };
 
 let BASES = ["https://raw.githubusercontent.com/PMDCollab/SpriteCollab/master/sprite", "https://sprites.pmdcollab.org"];
 /** where the sheets come from (the first that answers wins); for tests, or a mirror of your own */
-export function pmdSetBases(b: string[]) { BASES = b; SHEETS.clear(); FRAMES.clear(); }
+export function pmdSetBases(b: string[]) { BASES = b; SHEETS.clear(); FRAMES.clear(); TRACKER = undefined; TRACKING = false; }
 
 const NAMES = ["Walk", "Idle", "Hurt", "Attack", "Shoot", "Rumble"] as const;
 const COUNT: Record<string, number> = { Walk: 4, Idle: 1, Hurt: 2, Attack: 13, Shoot: 12, Rumble: 13 }; // when the XML is out of reach
 type Cell = { fw: number; fh: number; dur: number[] | null };
 type Sheet = { imgs: Map<string, HTMLImageElement>; xml: Map<string, Cell> | null; xmlDone: boolean; failed: boolean; at: number; can: number; w0: number; k: number; oy: number };
 
-const SHEETS = new Map<number, Sheet>();
+const SHEETS = new Map<string, Sheet>();
 const FRAMES = new Map<string, HTMLCanvasElement>();
 
 let ENABLED: boolean | undefined;
@@ -55,10 +55,10 @@ function parseXml(txt: string): Map<string, Cell> | null {
   } catch { return null; }
 }
 
-function begin(num: number): Sheet {
+function begin(skey: string, num: number, sub: string): Sheet {
   const sh: Sheet = { imgs: new Map(), xml: null, xmlDone: false, failed: false, at: performance.now(), can: 0, w0: 0, k: 1, oy: 0 };
-  SHEETS.set(num, sh);
-  const id = dex4(num);
+  SHEETS.set(skey, sh);
+  const id = dex4(num) + (sub ? "/" + sub : "");
   if (typeof fetch === "function") {
     fetch(`${BASES[0]}/${id}/AnimData.xml`)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error("http"))))
@@ -78,6 +78,51 @@ function begin(num: number): Sheet {
     load(0);
   }
   return sh;
+}
+
+/**
+ * Forms (Mega, Gigantamax, Origin ...) live in numbered sub-folders of a Pokémon's folder; the project's tracker.json says which number is which form.
+ * It is fetched once, only when a form is first needed, and only the names are kept. If it cannot be had, or no name fits, the caller keeps the old picture.
+ */
+let TRACKER: Map<number, [string, string][]> | undefined;
+let TRACKING = false;
+function loadTracker() {
+  if (TRACKER || TRACKING || typeof fetch !== "function") return;
+  const root = BASES[0]!.replace(/\/sprite\/?$/, "");
+  if (root === BASES[0]) { TRACKER = new Map(); return; }
+  TRACKING = true;
+  fetch(`${root}/tracker.json`)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("http"))))
+    .then((j: Record<string, any>) => {
+      const m = new Map<number, [string, string][]>();
+      for (const [k, v] of Object.entries(j)) {
+        const num = Number(k);
+        const forms = v && (v.subgroups ?? v.forms);
+        if (!(num > 0) || !forms || typeof forms !== "object") continue;
+        const list: [string, string][] = [];
+        for (const [fk, fv] of Object.entries(forms as Record<string, any>)) if (fv && typeof fv.name === "string") list.push([fk, fv.name]);
+        if (list.length) m.set(num, list);
+      }
+      TRACKER = m;
+    })
+    .catch(() => { TRACKER = new Map(); });
+}
+const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
+const ALIAS: Record<string, string> = { gmax: "gigantamax", rapidstrike: "rapidstrike", dawnwings: "dawnwings", duskmane: "duskmane" };
+/** the sub-folder for a form, given the part of our form id after the species ("megax", "gmax", "black" ...): a folder name, null if there is none, undefined while the list is still loading */
+function formFolder(num: number, suffix: string): string | null | undefined {
+  loadTracker();
+  if (!TRACKER) return undefined;
+  const list = TRACKER.get(num);
+  if (!list) return null;
+  const sfx = norm(ALIAS[suffix] ?? suffix);
+  const names = list.map(([k, n]) => [k, norm(n)] as const).filter(([k]) => k !== "0000");
+  const exact = names.find(([, n]) => n === sfx || n === "mega" + sfx);
+  if (exact) return exact[0];
+  // "mega" alone must not pick "mega x" / "mega y"
+  if (sfx === "mega") return null;
+  const part = names.find(([, n]) => n.includes(sfx));
+  return part ? part[0] : null;
 }
 
 const cellOf = (sh: Sheet, name: string, im: HTMLImageElement): Cell => {
@@ -107,13 +152,21 @@ function frameIndex(name: string, n: number, dur: number[] | null, clock: number
  * @param num   national dex number
  * @param state what it is doing
  * @param fa    the way it faces on the screen, in radians (0 right, PI/2 towards the viewer / down, -PI/2 away / up)
+ * @param form  a Mega, Gigantamax or other form: the part of its id after the species name ("megax", "gmax", "black" ...), omitted for the base form
  * @param t     for walk and idle the running clock in seconds; for hurt, attack, shoot and rumble how far through it is (0..1)
  */
-export function pmdFrame(num: number, state: PmdState, fa: number, t: number): PmdFrame | null {
+export function pmdFrame(num: number, state: PmdState, fa: number, t: number, form?: string): PmdFrame | null {
   if (!pmdEnabled() || !(num > 0 && num <= 1025)) return null;
-  let sh = SHEETS.get(num);
-  if (!sh) sh = begin(num);
-  else if (sh.failed) { if (performance.now() - sh.at < 30000) return null; SHEETS.delete(num); return null; }
+  let sub = "";
+  if (form) {
+    const fo = formFolder(num, form);
+    if (!fo) return null; // still loading the list, or this form has no PMD pictures
+    sub = fo;
+  }
+  const skey = `${num}/${sub}`;
+  let sh = SHEETS.get(skey);
+  if (!sh) sh = begin(skey, num, sub);
+  else if (sh.failed) { if (performance.now() - sh.at < 30000) return null; SHEETS.delete(skey); return null; }
   const walk = sh.imgs.get("Walk");
   if (!walk || !sh.xmlDone) return null;
   if (!sh.can) {
@@ -156,7 +209,7 @@ export function pmdFrame(num: number, state: PmdState, fa: number, t: number): P
   const n = Math.max(1, Math.floor(im.naturalWidth / cell.fw));
   const row = ((Math.round((Math.PI / 2 - fa) / (Math.PI / 4)) % 8) + 8) % 8;
   const fi = name === "Hurt" ? (t < 0.5 ? 0 : Math.min(1, n - 1)) : frameIndex(name, n, cell.dur, t);
-  const key = `${num}|${name}|${row}|${fi}|${sh.xml ? 1 : 0}`;
+  const key = `${skey}|${name}|${row}|${fi}|${sh.xml ? 1 : 0}`;
   let cv = FRAMES.get(key);
   if (!cv) {
     cv = document.createElement("canvas"); cv.width = cv.height = sh.can;

@@ -6013,7 +6013,8 @@ export class ArenaRenderer {
     const wantBack = ps.back === undefined ? sn < -0.6 : ps.back ? sn < -0.34 : sn < -0.66;
     // PMDCollab picture: a real walk / attack / hurt animation in eight directions (base forms only; the Showdown picture stays the fallback)
     let pf: ReturnType<typeof pmdFrame> = null;
-    if (pmdEnabled() && formId === f.sp.id && !under) {
+    const fsfx = formId === f.sp.id ? "" : formId.startsWith(f.sp.id + "-") ? formId.slice(f.sp.id.length + 1) : null;
+    if (pmdEnabled() && fsfx !== null && !under) {
       const rollingNow = f.dodge.t > 0;
       let st: PmdState = moving || f.dash || rollingNow ? "walk" : "idle";
       let pt = ps.clock;
@@ -6023,7 +6024,7 @@ export class ArenaRenderer {
         st = k === "nova" || k === "hazard" || k === "buff" || k === "guard" || k === "heal" ? "rumble" : k === "dash" || k === "grab" || k === "burrow" ? "attack" : "shoot";
         pt = 1 - ps.atk / 0.32;
       }
-      pf = pmdFrame(f.sp.num, st, fa, pt);
+      pf = pmdFrame(f.sp.num, st, fa, pt, fsfx || undefined);
     }
     const pmd = !!pf;
     if (!pmd && ps.back !== undefined && ps.back !== wantBack && ps.lastIm) {
@@ -6475,7 +6476,7 @@ export class ArenaRenderer {
         for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
       }
       // a form whose picture is not there: the plain body, outlined and shimmering so the change still shows
-      if (formMissing && !morph) {
+      if (formMissing && !morph && !pmd) {
         const pulse = 0.55 + Math.sin(t * 5) * 0.25;
         for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse);
       }
