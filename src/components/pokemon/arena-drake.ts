@@ -225,8 +225,37 @@ function drakeLeg(g: G, x: number, y: number, ang: number, bend: number, p: Pal,
   for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(fx, fy); g.lineTo(fx + Math.cos(a2 + i * 0.55 + 0.2) * 0.11 * sz, fy + Math.sin(a2 + i * 0.55 + 0.2) * 0.11 * sz); g.globalAlpha = al; g.strokeStyle = p.core; g.lineWidth = un * 1.8; g.stroke(); }
 }
 
+let RUN_IMG: HTMLImageElement | null = null;
+/** The painted running dragon (a glowing low-poly dragon on black, drawn as light so the black drops away); null until it has loaded. */
+function runSprite(): HTMLImageElement | null {
+  if (typeof Image === "undefined") return null;
+  if (!RUN_IMG) { RUN_IMG = new Image(); RUN_IMG.src = new URL("./dragon-runner.webp", import.meta.url).href; }
+  return RUN_IMG.complete && RUN_IMG.naturalWidth > 0 ? RUN_IMG : null;
+}
+
+let COIL_IMG: HTMLImageElement | null = null;
+/** The painted coiling spirit dragon (glowing, on black, drawn as light); null until it has loaded. */
+export function coilSprite(): HTMLImageElement | null {
+  if (typeof Image === "undefined") return null;
+  if (!COIL_IMG) { COIL_IMG = new Image(); COIL_IMG.src = new URL("./dragon-coil.webp", import.meta.url).href; }
+  return COIL_IMG.complete && COIL_IMG.naturalWidth > 0 ? COIL_IMG : null;
+}
+
 /** The core dragon running to the right. L is its length in pixels. */
 export function drakeRunner(g: G, L: number, t: number, p: Pal, al: number, seed = 0) {
+  const im = runSprite();
+  if (im) {
+    const w = L * 1.45, h = w * (im.naturalHeight / im.naturalWidth), ph0 = t * 9;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.translate(0, Math.sin(ph0) * L * 0.015 - L * 0.02);
+    g.rotate(Math.sin(ph0 + 0.6) * 0.035);
+    g.scale(1 + Math.sin(ph0 * 2) * 0.012, 1 - Math.sin(ph0 * 2) * 0.012);
+    g.globalAlpha = al; g.drawImage(im, -w * 0.5, -h * 0.5, w, h);
+    g.globalAlpha = al * 0.3; g.drawImage(im, -w * 0.5, -h * 0.5, w, h); // a second pass lifts the glow
+    g.restore();
+    return;
+  }
   const sc = L / 2.4, un = 1 / sc, ph = t * 9;
   g.save();
   g.scale(sc, sc); g.translate(-0.05, 0.12);

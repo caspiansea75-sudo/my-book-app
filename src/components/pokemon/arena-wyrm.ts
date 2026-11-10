@@ -4,7 +4,7 @@
  * Draws in absolute world coordinates (see `at` in the renderer).
  */
 import { decal } from "./arena-dusk";
-import { dragonHead, leg, meshBand, type Pt } from "./arena-drake";
+import { coilSprite, dragonHead, leg, meshBand, type Pt } from "./arena-drake";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -45,6 +45,19 @@ export function wyrmFlat(g: G, s: WyrmSig) {
 
 /** The dragon spirit: an S-shaped serpent of light, low-poly skin with a glowing edge, a row of spines, small clawed legs and a horned head with its jaw open. */
 function dragon(g: G, H: number, W: number, t: number, al: number, p: ReturnType<typeof pal>, seed: number) {
+  const im = coilSprite();
+  if (im) {
+    // the painted spirit dragon rises out of the ring, swaying slowly and breathing
+    const h = H * 1.85, w = h * (im.naturalWidth / im.naturalHeight), face = hs(seed) > 0.5 ? 1 : -1;
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.rotate(Math.sin(t * 1.3 + seed) * 0.035 * face);
+    g.scale(face * (1 + Math.sin(t * 2.1) * 0.012), 1 + Math.sin(t * 1.7 + 1) * 0.015);
+    g.globalAlpha = al; g.drawImage(im, -w * 0.5, -h * 0.97, w, h);
+    g.globalAlpha = al * 0.28; g.drawImage(im, -w * 0.5, -h * 0.97, w, h);
+    g.restore();
+    return;
+  }
   const N = 30, face = hs(seed) > 0.5 ? 1 : -1, pts: Pt[] = [];
   for (let i = 0; i <= N; i++) {
     const k = i / N;
