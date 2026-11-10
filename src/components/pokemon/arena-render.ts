@@ -405,7 +405,7 @@ export class ArenaRenderer {
     if (on) this.manualT = 1e9;
     else this.manualT = 0;
     // the picture is drawn at full sharpness while taking photos
-    if (on) { this.q = 1; this.qAt = this.t; }
+    if (on) { this.q = 1; this.qAt = this.t; this.hi = true; }
     this.resize();
   }
   isPhoto() {
@@ -795,6 +795,8 @@ export class ArenaRenderer {
   /** Fit the drawing to the size the page gives the canvas, crisp on high-density screens. */
   /** Adaptive quality: a slow device draws at a lower resolution (and fewer particles) so the game keeps up with the thumb. */
   private q = 1;
+  /** whether the stands and wall are drawn in full detail. It only drops when quality is at its lowest and only comes back when it is at its highest, so the stands never flip back and forth. */
+  private hi = true;
   private frameEma = 1 / 60;
   private qAt = 0;
   resize() {
@@ -1750,7 +1752,8 @@ export class ArenaRenderer {
       this.frameEma += (dtReal - this.frameEma) * 0.05;
       if (this.t - this.qAt > 2 && !this.z && !this.tint && !this.clean) {
         if (this.frameEma > 0.027 && this.q > 0.55) { this.q = Math.max(0.55, this.q - 0.15); this.qAt = this.t; this.resize(); }
-        else if (this.frameEma < 0.019 && this.q < 1) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
+        else if (this.frameEma < 0.017 && this.q < 1 && this.t - this.qAt > 12) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
+        if (this.q <= 0.55) this.hi = false; else if (this.q >= 1) this.hi = true;
       }
     }
     if (this.later.length) {
@@ -1822,8 +1825,11 @@ export class ArenaRenderer {
     // (in the tilted views the floor is laid onto the ground straight from its own picture, in finishGround, with its fine detail)
     // the stands round the pitch: a crowd that cheers in a wave (a few baked frames, cycled)
     {
-      const fr = crowdFrames(S.stage, PAD)[Math.floor(this.t * 5) % CROWD_FRAMES]!;
-      G.drawImage(fr, -PAD.l, -PAD.t, ARENA.W + PAD.l + PAD.r, ARENA.H + PAD.t + PAD.b);
+      // the baked frames are blended into one another, so the wave rolls smoothly instead of the whole crowd jumping five times a second
+      const frs = crowdFrames(S.stage, PAD), ph = this.t * 3.2, k0 = Math.floor(ph), a = ph - k0, sa = a * a * (3 - 2 * a);
+      const cw = ARENA.W + PAD.l + PAD.r, ch = ARENA.H + PAD.t + PAD.b;
+      G.drawImage(frs[k0 % CROWD_FRAMES]!, -PAD.l, -PAD.t, cw, ch);
+      if (sa > 0.01) { G.globalAlpha = sa; G.drawImage(frs[(k0 + 1) % CROWD_FRAMES]!, -PAD.l, -PAD.t, cw, ch); G.globalAlpha = 1; }
     }
     // the Ocean arena: the whole floor is moving water
     if (S.pools.some((p) => p.flood)) drawOcean(G, this.t);
@@ -2054,7 +2060,7 @@ export class ArenaRenderer {
       for (let e = 0; e < 4; e++) {
         const [x0, y0] = corners[e]!;
         const [x1, y1] = corners[(e + 1) % 4]!;
-        const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (this.q > 0.7 ? 90 : 150));
+        const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (this.hi ? 90 : 150));
         for (let i = 0; i < n; i++) {
           const ax = x0 + ((x1 - x0) * i) / n;
           const ay = y0 + ((y1 - y0) * i) / n;
@@ -3768,7 +3774,7 @@ export class ArenaRenderer {
     const w = 74 * sc, h = 44 * sc;
     g.fillStyle = "#1c2028";
     g.fillRect(tx - w / 2, ty - h / 2, w, h);
-    const fl = 0.92 + 0.08 * Math.sin(this.t * 9 + x);
+    const fl = 0.97 + 0.03 * Math.sin(this.t * 1.6 + x);
     for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) {
       g.fillStyle = look.light;
       g.globalAlpha = al * fl;
@@ -3810,7 +3816,7 @@ export class ArenaRenderer {
     g.closePath();
     g.fill();
     // the people
-    const R = this.q > 0.7 ? 3 : 2;
+    const R = this.hi ? 3 : 2;
     const C = Math.max(4, Math.round(Math.hypot(pts[1]![0] - pts[0]![0], pts[1]![1] - pts[0]![1]) / 15));
     const t = this.t;
     for (let r = 0; r < R; r++) {
@@ -3827,7 +3833,7 @@ export class ArenaRenderer {
         const hue = (look.hues[Math.floor(h0 * 997) % look.hues.length]! + (h0 * 40 - 20) + 360) % 360;
         g.fillStyle = `hsl(${hue} ${look.sat}% ${38 + (h0 * 20)}%)`;
         g.beginPath(); g.arc(x, y, 4.6 * sc, 0, Math.PI * 2); g.fill();
-        if (this.q > 0.7) { g.fillStyle = h0 > 0.5 ? "#e8c4a0" : "#b98760"; g.beginPath(); g.arc(x, y - 4.2 * sc, 2.5 * sc, 0, Math.PI * 2); g.fill(); }
+        if (this.hi) { g.fillStyle = h0 > 0.5 ? "#e8c4a0" : "#b98760"; g.beginPath(); g.arc(x, y - 4.2 * sc, 2.5 * sc, 0, Math.PI * 2); g.fill(); }
       }
     }
     // a light rail along the front edge of the slab, and a shade at its back
@@ -3882,7 +3888,7 @@ export class ArenaRenderer {
       g.moveTo(qa.x, qa.y + (ta - qa.y) * c);
       g.lineTo(qb.x, qb.y + (tb - qb.y) * c);
     }
-    if (this.q > 0.7) {
+    if (this.hi) {
       for (let course = 0; course < 3; course++) {
         const c0 = course / 3;
         const c1 = (course + 1) / 3;
@@ -6468,7 +6474,7 @@ export class ArenaRenderer {
       const drawMain = (gg: CanvasRenderingContext2D) => view(gg, faceN, 1);
       // in the player views the sun lights the picture: bright on the side that faces it, darker on the other, darker towards the feet.
       // Seen from the side it also has a little thickness, like a figure cut out of card, which swings round as it turns.
-      if (this.v3 && this.q > 0.7) {
+      if (this.v3 && this.hi) {
         const side = Math.abs(cf);
         const T = this.q > 0.88 && side > 0.35 ? clamp(size * 0.05, 2.5, 6) * side * Math.min(1, Math.abs(faceN)) ** 3 : 0;
         this.shaded(g, px, pyB, size * 1.1 + 34, drawMain, T ? [-Math.sign(cf) * T, T * 0.25] : undefined);

@@ -239,13 +239,6 @@ function build(stage: StageKind, pad: Pad): HTMLCanvasElement[] {
       // a held sign
       if (p.sign && up) { x.fillStyle = p.sign; x.fillRect(-6.5, -15, 13, 6.4); x.strokeStyle = "rgba(0,0,0,.5)"; x.lineWidth = 0.8; x.strokeRect(-6.5, -15, 13, 6.4); }
       x.restore();
-      // a camera flash now and then
-      if (Math.floor(p.flash * 997) % CROWD_FRAMES === f && p.flash > 0.93) {
-        x.fillStyle = "rgba(255,255,255,.9)";
-        x.beginPath(); x.arc(p.x, p.y - 3, 2.2, 0, TAU); x.fill();
-        x.fillStyle = "rgba(255,255,255,.28)";
-        x.beginPath(); x.arc(p.x, p.y - 3, 6, 0, TAU); x.fill();
-      }
     }
     // the stage's colour wash over the stands only
     x.setTransform(1, 0, 0, 1, 0, 0);
