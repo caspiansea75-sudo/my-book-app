@@ -225,6 +225,32 @@ function drakeLeg(g: G, x: number, y: number, ang: number, bend: number, p: Pal,
   for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(fx, fy); g.lineTo(fx + Math.cos(a2 + i * 0.55 + 0.2) * 0.11 * sz, fy + Math.sin(a2 + i * 0.55 + 0.2) * 0.11 * sz); g.globalAlpha = al; g.strokeStyle = p.core; g.lineWidth = un * 1.8; g.stroke(); }
 }
 
+/** Draw a still picture as if it were alive by cutting it into thin strips and sliding each one a little differently every frame.
+ *  `horizontal` strips are cut top to bottom and slide sideways (a body that ripples); otherwise vertical strips slide up and down,
+ *  and the lower part of each strip (the legs) slides along x by `legX` as well. */
+const WARP = new Map<string, HTMLCanvasElement>();
+function warpDraw(g: G, im: HTMLImageElement, x: number, y: number, w: number, h: number, n: number, horizontal: boolean, off: (u: number) => number, legX?: (u: number) => number) {
+  const iw = im.naturalWidth, ih = im.naturalHeight, kx = iw / w, ky = ih / h;
+  // the strips go onto a scratch canvas first (plain painting, so where they overlap nothing doubles up), then it is added to the scene once
+  const key = iw + "x" + ih;
+  let cv = WARP.get(key);
+  if (!cv) { cv = document.createElement("canvas"); cv.width = iw; cv.height = ih; WARP.set(key, cv); }
+  const o = cv.getContext("2d")!;
+  o.globalCompositeOperation = "source-over"; o.globalAlpha = 1; o.clearRect(0, 0, iw, ih);
+  if (horizontal) {
+    const sh = ih / n;
+    for (let i = 0; i < n; i++) o.drawImage(im, 0, i * sh, iw, sh + 1, off(i / n) * kx, i * sh, iw, sh + 1);
+  } else {
+    const cut = 0.62, sw = iw / n; // below `cut` the strip is leg, not body
+    for (let i = 0; i < n; i++) {
+      const u = i / n, dy = off(u) * ky;
+      o.drawImage(im, i * sw, 0, sw + 1, ih * cut, i * sw, dy, sw + 1, ih * cut);
+      o.drawImage(im, i * sw, ih * cut, sw + 1, ih * (1 - cut), i * sw + (legX ? legX(u) * kx : 0), ih * cut + dy * 0.6, sw + 1, ih * (1 - cut));
+    }
+  }
+  g.drawImage(cv, x, y, w, h);
+}
+
 let RUN_IMG: HTMLImageElement | null = null;
 /** The painted running dragon (a glowing low-poly dragon on black, drawn as light so the black drops away); null until it has loaded. */
 function runSprite(): HTMLImageElement | null {
@@ -233,6 +259,7 @@ function runSprite(): HTMLImageElement | null {
   return RUN_IMG.complete && RUN_IMG.naturalWidth > 0 ? RUN_IMG : null;
 }
 
+export { warpDraw };
 let COIL_IMG: HTMLImageElement | null = null;
 /** The painted coiling spirit dragon (glowing, on black, drawn as light); null until it has loaded. */
 export function coilSprite(): HTMLImageElement | null {
@@ -250,8 +277,11 @@ export function drakeRunner(g: G, L: number, t: number, p: Pal, al: number, seed
     g.globalCompositeOperation = "lighter";
     g.translate(0, Math.sin(ph0) * L * 0.015 - L * 0.02);
     g.rotate(Math.sin(ph0 + 0.6) * 0.035);
-    g.scale(1 + Math.sin(ph0 * 2) * 0.012, 1 - Math.sin(ph0 * 2) * 0.012);
-    g.globalAlpha = al; g.drawImage(im, -w * 0.5, -h * 0.5, w, h);
+    // body ripples from the head back to the tail, the tail whips harder, the legs swing front and back in a gallop
+    g.globalAlpha = al;
+    warpDraw(g, im, -w * 0.5, -h * 0.5, w, h, 72, false,
+      (u) => Math.sin(ph0 - u * 7) * h * 0.03 * (1 - u * 0.5) * (u < 0.3 ? 1.6 - u : 1),
+      (u) => Math.sin(ph0 * 1.0 + u * 11) * w * 0.03 * (u > 0.55 ? 1 : 0.7));
     g.globalAlpha = al * 0.3; g.drawImage(im, -w * 0.5, -h * 0.5, w, h); // a second pass lifts the glow
     g.restore();
     return;

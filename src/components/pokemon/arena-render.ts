@@ -20,6 +20,7 @@ import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./a
 import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { DRAKE_BOLTS, drakeFlat, drakeItems, type DrakeSig } from "./arena-drake";
+import { pmdEnabled, pmdFrame, type PmdState } from "./arena-pmd";
 import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
@@ -194,7 +195,7 @@ export class ArenaRenderer {
   private anims = new Map<string, GifFrames | HTMLImageElement | "loading" | "fail">();
   private rigs = new Map<number, RigState>();
   private poses = new Map<number, {
-    clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; aura?: { c: string; t: number };
+    clock: number; atk: number; atkDir: number; hurt: number; hx: number; hy: number; kind?: string; aura?: { c: string; t: number };
     /** the way it faces, smoothed (so a full turn glides) */
     fs?: number;
     /** facing left / away, with a margin so it does not flicker at the edge */
@@ -1093,6 +1094,7 @@ export class ArenaRenderer {
           const ps = this.poses.get(e.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
           ps.atk = 0.32;
           ps.atkDir = e.dir;
+          ps.kind = e.kind;
           this.poses.set(e.id, ps);
           this.specialCast(e);
           this.beamTrench(e);
@@ -6009,14 +6011,30 @@ export class ArenaRenderer {
     // front or back view, with a margin either side so it does not flicker while it is turning through the edge
     const sn = Math.sin(fa);
     const wantBack = ps.back === undefined ? sn < -0.6 : ps.back ? sn < -0.34 : sn < -0.66;
-    if (ps.back !== undefined && ps.back !== wantBack && ps.lastIm) {
+    // PMDCollab picture: a real walk / attack / hurt animation in eight directions (base forms only; the Showdown picture stays the fallback)
+    let pf: ReturnType<typeof pmdFrame> = null;
+    if (pmdEnabled() && formId === f.sp.id && !under) {
+      const rollingNow = f.dodge.t > 0;
+      let st: PmdState = moving || f.dash || rollingNow ? "walk" : "idle";
+      let pt = ps.clock;
+      if (ps.hurt > 0) { st = "hurt"; pt = 1 - ps.hurt / 0.26; }
+      else if (ps.atk > 0) {
+        const k = ps.kind ?? "";
+        st = k === "nova" || k === "hazard" || k === "buff" || k === "guard" || k === "heal" ? "rumble" : k === "dash" || k === "grab" || k === "burrow" ? "attack" : "shoot";
+        pt = 1 - ps.atk / 0.32;
+      }
+      pf = pmdFrame(f.sp.num, st, fa, pt);
+    }
+    const pmd = !!pf;
+    if (!pmd && ps.back !== undefined && ps.back !== wantBack && ps.lastIm) {
       ps.fadeIm = ps.lastIm;
       ps.fade = 1;
     }
     ps.back = wantBack;
     const gif = this.loadAnim(usedId, wantBack) ?? (wantBack ? this.loadAnim(usedId, false) : null);
-    const animated = !!gif && !formMissing;
+    let animated = !!gif && !formMissing;
     if (gif && animated) im = gif instanceof HTMLImageElement ? gif : frameAt(gif, ps.clock).el;
+    if (pf) { im = pf.el; animated = true; }
     // a transformation starts small (or normal) and grows into its new size
     let grow = 1;
     if (morph && (morph.kind === "dyna" || morph.kind === "mega")) {
@@ -6024,7 +6042,9 @@ export class ArenaRenderer {
       const from = morph.kind === "dyna" ? 1 / 1.55 : 1 / 1.12;
       grow = from + (1 - from) * easeOutBack(k);
     }
-    const size = f.r * 4.1 * grow;
+    const size0 = f.r * 4.1 * grow;
+    // PMD frames sit on a square canvas bigger than the walk frame, and the sprites are small: draw them larger than the Showdown ones
+    const size = pf ? size0 * pf.k * 1.5 : size0;
     const c = col(f.types[0] ?? "Normal");
     const cf = Math.cos(fa);
     const faceLeft = ps.left === undefined ? cf < 0 : ps.left ? cf < 0.14 : cf < -0.14;
@@ -6035,7 +6055,7 @@ export class ArenaRenderer {
     if (ps.fd !== undefined && Math.sign(ps.fd) !== fdTarget) ps.tp = 1;
     ps.fd = fdTarget;
     if (ps.tp) ps.tp = Math.max(0, ps.tp - this.dtr / 0.2);
-    const faceN = fdTarget;
+    const faceN = pmd ? 1 : fdTarget;
     ps.lastIm = im ?? undefined;
     // a direction in the arena -> across / away on the screen the camera sees
     const vd = (dx: number, dy: number) => (this.v3 ? { x: dx * this.c3.rx + dy * this.c3.ry, y: -(dx * this.c3.fx + dy * this.c3.fy) } : { x: dx, y: dy });
@@ -6422,8 +6442,9 @@ export class ArenaRenderer {
       if (!rs) { rs = newRig(); this.rigs.set(f.id, rs); if (this.rigs.size > 80) this.rigs.delete(this.rigs.keys().next().value as number); }
       const persona = personaOf(f.sp.id, f.types, f.sp.size, f.loco);
       stepRig(rs, persona, vv.x, vv.y, this.dtr, speed);
-      const rigA = { st: rs, p: persona, o: { t, moving: moving && !f.dash && !rolling, speed, loco: f.loco, animated, id: f.id } };
-      const wk = moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
+      const rigA0 = { st: rs, p: persona, o: { t, moving: moving && !f.dash && !rolling, speed, loco: f.loco, animated, id: f.id } };
+      const rigA = pmd ? undefined : rigA0;
+      const wk = !pmd && moving && (f.loco === "run" || f.loco === "walk") && !f.dash && !rolling ? { p: phase * 1.3 * (f.loco === "run" ? 1 : 1.25), a: 0.075 * clamp(speed / 200, 0.6, 1.1) } : undefined;
       const rotMain = rot + spin + (f.status.slp > 0 ? 0.4 : 0) + (f.status.par > 0 ? Math.sin(t * 60) * 0.05 : 0) + (f.status.cnf > 0 ? Math.sin(t * 9) * 0.12 : 0);
       // changing between its front and back view: the old picture fades out while the new one fades in
       const imMain = im;
@@ -6450,12 +6471,12 @@ export class ArenaRenderer {
       // held by a mind attack: a glowing outline all round
       if (ps.aura) {
         const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);
-        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, py + dy, size, faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
+        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, py + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
       }
       // a form whose picture is not there: the plain body, outlined and shimmering so the change still shows
       if (formMissing && !morph) {
         const pulse = 0.55 + Math.sin(t * 5) * 0.25;
-        for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, py + dy, size, faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse);
+        for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, py + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse);
       }
       // while it changes: a white (or red, or crystal) silhouette that builds, then fades into the new body
       if (morph) {
@@ -6463,10 +6484,10 @@ export class ArenaRenderer {
         let whiteAmt = mt < sw ? smooth(0.05, sw, mt) : 1 - smooth(sw, sw + 0.5, mt);
         if (morph.kind === "awaken") whiteAmt = 1 - smooth(0, 0.5, mt);
         const tintC = morph.kind === "mega" ? (morph.z ? "#fff1b8" : "#ffffff") : morph.kind === "dyna" ? "#ff3355" : morph.kind === "tera" ? morph.color : "#fff2a8";
-        this.body(g, im, usedId, px, py, size * (1 + Math.sin(mt * 28) * 0.02 * whiteAmt), faceLeft, sxx, syy, rot + spin, tintC, clamp(whiteAmt, 0, 1) * 0.95);
+        this.body(g, im, usedId, px, py, size * (1 + Math.sin(mt * 28) * 0.02 * whiteAmt), pmd ? 1 : faceLeft, sxx, syy, rot + spin, tintC, clamp(whiteAmt, 0, 1) * 0.95);
         if (morph.kind !== "tera") {
           const flashAmt = smooth(sw - 0.08, sw, mt) * (1 - smooth(sw, sw + 0.16, mt));
-          if (flashAmt > 0) this.body(g, im, usedId, px, py, size, faceLeft, sxx, syy, rot + spin, "#ffffff", flashAmt);
+          if (flashAmt > 0) this.body(g, im, usedId, px, py, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, "#ffffff", flashAmt);
         }
       }
     } else {
