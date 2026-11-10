@@ -15,8 +15,8 @@ export const WYRM_BIG = new Set(["dracometeor", "outrage", "draconicfury"]);
 export const WYRM_IDS = new Set([...WYRM_BIG, "clangingscales"]);
 const VIOLET = new Set(["outrage", "draconicfury"]);
 const pal = (s: WyrmSig) => (VIOLET.has(s.mv)
-  ? { lt: "#f0d8ff", md: "#b070ff", body: "150,90,255", ice: "#d8c4ff", rune: { lt: "#e6d0ff", md: "#9a5cff" } }
-  : { lt: "#d8fbff", md: "#40d8ff", body: "60,200,255", ice: "#bff4ff", rune: { lt: "#e0e8ff", md: "#8a78ff" } });
+  ? { lt: "#f0d8ff", md: "#b070ff", body: "150,90,255", core: "#ffffff", ice: "#d8c4ff", rune: { lt: "#e6d0ff", md: "#9a5cff" } }
+  : { lt: "#d8fbff", md: "#40d8ff", body: "60,200,255", core: "#ffffff", ice: "#bff4ff", rune: { lt: "#e0e8ff", md: "#8a78ff" } });
 
 export function wyrmFlat(g: G, s: WyrmSig) {
   const p = pal(s);

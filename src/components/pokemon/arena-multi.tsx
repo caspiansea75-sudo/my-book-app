@@ -1211,7 +1211,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
             <div className="ab-tools">
               <button type="button" className="ab-ic tilt" onClick={() => cycleView()} aria-label="View: top-down / third person / first person" title="V">{view === "top" ? "Top" : view === "third" ? "3rd" : "1st"}</button>
               {view === "top" ? <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label="Camera angle" title="T">{tilt}°</button> : null}
-              <button type="button" className="ab-ic tilt" onClick={togglePmd} aria-label="Sprites: PMD / earlier animation" title="Switch sprites">{pmdOn ? "PMD" : "Old"}</button>
+              <button type="button" className="ab-ic tilt" onClick={togglePmd} aria-label="Sprites: PMD / SDN (Showdown)" title="Switch sprites">{pmdOn ? "PMD" : "SDN"}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label="Zoom out">−</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label="Zoom in">+</button>
               <button type="button" className="ab-ic" onClick={() => { if (fs) leaveFs(); else { setFs(true); void goNative(); } }} aria-label="Full screen">⛶</button>

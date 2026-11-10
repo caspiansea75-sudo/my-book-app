@@ -14,6 +14,7 @@ import {
   trainMovePool,
   trainPlayerGimmick,
   trainPlayerMove,
+  trainPlayerSpecies,
   trainRemove,
   trainReset,
   trainSet,
@@ -139,6 +140,12 @@ export function TrainPanel({ hud, getS, t, onPhoto }: { hud: TrainHud; getS: () 
 
           {tab === "me" ? (
             <>
+              <label className="ab-train-row">
+                <span>{t("আপনার পোকেমন", "Your Pokémon")}</span>
+                <select value={hud.me.species} onChange={(e) => { setSlot(0); run((S) => trainPlayerSpecies(S, e.target.value)); e.currentTarget.blur(); }}>
+                  {ROSTER.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </label>
               <div className="ab-train-sub">{t("আপনার জিমিক", "Your gimmick")}</div>
               <GimmickPick
                 species={hud.me.species}

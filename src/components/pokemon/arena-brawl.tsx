@@ -1010,7 +1010,7 @@ export function ArenaBrawl() {
             <div className="ab-tools">
               <button type="button" className="ab-ic tilt" onClick={() => cycleView()} aria-label={t("দৃশ্য: উপর থেকে / তৃতীয় ব্যক্তি / প্রথম ব্যক্তি", "View: top-down / third person / first person")} title="V">{view === "top" ? t("উপর", "Top") : view === "third" ? t("৩য়", "3rd") : t("১ম", "1st")}</button>
               {view === "top" ? <button type="button" className="ab-ic tilt" onClick={() => cycleTilt()} aria-label={t("ক্যামেরা কোণ", "Camera angle")} title="T">{tilt}°</button> : null}
-              <button type="button" className="ab-ic tilt" onClick={togglePmd} aria-label={t("স্প্রাইট: PMD / আগের অ্যানিমেশন", "Sprites: PMD / earlier animation")} title={t("স্প্রাইট বদলান", "Switch sprites")}>{pmdOn ? "PMD" : t("আগের", "Old")}</button>
+              <button type="button" className="ab-ic tilt" onClick={togglePmd} aria-label={t("স্প্রাইট: PMD / SDN (Showdown)", "Sprites: PMD / SDN (Showdown)")} title={t("স্প্রাইট বদলান", "Switch sprites")}>{pmdOn ? "PMD" : "SDN"}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom - 0.15)} aria-label={t("ছোট করুন", "Zoom out")}><ZoomOut size={16} /></button>
               <button type="button" className="ab-ic wide" onClick={() => setZoom(ZOOM0)} aria-label={t("জুম রিসেট", "Reset zoom")}>×{zoom.toFixed(2).replace(/\.?0+$/, "")}</button>
               <button type="button" className="ab-ic" onClick={() => setZoom(zoom + 0.15)} aria-label={t("বড় করুন", "Zoom in")}><ZoomIn size={16} /></button>

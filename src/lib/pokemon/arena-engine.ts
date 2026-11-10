@@ -898,6 +898,27 @@ export function trainPlayerMove(S: State, slot: number, move: string, everything
   p.override = {};
 }
 
+/** Training Ground: become another Pokémon where you stand (same place, same way you face, full health, its own default moves and ability). Any gimmick running ends. */
+export function trainPlayerSpecies(S: State, speciesId: string) {
+  const T = S.train;
+  const old = playerOf(S);
+  const sp = ROSTER.find((x) => x.id === speciesId);
+  if (!T || !old || !sp || sp.id === old.sp.id) return;
+  const nf = makeFighter(S, sp, 0, true, old.x, old.y);
+  nf.id = old.id; // everything that points at "the player" keeps pointing at it
+  nf.face = old.face;
+  nf.auto = old.auto;
+  nf.cpuGimmick = old.cpuGimmick;
+  nf.loadout = cleanMoves(sp.id, null);
+  chooseAbility(nf, undefined);
+  nf.gimmick = gimmicksFor(sp.id).includes(old.gimmick) ? old.gimmick : "awaken";
+  nf.megaForm = (MEGAS[sp.id] ?? [])[0] ?? null;
+  if (nf.gimmick === "mega" && !nf.megaForm) nf.gimmick = "awaken";
+  nf.teraType = TERA_TYPES.includes(old.teraType) ? old.teraType : nf.types[0] ?? "Normal";
+  nf.cd = [0, 0, 0, 0];
+  S.fighters[S.fighters.indexOf(old)] = nf;
+}
+
 /** Change the player's gimmick (only while none is running). */
 export function trainPlayerGimmick(S: State, kind: GimmickKind, mega?: string, tera?: string) {
   const p = playerOf(S);

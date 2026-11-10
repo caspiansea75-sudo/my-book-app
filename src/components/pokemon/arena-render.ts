@@ -19,7 +19,7 @@ import { electroBoom } from "./arena-elec";
 import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./arena-fx13";
 import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
-import { DRAKE_BOLTS, drakeFlat, drakeItems, type DrakeSig } from "./arena-drake";
+import { DRAKE_BOLTS, DRAKE_SHOTS, drakeFlat, drakeItems, drakeShotLift, drawDrakeBody, drawDrakeGround, type DrakeSig } from "./arena-drake";
 import { pmdEnabled, pmdFrame, type PmdState } from "./arena-pmd";
 import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
@@ -2000,7 +2000,7 @@ export class ArenaRenderer {
     for (const d of this.fx13) items13(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
-    for (const h of this.drakes) drakeItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    for (const h of this.drakes) drakeItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }), this.v3 ? this.yaw + Math.PI / 2 : 0);
     for (const h of this.psys) psyItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const h of this.hells) hellItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const sg of this.sigs) sigItems(sg, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
@@ -5447,7 +5447,13 @@ export class ArenaRenderer {
           g.fill();
         });
       }
-      this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t), "p", this.v3 ? 32 : 0);
+      if (this.tilted && !p.beam && DRAKE_SHOTS.has(p.mv)) {
+        // the dragon stands up in the tilted and player views; only its rune strip lies on the floor
+        const ang = Math.atan2(p.vy, p.vx), age = S.time - p.born;
+        this.at(g, p.x, p.y, "fl", () => drawDrakeGround(g, p.mv, ang, age, this.t));
+        const sa = this.v3 ? ang - this.yaw - Math.PI / 2 : ang;
+        this.at(g, p.x, p.y, "bb", () => drawDrakeBody(g, p.mv, sa, age, this.t), "p", drakeShotLift(p.mv));
+      } else this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t), "p", this.v3 ? 32 : 0);
       if (!specShotTrail(p, this.sctx)) {
         const tmd = MOVES[p.mv];
         if (tmd && !OWN_SHOT_ART.has(p.mv)) vfxTrail(tmd, p, this.sctx);

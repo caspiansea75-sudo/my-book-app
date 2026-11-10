@@ -10,9 +10,13 @@ const TAU = Math.PI * 2;
 export const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 export const hs = (n: number) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
-export type Pal = { lt: string; md: string; body: string; core: string };
+/** `hue`: how far to turn the painted dragon's colour (degrees) from its cyan original */
+export type Pal = { lt: string; md: string; body: string; core: string; hue?: number };
 export const PAL_CYAN: Pal = { lt: "#d8fbff", md: "#40d8ff", body: "60,200,255", core: "#ffffff" };
-export const PAL_VIOLET: Pal = { lt: "#f0d8ff", md: "#b070ff", body: "150,90,255", core: "#ffffff" };
+export const PAL_VIOLET: Pal = { lt: "#f0d8ff", md: "#b070ff", body: "150,90,255", core: "#ffffff", hue: 85 };
+export const PAL_GOLD: Pal = { lt: "#fff3d0", md: "#ffc040", body: "255,190,60", core: "#ffffff", hue: -145 };
+export const PAL_GREEN: Pal = { lt: "#e8ffd8", md: "#7cff5a", body: "120,240,90", core: "#ffffff", hue: -80 };
+export const PAL_CRIMSON: Pal = { lt: "#ffd8e4", md: "#ff4f8a", body: "255,80,140", core: "#ffffff", hue: 150 };
 
 /** stroke the current path twice: wide and faint, then sharp (a glow without shadowBlur) */
 function glow(g: G, col: string, lw: number, a: number) {
@@ -229,10 +233,10 @@ function drakeLeg(g: G, x: number, y: number, ang: number, bend: number, p: Pal,
  *  `horizontal` strips are cut top to bottom and slide sideways (a body that ripples); otherwise vertical strips slide up and down,
  *  and the lower part of each strip (the legs) slides along x by `legX` as well. */
 const WARP = new Map<string, HTMLCanvasElement>();
-function warpDraw(g: G, im: HTMLImageElement, x: number, y: number, w: number, h: number, n: number, horizontal: boolean, off: (u: number) => number, legX?: (u: number) => number) {
-  const iw = im.naturalWidth, ih = im.naturalHeight, kx = iw / w, ky = ih / h;
+function warpDraw(g: G, im: HTMLImageElement | HTMLCanvasElement, x: number, y: number, w: number, h: number, n: number, horizontal: boolean, off: (u: number) => number, legX?: (u: number) => number) {
+  const iw = im instanceof HTMLImageElement ? im.naturalWidth : im.width, ih = im instanceof HTMLImageElement ? im.naturalHeight : im.height, kx = iw / w, ky = ih / h;
   // the strips go onto a scratch canvas first (plain painting, so where they overlap nothing doubles up), then it is added to the scene once
-  const key = iw + "x" + ih;
+  const key = iw + "x" + ih + (im instanceof HTMLImageElement ? "" : "c");
   let cv = WARP.get(key);
   if (!cv) { cv = document.createElement("canvas"); cv.width = iw; cv.height = ih; WARP.set(key, cv); }
   const o = cv.getContext("2d")!;
@@ -259,6 +263,36 @@ function runSprite(): HTMLImageElement | null {
   return RUN_IMG.complete && RUN_IMG.naturalWidth > 0 ? RUN_IMG : null;
 }
 
+/** The painted dragon with its colour turned by `deg` (the same picture for every move that shares a hue); the original if it cannot be done. */
+const TINTS = new Map<number, HTMLCanvasElement | null>();
+function tinted(im: HTMLImageElement, deg: number): HTMLImageElement | HTMLCanvasElement {
+  if (!deg) return im;
+  const key = Math.round(deg);
+  if (TINTS.has(key)) return TINTS.get(key) ?? im;
+  let out: HTMLCanvasElement | null = null;
+  try {
+    const cv = document.createElement("canvas"); cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+    const c = cv.getContext("2d", { willReadFrequently: true })!;
+    c.drawImage(im, 0, 0);
+    const d = c.getImageData(0, 0, cv.width, cv.height), a = d.data;
+    const r = (key * Math.PI) / 180, cs = Math.cos(r), sn = Math.sin(r);
+    // the usual hue-rotation matrix
+    const m = [0.213 + cs * 0.787 - sn * 0.213, 0.715 - cs * 0.715 - sn * 0.715, 0.072 - cs * 0.072 + sn * 0.928,
+      0.213 - cs * 0.213 + sn * 0.143, 0.715 + cs * 0.285 + sn * 0.14, 0.072 - cs * 0.072 - sn * 0.283,
+      0.213 - cs * 0.213 - sn * 0.787, 0.715 - cs * 0.715 + sn * 0.715, 0.072 + cs * 0.928 + sn * 0.072];
+    for (let i = 0; i < a.length; i += 4) {
+      const R = a[i]!, Gc = a[i + 1]!, B = a[i + 2]!;
+      a[i] = Math.max(0, Math.min(255, R * m[0]! + Gc * m[1]! + B * m[2]!));
+      a[i + 1] = Math.max(0, Math.min(255, R * m[3]! + Gc * m[4]! + B * m[5]!));
+      a[i + 2] = Math.max(0, Math.min(255, R * m[6]! + Gc * m[7]! + B * m[8]!));
+    }
+    c.putImageData(d, 0, 0);
+    out = cv;
+  } catch { out = null; }
+  TINTS.set(key, out);
+  return out ?? im;
+}
+
 export { warpDraw };
 let COIL_IMG: HTMLImageElement | null = null;
 /** The painted coiling spirit dragon (glowing, on black, drawn as light); null until it has loaded. */
@@ -270,9 +304,10 @@ export function coilSprite(): HTMLImageElement | null {
 
 /** The core dragon running to the right. L is its length in pixels. */
 export function drakeRunner(g: G, L: number, t: number, p: Pal, al: number, seed = 0) {
-  const im = runSprite();
-  if (im) {
-    const w = L * 1.45, h = w * (im.naturalHeight / im.naturalWidth), ph0 = t * 9;
+  const im0 = runSprite();
+  if (im0) {
+    const im = tinted(im0, p.hue ?? 0);
+    const w = L * 1.45, h = w * (im0.naturalHeight / im0.naturalWidth), ph0 = t * 9;
     g.save();
     g.globalCompositeOperation = "lighter";
     g.translate(0, Math.sin(ph0) * L * 0.015 - L * 0.02);
@@ -387,27 +422,85 @@ export function circuitStrip(g: G, len: number, w: number, t: number, p: Pal, al
 export const DRAKE_SHOTS = new Set(["dragonpulse", "dragonbreath"]);
 const SHOT_L: Record<string, number> = { dragonpulse: 124, dragonbreath: 88 };
 
-/** One flying shot: the running dragon with its helix trails and wake, over a short strip of circuit runes on the ground behind it. */
-export function drawDrakeShot(g: G, mv: string, ang: number, age: number, t: number) {
-  const L = SHOT_L[mv] ?? 80, p = PAL_CYAN;
+/** The circuit-rune strip lying on the ground behind a shot, along its path (a floor decal: it is laid flat in the tilted views). */
+export function drawDrakeGround(g: G, mv: string, ang: number, age: number, t: number) {
+  const L = SHOT_L[mv] ?? 80;
   const grow = sm(0, 0.12, age);
-  const dx = Math.cos(ang), dy = Math.sin(ang), face = dx >= 0 ? 1 : -1;
-  const tilt = Math.atan2(dy, Math.abs(dx)) * 0.55;
-  // ground decal behind the shot, lying along its path
-  g.save(); g.translate(0, L * 0.22); g.rotate(ang); circuitStrip(g, L * 1.9, L * 0.55, t, p, grow * 0.9, mv.length); g.restore();
-  g.save(); g.scale(face, 1); g.rotate(tilt);
-  wakeField(g, L, L * 1.5, t, p, grow, mv.length);
-  helixTrails(g, L, L * 1.6, t, p, grow * 0.9);
-  drakeRunner(g, L, t, p, grow, mv.length);
+  g.save(); g.translate(0, L * 0.22); g.rotate(ang);
+  if (mv === "dragonbreath") circuitStrip(g, L * 1.5, L * 0.32, t, PAL_GREEN, grow * 0.8, mv.length + 5); // a narrow scorched trail
+  else circuitStrip(g, L * 1.9, L * 0.55, t, PAL_CYAN, grow * 0.9, mv.length);
   g.restore();
+}
+
+/** Dragon Pulse: the whole dragon running, with shock rings pulsing out ahead of its head. */
+function pulseBody(g: G, L: number, t: number, grow: number, seed: number) {
+  const p = PAL_CYAN;
+  wakeField(g, L, L * 1.5, t, p, grow, seed);
+  helixTrails(g, L, L * 1.6, t, p, grow * 0.9);
+  drakeRunner(g, L, t, p, grow, seed);
+  g.save(); g.globalCompositeOperation = "lighter"; g.lineCap = "round";
+  for (let i = 0; i < 3; i++) {
+    const q = (t * 1.7 + i / 3) % 1, x = L * 0.62 + q * L * 0.75, ry = L * (0.16 + 0.3 * q), rx = L * (0.05 + 0.09 * q);
+    g.beginPath(); g.ellipse(x, -L * 0.02, rx, ry, 0, -1.25, 1.25);
+    g.globalAlpha = grow * (1 - q) * 0.9; glow(g, i % 2 ? p.lt : p.core, 2.6 * (1 - q * 0.5), 0.9);
+  }
+  g.restore();
+}
+
+/** Dragon Breath: no body, only a dragon's head racing along on a streaming comet of green and violet dragonfire. */
+function breathBody(g: G, L: number, t: number, grow: number, seed: number) {
+  const p = PAL_GREEN;
+  g.save(); g.globalCompositeOperation = "lighter";
+  const N = 18;
+  for (let i = 0; i < N; i++) {
+    const q = (i + ((t * 3.2) % 1)) / N, x = -L * 0.1 - q * L * 1.7;
+    const r = L * (0.13 + 0.3 * q) * (0.8 + 0.4 * hs(i + seed)), y = Math.sin(t * 11 + i * 1.3) * L * 0.1 * q + (hs(i * 5 + seed) - 0.5) * L * 0.12 * q;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    const violet = sm(0.35, 1, q);
+    gr.addColorStop(0, q < 0.25 ? "rgba(240,255,220,.95)" : `rgba(${Math.round(120 + 40 * violet)},${Math.round(240 - 130 * violet)},${Math.round(90 + 165 * violet)},.7)`);
+    gr.addColorStop(1, `rgba(${violet > 0.5 ? "150,90,255" : "120,240,90"},0)`);
+    g.globalAlpha = grow * Math.pow(1 - q, 1.1) * 0.85; g.fillStyle = gr; g.beginPath(); g.ellipse(x, y, r * 1.5, r * 0.85, 0, 0, TAU); g.fill();
+  }
+  // sparks flying off the stream
+  for (let i = 0; i < 9; i++) {
+    const q = (t * 1.4 + hs(i + seed)) % 1, x = -L * 0.2 - q * L * 1.5, y = (hs(i * 7 + seed) - 0.5) * L * 0.5 * (0.3 + q);
+    g.globalAlpha = grow * (1 - q); g.fillStyle = i % 2 ? "#e8ffd8" : "#c8a0ff"; g.beginPath(); g.arc(x, y, 1.6 + hs(i) * 1.6, 0, TAU); g.fill();
+  }
+  // the head, jaws open, leading
+  g.globalCompositeOperation = "source-over";
+  g.save(); g.translate(-L * 0.4, -L * 0.03); g.rotate(Math.sin(t * 8) * 0.04); dragonHead(g, L * 0.44, t * 1.6, p, grow); g.restore();
+  // the breath bursting out of the mouth
+  g.globalCompositeOperation = "lighter";
+  const mx = L * 0.14, mg = g.createRadialGradient(mx, 0, 0, mx, 0, L * 0.3);
+  mg.addColorStop(0, "rgba(255,255,230,.95)"); mg.addColorStop(0.4, "rgba(140,255,100,.6)"); mg.addColorStop(1, "rgba(120,240,90,0)");
+  g.globalAlpha = grow * (0.75 + 0.25 * Math.sin(t * 25)); g.fillStyle = mg; g.beginPath(); g.arc(mx, 0, L * 0.3, 0, TAU); g.fill();
+  g.restore();
+}
+
+/** The dragon of a shooting move. It stands upright: `sa` is the way it heads ON THE SCREEN (the world angle in the top views, turned by the camera in the player views). */
+export function drawDrakeBody(g: G, mv: string, sa: number, age: number, t: number) {
+  const L = SHOT_L[mv] ?? 80;
+  const grow = sm(0, 0.12, age);
+  const dx = Math.cos(sa), dy = Math.sin(sa), face = dx >= 0 ? 1 : -1;
+  const tilt = Math.atan2(dy, Math.abs(dx)) * 0.55;
+  g.save(); g.scale(face, 1); g.rotate(tilt);
+  if (mv === "dragonbreath") breathBody(g, L, t, grow, mv.length); else pulseBody(g, L, t, grow, mv.length);
+  g.restore();
+}
+/** how high the dragon's middle sits above the ground, for the tilted views */
+export const drakeShotLift = (mv: string) => (SHOT_L[mv] ?? 80) * 0.3;
+
+/** One flying shot, flat view from above: the dragon over its strip of runes, all on one plane. */
+export function drawDrakeShot(g: G, mv: string, ang: number, age: number, t: number) {
+  drawDrakeGround(g, mv, ang, age, t);
+  drawDrakeBody(g, mv, ang, age, t);
 }
 
 /* ------------------------------------------------------------------------- beams: the dragon runs the whole line */
 
 export type DrakeSig = { x: number; y: number; dir: number; len: number; t: number; life: number; seed: number; mv: string };
 export const DRAKE_BOLTS = new Set(["spacialrend", "roaroftime", "coreenforcer", "eternabeam"]);
-const VIOLET_B = new Set(["spacialrend", "roaroftime"]);
-const palB = (s: DrakeSig) => (VIOLET_B.has(s.mv) ? PAL_VIOLET : PAL_CYAN);
+const palB = (s: DrakeSig): Pal => (s.mv === "spacialrend" ? PAL_VIOLET : s.mv === "roaroftime" ? PAL_GOLD : s.mv === "coreenforcer" ? PAL_GREEN : s.mv === "eternabeam" ? PAL_CRIMSON : PAL_CYAN);
 const runK = (s: DrakeSig) => 1 - Math.pow(1 - Math.min(1, s.t / (s.life * 0.45)), 2.2);
 
 /** On the floor: the circuit-rune decal along the whole line, brightest where the dragon has just been. */
@@ -423,14 +516,15 @@ export function drakeFlat(g: G, s: DrakeSig) {
 }
 
 /** Upright: the big dragon racing down the line with its trails and wake. */
-export function drakeItems(s: DrakeSig, push: (x: number, y: number, dy: number, draw: (g: G) => void) => void) {
+export function drakeItems(s: DrakeSig, push: (x: number, y: number, dy: number, draw: (g: G) => void) => void, off = 0) {
   const p = palB(s), u = Math.min(1, s.t / s.life), k = runK(s);
   const a = sm(0, 0.04, u) * (1 - sm(0.5, 0.95, u));
   if (a < 0.01) return;
   const px = s.x + Math.cos(s.dir) * s.len * k, py = s.y + Math.sin(s.dir) * s.len * k;
   push(px, py, 0.6, (g) => {
-    const dx = Math.cos(s.dir), dy = Math.sin(s.dir), face = dx >= 0 ? 1 : -1;
-    const L = 215;
+    const sa = s.dir - off; // the heading on the screen
+    const dx = Math.cos(sa), dy = Math.sin(sa), face = dx >= 0 ? 1 : -1;
+    const L = s.mv === "eternabeam" ? 270 : 215;
     g.save(); g.translate(px, py - L * 0.14); g.scale(face, 1); g.rotate(Math.atan2(dy, Math.abs(dx)) * 0.5);
     wakeField(g, L, Math.min(s.len * k, 380), s.t, p, a, s.seed);
     helixTrails(g, L, Math.min(s.len * k + 60, 420), s.t, p, a);

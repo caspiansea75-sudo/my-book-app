@@ -72,7 +72,7 @@ function begin(skey: string, num: number, sub: string): Sheet {
       // the first host (GitHub) allows cross-origin reads, which lets us measure the sprite; others are loaded plainly
       if (bi === 0) im.crossOrigin = "anonymous";
       im.onload = () => sh.imgs.set(name, im);
-      im.onerror = () => { if (bi + 1 < BASES.length) load(bi + 1); else if (name === "Walk") { sh.failed = true; sh.at = performance.now(); } };
+      im.onerror = () => { if (bi + 1 < BASES.length) load(bi + 1); else if (name === "Walk") { sh.failed = true; sh.at = performance.now(); say(`w${id}`, `no Walk sheet at ${id} on any host; the old sprite is used`); } };
       im.src = `${BASES[bi]}/${id}/${name}-Anim.png`;
     };
     load(0);
@@ -103,27 +103,44 @@ function loadTracker() {
         for (const [fk, fv] of Object.entries(forms as Record<string, any>)) if (fv && typeof fv.name === "string") list.push([fk, fv.name]);
         if (list.length) m.set(num, list);
       }
+      if (!m.size) say("shape", "tracker.json loaded but no form lists were found in it; its first keys are", Object.keys(j).slice(0, 5), "and one entry looks like", JSON.stringify(Object.values(j)[1] ?? null)?.slice(0, 300));
       TRACKER = m;
     })
-    .catch(() => { TRACKER = new Map(); });
+    .catch((e) => { say("trk", "could not load tracker.json (forms stay on the old sprites):", String(e)); TRACKER = new Map(); });
 }
 const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
-const ALIAS: Record<string, string> = { gmax: "gigantamax", rapidstrike: "rapidstrike", dawnwings: "dawnwings", duskmane: "duskmane" };
+const SAID = new Set<string>();
+const say = (key: string, ...a: unknown[]) => { if (SAID.has(key)) return; SAID.add(key); try { console.info("[pmd]", ...a); } catch { /* no console */ } };
 /** the sub-folder for a form, given the part of our form id after the species ("megax", "gmax", "black" ...): a folder name, null if there is none, undefined while the list is still loading */
 function formFolder(num: number, suffix: string): string | null | undefined {
   loadTracker();
   if (!TRACKER) return undefined;
   const list = TRACKER.get(num);
-  if (!list) return null;
-  const sfx = norm(ALIAS[suffix] ?? suffix);
+  if (!list) { say(`n${num}`, `no form list for #${num} in the tracker (${TRACKER.size} species listed)`); return null; }
+  const sfx = norm(suffix);
   const names = list.map(([k, n]) => [k, norm(n)] as const).filter(([k]) => k !== "0000");
-  const exact = names.find(([, n]) => n === sfx || n === "mega" + sfx);
-  if (exact) return exact[0];
-  // "mega" alone must not pick "mega x" / "mega y"
-  if (sfx === "mega") return null;
-  const part = names.find(([, n]) => n.includes(sfx));
-  return part ? part[0] : null;
+  const has = (n: string, w: string) => n.includes(w);
+  let hit: readonly [string, string] | undefined;
+  if (sfx === "gmax") hit = names.find(([, n]) => has(n, "gigantamax") || has(n, "gmax") || has(n, "gigamax"));
+  else if (/^mega[xyz]$/.test(sfx)) { const l = sfx[4]!; hit = names.find(([, n]) => n === sfx || (has(n, "mega") && n.endsWith(l))); }
+  else if (sfx === "mega") {
+    // a single Mega: any form called Mega that is not X / Y / Z (when it is the only one, take it whatever it ends with)
+    const m = names.filter(([, n]) => has(n, "mega"));
+    hit = m.length === 1 ? m[0] : m.find(([, n]) => !/[xyz]$/.test(n)) ?? (m.length ? undefined : undefined);
+  } else hit = names.find(([, n]) => n === sfx) ?? names.find(([, n]) => has(n, sfx));
+  if (!hit) say(`f${num}${sfx}`, `no PMD form for #${num} "${suffix}"; the tracker lists:`, list.map(([k, n]) => `${k}=${n}`).join(", "));
+  return hit ? hit[0] : null;
 }
+
+/** what the loader knows, for the browser console: arenaPmd() */
+export function pmdReport() {
+  return {
+    enabled: pmdEnabled(),
+    tracker: TRACKER ? `${TRACKER.size} species` : TRACKING ? "loading" : "not asked yet",
+    sheets: [...SHEETS].map(([k, v]) => `${k}: ${v.failed ? "FAILED" : v.imgs.size ? "ok (" + [...v.imgs.keys()].join(",") + ")" : "loading"}`),
+  };
+}
+if (typeof window !== "undefined") (window as unknown as { arenaPmd?: () => unknown }).arenaPmd = pmdReport;
 
 const cellOf = (sh: Sheet, name: string, im: HTMLImageElement): Cell => {
   const x = sh.xml?.get(name);
