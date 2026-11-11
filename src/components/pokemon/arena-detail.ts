@@ -139,13 +139,9 @@ const BUILD: Partial<Record<StageKind, (g: Ctx, r: () => number) => void>> = {
     for (let i = 0; i < 12; i++) { const x = r() * N, y = r() * N; line(g, x - 3, y, 0, 6, 1, "rgba(235,225,255,.7)"); line(g, x, y - 3, Math.PI / 2, 6, 1, "rgba(235,225,255,.7)"); }
   },
   ice(g, r) {
-    dots(g, r, 3200, "rgba(255,255,255,.3)", "rgba(40,90,150,.3)");
-    for (let i = 0; i < 130; i++) line(g, r() * N, r() * N, r() * 6.28, 18 + r() * 70, 1, r() < 0.65 ? "rgba(255,255,255,.34)" : "rgba(30,80,140,.28)");
-    for (let i = 0; i < 55; i++) {
-      const x = r() * N, y = r() * N, s = 1.2 + r() * 3.4;
-      wrapped(x, y, s + 2, (ox, oy) => { g.beginPath(); g.arc(x + ox, y + oy, s, 0, 6.28); g.strokeStyle = "rgba(255,255,255,.55)"; g.lineWidth = 1; g.stroke(); });
-    }
-    for (let i = 0; i < 5; i++) crack(g, r, "rgba(40,100,170,.55)", 60 + r() * 60);
+    dots(g, r, 1800, "rgba(255,255,255,.22)", "rgba(40,100,160,.18)");
+    // long slanted glints, all one way, like the highlights painted on cartoon ice slabs
+    for (let i = 0; i < 70; i++) line(g, r() * N, r() * N, 0.5 + (r() - 0.5) * 0.08, 24 + r() * 80, 1, r() < 0.8 ? "rgba(255,255,255,.4)" : "rgba(70,130,190,.2)");
   },
   lava(g, r) {
     dots(g, r, 5000, "rgba(255,170,90,.35)", "rgba(8,3,2,.5)");

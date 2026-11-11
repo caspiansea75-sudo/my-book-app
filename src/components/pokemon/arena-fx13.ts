@@ -16,6 +16,7 @@
  * All upright pieces draw in absolute world coordinates (see `at` in the renderer).
  */
 import { decal } from "./arena-dusk";
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 type Emit = (p: Record<string, unknown>) => void;
 type Push = (x: number, y: number, dy: number, draw: (g: G) => void) => void;
@@ -84,7 +85,7 @@ const dome = (g: G, W: number, H: number, rgb: string, a: number, rim: string, t
     for (let k = 1; k < 4; k++) { g.beginPath(); g.ellipse(0, 0, W * (k / 4), H * (k / 4) * 1.0, 0, Math.PI, TAU); g.stroke(); }
   }
   g.restore();
-  g.globalCompositeOperation = "lighter"; g.strokeStyle = rim; g.lineWidth = 2.5; g.globalAlpha = a * 0.9; g.shadowColor = rim; g.shadowBlur = 12;
+  g.globalCompositeOperation = "lighter"; g.strokeStyle = rim; g.lineWidth = 2.5; g.globalAlpha = a * 0.9; g.shadowColor = rim; g.shadowBlur = fxBlur(12);
   g.beginPath(); g.ellipse(0, 0, W, H, 0, Math.PI, TAU); g.stroke();
   g.beginPath(); g.ellipse(0, 0, W, W * 0.28, 0, 0, Math.PI); g.stroke();
   g.shadowBlur = 0;
@@ -94,7 +95,7 @@ const sphere = (g: G, cx: number, cy: number, r: number, rgb: string, a: number,
   const gr = g.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.05, 0, 0, r);
   gr.addColorStop(0, `rgba(255,255,255,${0.35 * a})`); gr.addColorStop(0.45, `rgba(${rgb},${0.18 * a})`); gr.addColorStop(1, `rgba(${rgb},${0.55 * a})`);
   g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r, 0, TAU); g.fill();
-  g.globalCompositeOperation = "lighter"; g.strokeStyle = rim; g.lineWidth = 2; g.globalAlpha = a * 0.85; g.shadowColor = rim; g.shadowBlur = 10; g.stroke(); g.shadowBlur = 0;
+  g.globalCompositeOperation = "lighter"; g.strokeStyle = rim; g.lineWidth = 2; g.globalAlpha = a * 0.85; g.shadowColor = rim; g.shadowBlur = fxBlur(10); g.stroke(); g.shadowBlur = 0;
   if (mesh) {
     g.lineWidth = 1; g.globalAlpha = a * 0.45;
     for (let k = -2; k <= 2; k++) { const y = k * r * 0.36, rx = Math.sqrt(Math.max(0, r * r - y * y)); g.beginPath(); g.ellipse(0, y, rx, rx * 0.26, 0, 0, TAU); g.stroke(); }
@@ -178,7 +179,7 @@ export function flat13(g: G, s: F13) {
       for (let i = 0; i <= n; i++) { const ang = (i / n) * TAU, rr = R * (0.8 + 0.25 * hs(i + sd)) * sm(0, 0.15, u); const x = Math.cos(ang) * rr, y = Math.sin(ang) * rr * 0.9; i ? gp.lineTo(x, y) : gp.moveTo(x, y); }
       gp.closePath();
       g.globalAlpha = a * 0.8; g.fillStyle = "#14240c"; g.fill(gp);
-      g.globalCompositeOperation = "lighter"; g.strokeStyle = "#a6ff3a"; g.lineWidth = 3; g.globalAlpha = a * (0.7 + 0.3 * Math.sin(t * 5)); g.shadowColor = "#7aff20"; g.shadowBlur = 12; g.stroke(gp); g.shadowBlur = 0;
+      g.globalCompositeOperation = "lighter"; g.strokeStyle = "#a6ff3a"; g.lineWidth = 3; g.globalAlpha = a * (0.7 + 0.3 * Math.sin(t * 5)); g.shadowColor = "#7aff20"; g.shadowBlur = fxBlur(12); g.stroke(gp); g.shadowBlur = 0;
       for (let i = 0; i < 7; i++) { const ang = hs(i + sd) * TAU, rr = R * 0.6 * hs(i + 4); g.globalAlpha = a * 0.4; g.fillStyle = "#d8ff70"; g.beginPath(); g.arc(Math.cos(ang) * rr, Math.sin(ang) * rr * 0.8, 3 + 3 * hs(i), 0, TAU); g.fill(); }
       break;
     }
@@ -206,7 +207,7 @@ export function flat13(g: G, s: F13) {
     case "zealousfear": {
       glowDisc(g, R, "40,120,40", a * 0.4);
       // the cone sigil: a pentagram in a ring with a triangle of light
-      g.globalCompositeOperation = "lighter"; g.strokeStyle = "#d8ffd0"; g.shadowColor = "#6aff5a"; g.shadowBlur = 8; g.globalAlpha = a * 0.9; g.lineWidth = 2;
+      g.globalCompositeOperation = "lighter"; g.strokeStyle = "#d8ffd0"; g.shadowColor = "#6aff5a"; g.shadowBlur = fxBlur(8); g.globalAlpha = a * 0.9; g.lineWidth = 2;
       g.beginPath(); g.ellipse(0, 0, R * 0.9, R * 0.9 * 0.95, 0, 0, TAU); g.stroke();
       g.save(); g.rotate(t * 0.3); g.beginPath(); for (let i = 0; i <= 5; i++) { const ang = ((i * 2) / 5) * TAU - Math.PI / 2; const x = Math.cos(ang) * R * 0.8, y = Math.sin(ang) * R * 0.8; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
       g.beginPath(); g.moveTo(0, -R * 0.35); g.lineTo(R * 0.3, R * 0.2); g.lineTo(-R * 0.3, R * 0.2); g.closePath(); g.globalAlpha = a * 0.6; g.stroke(); g.restore();
@@ -256,7 +257,7 @@ export function items13(s: F13, push: Push) {
         g.beginPath(); g.moveTo(0, 0); g.lineTo(-w, top); g.lineTo(w, top); g.closePath();
         const cg = g.createLinearGradient(0, 0, 0, top); cg.addColorStop(0, "rgba(255,255,255,.95)"); cg.addColorStop(0.25, "rgba(170,90,255,.85)"); cg.addColorStop(1, "rgba(50,10,100,.25)");
         g.globalAlpha = a; g.fillStyle = cg; g.fill();
-        g.globalCompositeOperation = "lighter"; g.strokeStyle = "#e6c8ff"; g.lineWidth = 2; g.shadowColor = "#a040ff"; g.shadowBlur = 14; g.stroke(); g.shadowBlur = 0;
+        g.globalCompositeOperation = "lighter"; g.strokeStyle = "#e6c8ff"; g.lineWidth = 2; g.shadowColor = "#a040ff"; g.shadowBlur = fxBlur(14); g.stroke(); g.shadowBlur = 0;
         g.beginPath(); g.moveTo(0, 0); g.lineTo(0, top); g.lineWidth = 3; g.globalAlpha = a * 0.8; g.strokeStyle = "#fff"; g.stroke();
         // descending rain: thin violet streaks falling through
         for (let i = 0; i < 26; i++) {
@@ -367,7 +368,7 @@ export function items13(s: F13, push: Push) {
         // celestial sphere: deep blue with star points and a tilted orbit ring
         const sg = g.createRadialGradient(-r0 * 0.3, cy - r0 * 0.3, r0 * 0.1, 0, cy, r0); sg.addColorStop(0, "rgba(120,140,255,.9)"); sg.addColorStop(1, "rgba(20,20,90,.9)");
         g.globalAlpha = a; g.fillStyle = sg; g.beginPath(); g.arc(0, cy, r0, 0, TAU); g.fill();
-        g.globalCompositeOperation = "lighter"; g.strokeStyle = "#8fa8ff"; g.lineWidth = 1.5; g.shadowColor = "#6a8cff"; g.shadowBlur = 12; g.stroke(); g.shadowBlur = 0;
+        g.globalCompositeOperation = "lighter"; g.strokeStyle = "#8fa8ff"; g.lineWidth = 1.5; g.shadowColor = "#6a8cff"; g.shadowBlur = fxBlur(12); g.stroke(); g.shadowBlur = 0;
         g.fillStyle = "#e0eaff"; for (let i = 0; i < 24; i++) { const ang = hs(i + sd) * TAU, d = r0 * Math.sqrt(hs(i + 5)); g.fillRect(Math.cos(ang + t * 0.3) * d, cy + Math.sin(ang) * d, 1.6, 1.6); }
         g.strokeStyle = "#a8c0ff"; g.lineWidth = 1.5; g.globalAlpha = a * 0.7; g.beginPath(); g.ellipse(0, cy, r0 * 1.35, r0 * 0.3, -0.25, 0, TAU); g.stroke();
       });

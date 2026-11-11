@@ -5,6 +5,7 @@
  *  - Blizzard, built like the concept picture: a glacial sigil on the floor, a frost shockwave, a ring of tall crystal spikes bursting out of the ground,
  *    a light burst under the ice, low cold mist, a lens flare, with flying ice chips and glinting frost drawn as particles by the renderer.
  */
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -60,7 +61,7 @@ export function drawPlates(g: G, list: Plate[], dt: number, t: number) {
     g.translate(p.x, p.y);
     const path = (dx = 0, dy = 0) => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x + dx, y + dy) : g.moveTo(x + dx, y + dy))); g.closePath(); };
     // water showing through, a soft cold glow round the plate
-    g.globalAlpha = al * 0.55; g.shadowColor = "rgba(150,215,255,.9)"; g.shadowBlur = 12; g.fillStyle = "#3f8cc4"; path(0, 3); g.fill();
+    g.globalAlpha = al * 0.55; g.shadowColor = "rgba(150,215,255,.9)"; g.shadowBlur = fxBlur(12); g.fillStyle = "#3f8cc4"; path(0, 3); g.fill();
     g.shadowBlur = 0;
     // the thick side of the slab
     g.globalAlpha = al * 0.95; g.fillStyle = "#8fc3e6"; path(0, 3.5); g.fill();

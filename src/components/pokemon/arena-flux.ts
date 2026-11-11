@@ -3,6 +3,7 @@
  * forward, chaotic ribbons of red and violet energy twist behind it, blood-dark droplets splatter off, sparkles glint,
  * crimson motes linger and a distortion wave rolls ahead of the point.
  */
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 type Emit = (p: Record<string, unknown>) => void;
 const TAU = Math.PI * 2;
@@ -37,7 +38,7 @@ export function drawFlux(g: G, ang: number, cx: number, cy: number, R: number, p
   cg.addColorStop(0, "rgba(255,150,170,.75)"); cg.addColorStop(0.5, "rgba(210,30,60,.6)"); cg.addColorStop(1, "rgba(90,8,30,.65)");
   g.globalAlpha = al; g.fillStyle = cg; g.fill();
   g.globalCompositeOperation = "lighter";
-  g.strokeStyle = "#ff6a86"; g.lineWidth = 2; g.shadowColor = "#ff2a4a"; g.shadowBlur = 12; g.globalAlpha = al; g.stroke();
+  g.strokeStyle = "#ff6a86"; g.lineWidth = 2; g.shadowColor = "#ff2a4a"; g.shadowBlur = fxBlur(12); g.globalAlpha = al; g.stroke();
   g.shadowBlur = 0;
   // the glowing mesh: lines running to the point (turning) and rings round the body
   g.lineWidth = 1.2; g.strokeStyle = "#ffc0cc"; g.globalAlpha = al * 0.8;

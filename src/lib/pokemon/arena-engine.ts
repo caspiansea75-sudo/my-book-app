@@ -483,7 +483,7 @@ export function buildStage(S: State, kind: StageKind) {
     S.fighters.every((f) => !f.alive || len(f.x - x, f.y - y) > f.r + r + 60);
   const scatter = (k: ObsKind, n: number) => {
     // a bigger floor gets more things standing on it (a little thinner than before, so there is still room to run)
-    for (let i = 0; i < Math.round(n * K * K * 0.75); i++) {
+    for (let i = 0; i < Math.max(1, Math.round(n * K * K * 0.375)); i++) {
       for (let t = 0; t < 30; t++) {
         const x = rnd(MARGIN + 40, W - MARGIN - 40);
         const y = rnd(MARGIN + 40, H - MARGIN - 40);

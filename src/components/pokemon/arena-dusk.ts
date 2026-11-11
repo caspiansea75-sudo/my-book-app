@@ -6,6 +6,7 @@
  *     chaotic swirling motes and a shadow-energy glow on the floor.
  * Everything here draws in absolute world coordinates (see `at` in the renderer).
  */
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -27,7 +28,7 @@ export function decal(g: G, R: number, t: number, a: number, p: { lt: string; md
   g.globalAlpha = a * 0.8; g.strokeStyle = "#1c0636"; g.lineWidth = 7; g.beginPath(); g.arc(0, 0, R, 0, TAU); g.stroke();
   g.lineWidth = 4; g.beginPath(); g.arc(0, 0, R * 0.55, 0, TAU); g.stroke();
   g.globalCompositeOperation = "lighter";
-  g.strokeStyle = p.md; g.fillStyle = p.lt; g.shadowColor = p.md; g.shadowBlur = 10; g.lineCap = "round";
+  g.strokeStyle = p.md; g.fillStyle = p.lt; g.shadowColor = p.md; g.shadowBlur = fxBlur(10); g.lineCap = "round";
   g.globalAlpha = a;
   g.lineWidth = 3; g.beginPath(); g.arc(0, 0, R, 0, TAU); g.stroke();
   g.lineWidth = 1.5; g.beginPath(); g.arc(0, 0, R * 0.9, 0, TAU); g.stroke();
@@ -123,9 +124,9 @@ export function duskItems(s: DuskSig, push: (x: number, y: number, dy: number, d
       const dg = g.createRadialGradient(0, -Hd * 0.35, Wd * 0.1, 0, -Hd * 0.3, Wd * 1.1);
       dg.addColorStop(0, `rgba(${p.glow},.12)`); dg.addColorStop(0.75, `rgba(${p.glow},.3)`); dg.addColorStop(1, `rgba(${p.glow},.7)`);
       g.globalAlpha = fade; g.fillStyle = dg; g.fill();
-      g.globalCompositeOperation = "lighter"; g.strokeStyle = p.lt; g.lineWidth = 2.5; g.shadowColor = p.md; g.shadowBlur = 14; g.globalAlpha = fade * 0.85; g.stroke();
+      g.globalCompositeOperation = "lighter"; g.strokeStyle = p.lt; g.lineWidth = 2.5; g.shadowColor = p.md; g.shadowBlur = fxBlur(14); g.globalAlpha = fade * 0.85; g.stroke();
       // a few crackles of dark energy crawling on the surface
-      g.shadowBlur = 6; g.lineWidth = 1.2; g.strokeStyle = "#f0d8ff";
+      g.shadowBlur = fxBlur(6); g.lineWidth = 1.2; g.strokeStyle = "#f0d8ff";
       for (let i = 0; i < 4; i++) {
         if (Math.sin(s.t * 11 + i * 3) < 0.2) continue;
         let x = (hs(i + s.seed) - 0.5) * Wd * 1.4, y = -Hd * (0.2 + 0.5 * hs(i + 9));
@@ -182,7 +183,7 @@ export function duskItems(s: DuskSig, push: (x: number, y: number, dy: number, d
       g.globalAlpha = ma * Math.sin(ph * Math.PI);
       const dark = i % 3 === 0;
       g.fillStyle = dark ? "#1a1024" : p.lt;
-      if (!dark) { g.globalCompositeOperation = "lighter"; g.shadowColor = p.md; g.shadowBlur = 8; }
+      if (!dark) { g.globalCompositeOperation = "lighter"; g.shadowColor = p.md; g.shadowBlur = fxBlur(8); }
       g.beginPath(); g.moveTo(0, -sz * 1.6); g.lineTo(sz, 0); g.lineTo(0, sz * 1.6); g.lineTo(-sz, 0); g.closePath(); g.fill();
       g.restore();
     });

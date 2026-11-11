@@ -159,19 +159,26 @@ const crystal: Surface = (x, y) => {
 };
 
 const ice: Surface = (x, y) => {
-  // clear blue ice: smooth with long streaks, a network of deep cracks, frosted patches and trapped bubbles
-  const n = fbm(x / 140, y / 100, 4, 40);
-  const streak = fbm(x / 120, y / 7, 3, 41);
-  let rgb: RGB = ramp(["#3f86b8", "#69b4dc", "#9ad6f0", "#cdeefa"].map(hex), 0.25 + n * 0.55 + (streak - 0.5) * 0.18);
-  const v = vor(x / 90, y / 76, 42);
-  const seam = clamp01(1 - (v.d2 - v.d1) * 14);
-  rgb = mix(rgb, hex("#e9fbff"), seam * 0.32);
-  const crack = ridge(fbm(x / 80, y / 60, 3, 43), 0.03);
-  rgb = mix(rgb, hex("#2a68a6"), crack * 0.3);
-  const frost = clamp01((fbm(x / 60, y / 50, 4, 44) - 0.5) * 3.2);
-  rgb = mix(rgb, hex("#f2fcff"), frost * (0.55 + vn(x / 1.6, y / 1.6, 45) * 0.4));
-  if (vn(x / 8, y / 8, 46) > 0.93) rgb = mix(rgb, hex("#ffffff"), 0.5);
-  return { rgb, h: n * 0.6 + seam * 0.9 - crack * 1.5 + frost * 0.8, gloss: 0.6 };
+  // cartoon pack ice: big pale slabs with bevelled edges, thin dark-blue water between them, long diagonal glints and a few hairline cracks
+  const wob = fbm(x / 70, y / 60, 3, 40);
+  const v = vor((x + wob * 34) / 210, (y + wob * 26) / 160, 42);
+  const edge = v.d2 - v.d1; // 0 on the seam between two slabs
+  const base = ramp(["#a9d8ef", "#bfe4f6", "#d3eefb", "#e6f7fe"].map(hex), 0.2 + v.id * 0.55 + (fbm(x / 120, y / 90, 2, 43) - 0.5) * 0.25);
+  let rgb: RGB = base;
+  // long thin glints at a slant, different spacing on each slab, fading in and out along their length
+  const sl = (x * 0.92 + y * 0.52) / (13 + v.id * 15);
+  const fr = sl - Math.floor(sl);
+  const glintMask = clamp01((fbm(x / 110 + v.id * 9, y / 40, 2, 44) - 0.4) * 3.4);
+  const glint = (fr < 0.3 ? Math.min(1, (1 - Math.abs(fr - 0.15) / 0.15) * 1.6) : 0) * glintMask;
+  rgb = mix(rgb, hex("#ffffff"), glint * 0.85);
+  const shade = (vn(x / 40, y / 28, 45) - 0.5) * 0.1;
+  rgb = mix(rgb, hex("#8cc4e4"), clamp01(0.12 + shade + (1 - clamp01(edge * 5)) * 0.25));
+  // the sunk edge of the slab (its side face), then the gap of dark water
+  const bevel = clamp01(1 - edge * 11); // 1 at the seam
+  rgb = mix(rgb, hex("#5aa4d2"), clamp01(bevel * 1.2) * 0.7);
+  const gap = clamp01(1 - edge * 26);
+  rgb = mix(rgb, hex("#1f6aa0"), gap * 0.92);
+  return { rgb, h: Math.min(1, edge * 9) * 1.6, gloss: 0.5 };
 };
 
 const lava: Surface = (x, y) => {

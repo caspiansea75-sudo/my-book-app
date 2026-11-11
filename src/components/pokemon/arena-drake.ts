@@ -5,6 +5,7 @@
  *                                                                              wake field and circuit-rune ground decals
  * Nothing here uses shadowBlur: a glow is a wide faint stroke under a sharp one. Draws in whatever frame the caller sets up.
  */
+import { LOD, lodN } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 export const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -233,26 +234,30 @@ function drakeLeg(g: G, x: number, y: number, ang: number, bend: number, p: Pal,
  *  `horizontal` strips are cut top to bottom and slide sideways (a body that ripples); otherwise vertical strips slide up and down,
  *  and the lower part of each strip (the legs) slides along x by `legX` as well. */
 const WARP = new Map<string, HTMLCanvasElement>();
-function warpDraw(g: G, im: HTMLImageElement | HTMLCanvasElement, x: number, y: number, w: number, h: number, n: number, horizontal: boolean, off: (u: number) => number, legX?: (u: number) => number) {
+function warpDraw(g: G, im: HTMLImageElement | HTMLCanvasElement, x: number, y: number, w: number, h: number, n0: number, horizontal: boolean, off: (u: number) => number, legX?: (u: number) => number) {
+  const n = lodN(n0, 24); // fewer strips when the game is busy
   const iw = im instanceof HTMLImageElement ? im.naturalWidth : im.width, ih = im instanceof HTMLImageElement ? im.naturalHeight : im.height, kx = iw / w, ky = ih / h;
-  // the strips go onto a scratch canvas first (plain painting, so where they overlap nothing doubles up), then it is added to the scene once
-  const key = iw + "x" + ih + (im instanceof HTMLImageElement ? "" : "c");
+  // the strips go onto a scratch canvas first (plain painting, so where they overlap nothing doubles up), then it is added to the scene once.
+  // The scratch is no bigger than it will be drawn (about 1.5x the on-screen size), so a small shot does not repaint a full-size picture every frame.
+  const sc = Math.min(1, Math.max(0.3, (w * 1.5) / iw));
+  const cw = Math.max(8, Math.round(iw * sc)), ch = Math.max(8, Math.round(ih * sc));
+  const key = cw + "x" + ch;
   let cv = WARP.get(key);
-  if (!cv) { cv = document.createElement("canvas"); cv.width = iw; cv.height = ih; WARP.set(key, cv); }
+  if (!cv) { cv = document.createElement("canvas"); cv.width = cw; cv.height = ch; WARP.set(key, cv); }
   const o = cv.getContext("2d")!;
-  o.globalCompositeOperation = "source-over"; o.globalAlpha = 1; o.clearRect(0, 0, iw, ih);
+  o.globalCompositeOperation = "source-over"; o.globalAlpha = 1; o.clearRect(0, 0, cw, ch);
   if (horizontal) {
     const sh = ih / n;
-    for (let i = 0; i < n; i++) o.drawImage(im, 0, i * sh, iw, sh + 1, off(i / n) * kx, i * sh, iw, sh + 1);
+    for (let i = 0; i < n; i++) o.drawImage(im, 0, i * sh, iw, sh + 1, off(i / n) * kx * sc, i * sh * sc, cw, (sh + 1) * sc);
   } else {
     const cut = 0.62, sw = iw / n; // below `cut` the strip is leg, not body
     for (let i = 0; i < n; i++) {
       const u = i / n, dy = off(u) * ky;
-      o.drawImage(im, i * sw, 0, sw + 1, ih * cut, i * sw, dy, sw + 1, ih * cut);
-      o.drawImage(im, i * sw, ih * cut, sw + 1, ih * (1 - cut), i * sw + (legX ? legX(u) * kx : 0), ih * cut + dy * 0.6, sw + 1, ih * (1 - cut));
+      o.drawImage(im, i * sw, 0, sw + 1, ih * cut, i * sw * sc, dy * sc, (sw + 1) * sc, ih * cut * sc);
+      o.drawImage(im, i * sw, ih * cut, sw + 1, ih * (1 - cut), (i * sw + (legX ? legX(u) * kx : 0)) * sc, (ih * cut + dy * 0.6) * sc, (sw + 1) * sc, ih * (1 - cut) * sc);
     }
   }
-  g.drawImage(cv, x, y, w, h);
+  g.drawImage(cv, 0, 0, cw, ch, x, y, w, h);
 }
 
 let RUN_IMG: HTMLImageElement | null = null;
@@ -317,7 +322,7 @@ export function drakeRunner(g: G, L: number, t: number, p: Pal, al: number, seed
     warpDraw(g, im, -w * 0.5, -h * 0.5, w, h, 72, false,
       (u) => Math.sin(ph0 - u * 7) * h * 0.03 * (1 - u * 0.5) * (u < 0.3 ? 1.6 - u : 1),
       (u) => Math.sin(ph0 * 1.0 + u * 11) * w * 0.03 * (u > 0.55 ? 1 : 0.7));
-    g.globalAlpha = al * 0.3; g.drawImage(im, -w * 0.5, -h * 0.5, w, h); // a second pass lifts the glow
+    if (LOD >= 0.8) { g.globalAlpha = al * 0.3; g.drawImage(im, -w * 0.5, -h * 0.5, w, h); } // a second pass lifts the glow
     g.restore();
     return;
   }

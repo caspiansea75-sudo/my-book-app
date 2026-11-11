@@ -35,6 +35,7 @@ import { SIG_MOVES, isTall, newSig, sigFlat, sigItems, type Sig } from "@/compon
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
+import { setLod } from "./arena-lod";
 
 const BEAM_PAL: Record<string, [string, string, string]> = {
   Grass: ["#7be04a", "#fff3a0", "#ffffff"],
@@ -553,7 +554,7 @@ export class ArenaRenderer {
   /** Lay a flat world-sized picture onto the tilted floor, row by row. */
   /** The fine tile of detail for a stage as a pattern in arena units, or null on a slow device. */
   private detailPattern(g: CanvasRenderingContext2D, kind: StageKind): CanvasPattern | null {
-    if (this.q < 0.6 || !DETAIL_STRENGTH[kind]) return null;
+    if (this.q < 0.8 || !DETAIL_STRENGTH[kind]) return null; // the fine detail costs a blended fill for every row of the floor: first thing to go on a slow device
     if (this.detPat?.kind !== kind) {
       const pat = g.createPattern(detailTile(kind), "repeat");
       if (!pat) return null;
@@ -775,8 +776,10 @@ export class ArenaRenderer {
     this.drawAim(this.gcx());
     const floor = extendedGround(this.stageNow);
     this.floorCv = floor;
-    this.blit(g, floor, this.v3 ? 3 : 2, this.detailPattern(g, this.stageNow));
-    this.blit(g, this.gc!, this.v3 ? 3 : 2);
+    // The floor is laid on in thin rows, the main cost of the tilted views, so the rows get thicker as the device falls behind (and the effects layer, soft glows and marks, always uses thicker ones)
+    const bump = this.q < 0.65 ? 2 : this.q < 0.85 ? 1 : 0;
+    this.blit(g, floor, (this.v3 ? 3 : 2) + bump, this.detailPattern(g, this.stageNow));
+    this.blit(g, this.gc!, 3 + bump);
     const far = this.v3 ? { y: this.c3.hz } : this.proj(ARENA.CX, -PAD.t);
     const len = this.v3 ? 200 : 150 * this.tp.s * this.zoom;
     g.save();
@@ -795,6 +798,8 @@ export class ArenaRenderer {
   /** Fit the drawing to the size the page gives the canvas, crisp on high-density screens. */
   /** Adaptive quality: a slow device draws at a lower resolution (and fewer particles) so the game keeps up with the thumb. */
   private q = 1;
+  /** how much detail the heavy effects draw right now (1 = all of it), see arena-lod */
+  private lod = 1;
   /** whether the stands and wall are drawn in full detail. It only drops when quality is at its lowest and only comes back when it is at its highest, so the stands never flip back and forth. */
   private hi = true;
   private frameEma = 1 / 60;
@@ -1750,7 +1755,7 @@ export class ArenaRenderer {
     this.dtr = dtReal;
     if (dtReal > 0 && dtReal < 0.5) {
       this.frameEma += (dtReal - this.frameEma) * 0.05;
-      if (this.t - this.qAt > 2 && !this.z && !this.tint && !this.clean) {
+      if (this.t - this.qAt > 1.4 && !this.z && !this.tint && !this.clean) {
         if (this.frameEma > 0.027 && this.q > 0.55) { this.q = Math.max(0.55, this.q - 0.15); this.qAt = this.t; this.resize(); }
         else if (this.frameEma < 0.017 && this.q < 1 && this.t - this.qAt > 12) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
         if (this.q <= 0.55) this.hi = false; else if (this.q >= 1) this.hi = true;
@@ -1928,6 +1933,13 @@ export class ArenaRenderer {
     this.drawTelegraphs(G, S);
     this.drawWaves(G, dt);
     // what lies on the floor under a signature move; the parts that stand up are put among the Pokémon below
+    // how much detail the heavy effects draw: less while several overlap (everyone casting at once) or the device is behind; it drops quickly and climbs back slowly
+    {
+      const heavy = this.sigs.length * 0.5 + this.hells.length + this.psys.length * 2 + this.drakes.length * 2 + this.dusks.length + this.wyrms.length * 2 + this.fx13.length;
+      const target = Math.min(this.q, heavy <= 2.5 ? 1 : heavy <= 4.5 ? 0.75 : 0.5);
+      this.lod += (target - this.lod) * Math.min(1, dtReal * (target < this.lod ? 8 : 1.2));
+      setLod(this.lod);
+    }
     for (let i = this.sigs.length - 1; i >= 0; i--) {
       const sg = this.sigs[i]!;
       sg.t += dt;

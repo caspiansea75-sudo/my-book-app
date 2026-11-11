@@ -2,6 +2,7 @@
 // Nothing here is a plain circle: every outline is an irregular, slowly moving shape (kept inside the
 // patch's ellipse so collisions still match), filled with a texture and edged with rocks, foam, shards or runes.
 import { texPat, type TexKind } from "./arena-tex";
+import { fxBlur } from "./arena-lod";
 
 type G = CanvasRenderingContext2D;
 type Patch = { x: number; y: number; rx: number; ry: number };
@@ -208,7 +209,7 @@ export function riftPit(g: G, h: Patch, t: number) {
   crown(g, rim, h.x, h.y, 12, sd + 7, "#7fd4ff", "#e7fbff", 2);
   g.save();
   smooth(g, rim);
-  g.strokeStyle = "rgba(140,215,255,.9)"; g.lineWidth = 3.5; g.shadowColor = "#4cc3ff"; g.shadowBlur = 14; g.stroke();
+  g.strokeStyle = "rgba(140,215,255,.9)"; g.lineWidth = 3.5; g.shadowColor = "#4cc3ff"; g.shadowBlur = fxBlur(14); g.stroke();
   g.restore();
 }
 
@@ -255,7 +256,7 @@ export function lavaLake(g: G, h: Patch, t: number) {
   crown(g, rim, h.x, h.y, 10, sd + 3, "#2b1b17", "#ff9a3a", 2);
   g.save();
   smooth(g, rim);
-  g.strokeStyle = "rgba(255,170,70,.9)"; g.lineWidth = 3.5; g.shadowColor = "#ff6a1a"; g.shadowBlur = 18; g.stroke();
+  g.strokeStyle = "rgba(255,170,70,.9)"; g.lineWidth = 3.5; g.shadowColor = "#ff6a1a"; g.shadowBlur = fxBlur(18); g.stroke();
   g.restore();
 }
 

@@ -16,6 +16,7 @@ import { vfxShot } from "./arena-vfx";
 import { PULSE_MOVES, drawPulse } from "./arena-sigfx";
 import { MOVES } from "@/lib/pokemon/arena-data";
 import { dressBackground, drawSceneObstacle } from "@/components/pokemon/arena-scenery";
+import { fxBlur } from "./arena-lod";
 
 const { W, H } = ARENA;
 export const col = (t: string) => TYPE_COLOR[t] ?? "#ffffff";
@@ -774,7 +775,7 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
       g.strokeStyle = "#a78bfa";
       g.lineWidth = 4;
       g.shadowColor = "#7c5cff";
-      g.shadowBlur = 14;
+      g.shadowBlur = fxBlur(14);
       for (let i = 0; i < 3; i++) {
         g.globalAlpha = 1 - i * 0.3;
         g.beginPath();
@@ -856,7 +857,7 @@ export function drawShot(g: CanvasRenderingContext2D, p: Proj, age: number, t: n
       g.strokeStyle = p.mv === "airslash" ? "#eaf6ff" : "#8b5cf6";
       g.lineWidth = 4;
       g.shadowColor = p.mv === "airslash" ? "#9fd0ff" : "#4c1d95";
-      g.shadowBlur = 10;
+      g.shadowBlur = fxBlur(10);
       g.beginPath();
       g.arc(-r, 0, r * 2, -0.9, 0.9);
       g.stroke();

@@ -7,6 +7,7 @@
  *   layer 5  a billowing cloud on top, tinted by the type
  * All of it draws in absolute world coordinates (see `at` in the renderer).
  */
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -82,7 +83,7 @@ export function vortexFlat(g: G, s: VSig) {
 
 function bit(g: G, kind: Cfg["bit"], size: number, c: Cfg, rot: number) {
   g.rotate(rot);
-  if (kind === "ember") { g.globalCompositeOperation = "lighter"; g.fillStyle = c.lt; g.shadowColor = c.md; g.shadowBlur = 8; g.beginPath(); g.moveTo(0, -size * 1.6); g.quadraticCurveTo(size, 0, 0, size); g.quadraticCurveTo(-size, 0, 0, -size * 1.6); g.fill(); }
+  if (kind === "ember") { g.globalCompositeOperation = "lighter"; g.fillStyle = c.lt; g.shadowColor = c.md; g.shadowBlur = fxBlur(8); g.beginPath(); g.moveTo(0, -size * 1.6); g.quadraticCurveTo(size, 0, 0, size); g.quadraticCurveTo(-size, 0, 0, -size * 1.6); g.fill(); }
   else if (kind === "drop") { g.fillStyle = c.lt; g.beginPath(); g.moveTo(0, -size * 1.5); g.quadraticCurveTo(size, 0, 0, size * 0.8); g.quadraticCurveTo(-size, 0, 0, -size * 1.5); g.fill(); }
   else if (kind === "leaf") { g.fillStyle = c.md; g.strokeStyle = c.dk; g.lineWidth = 1; g.beginPath(); g.moveTo(0, -size * 1.8); g.quadraticCurveTo(size * 1.3, 0, 0, size * 1.8); g.quadraticCurveTo(-size * 1.3, 0, 0, -size * 1.8); g.fill(); g.stroke(); }
   else if (kind === "grit") { g.fillStyle = c.dk; g.fillRect(-size * 0.6, -size * 0.6, size * 1.2, size * 1.2); }

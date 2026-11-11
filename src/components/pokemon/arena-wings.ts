@@ -4,6 +4,7 @@
  * crystal shards shed into the air and a ripple of refracted air. Both wings snap open and sweep forward.
  * Draws in the same space as the other melee pictures (centred on the attacker).
  */
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 type Emit = (p: Record<string, unknown>) => void;
 const TAU = Math.PI * 2;
@@ -66,7 +67,7 @@ export function drawWings(g: G, e: WingFx, cx: number, cy: number, R: number, p:
     g.fillStyle = e.c2; g.globalAlpha = al * 0.85;
     for (let i = 2; i < N; i += 2) { const [x, y] = top[i]!, ta = tan(i / N) - Math.PI / 2 - side * 0.5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ta) * L * 0.1, y + Math.sin(ta) * L * 0.1); g.lineTo(x + Math.cos(ta + 1.2) * 4, y + Math.sin(ta + 1.2) * 4); g.closePath(); g.fill(); }
     // the core moonlight: a jagged bolt crawling along the bone
-    g.shadowColor = e.c1; g.shadowBlur = 8; g.strokeStyle = "#ffffff"; g.lineWidth = 1.3; g.globalAlpha = al;
+    g.shadowColor = e.c1; g.shadowBlur = fxBlur(8); g.strokeStyle = "#ffffff"; g.lineWidth = 1.3; g.globalAlpha = al;
     g.beginPath();
     for (let i = 0; i <= 22; i++) { const k = i / 22 * 0.95, [x, y] = P(k), j = (hs(i * 7 + Math.floor(t * 18) + side) - 0.5) * R * 0.22; i ? g.lineTo(x, y + j) : g.moveTo(x, y + j); }
     g.stroke();

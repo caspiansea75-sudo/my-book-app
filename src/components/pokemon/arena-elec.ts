@@ -3,6 +3,7 @@
  * electric sparks in yellow and cyan, a radial air shockwave ring with air distortion, and a purple ribbon trail behind.
  * `drawElectroBall` draws with the origin on the ball (drawShot has already translated there).
  */
+import { fxBlur } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const hs = (n: number) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -47,7 +48,7 @@ export function drawElectroBall(g: G, ang: number, r: number, age: number, t: nu
   g.restore();
   // lightning arcs, re-rolled many times a second so they crawl
   const frame = Math.floor(t * 20);
-  g.shadowColor = "#7aa8ff"; g.shadowBlur = 10;
+  g.shadowColor = "#7aa8ff"; g.shadowBlur = fxBlur(10);
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU + hs(frame + i) * 0.6;
     const len = R * (2.0 + 2.2 * hs(frame * 3 + i * 5));

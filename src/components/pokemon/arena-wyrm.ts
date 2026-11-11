@@ -5,6 +5,7 @@
  */
 import { decal } from "./arena-dusk";
 import { coilSprite, warpDraw, dragonHead, leg, meshBand, type Pt } from "./arena-drake";
+import { LOD } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -56,7 +57,7 @@ function dragon(g: G, H: number, W: number, t: number, al: number, p: ReturnType
     // a wave runs up the body from the tail, the head sways, the tail tip curls
     g.globalAlpha = al;
     warpDraw(g, im, -w * 0.5, -h * 0.97, w, h, 90, true, (u) => Math.sin(t * 2.6 - u * 8 + seed) * w * 0.03 * (0.6 + 1.6 * Math.max(0, (u - 0.7) / 0.3) + 1.2 * Math.max(0, (0.25 - u) / 0.25)));
-    g.globalAlpha = al * 0.28; g.drawImage(im, -w * 0.5, -h * 0.97, w, h);
+    if (LOD >= 0.8) { g.globalAlpha = al * 0.28; g.drawImage(im, -w * 0.5, -h * 0.97, w, h); }
     g.restore();
     return;
   }

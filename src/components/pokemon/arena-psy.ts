@@ -5,6 +5,7 @@
  * Each move weights them differently. Nothing here uses shadowBlur (it is slow on the big floor layer): glow is a wide faint stroke under a sharp one.
  * Everything draws in absolute world coordinates (see `at` in the renderer).
  */
+import { lodN } from "./arena-lod";
 type G = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
 const sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -78,7 +79,7 @@ export function psyFlat(g: G, s: PsySig) {
     g.globalAlpha = a * sm(0, 0.02, u) * (1 - sm(0.05, 0.4, u)); g.fillStyle = cg; g.beginPath(); g.arc(0, 0, R * 0.4, 0, TAU); g.fill();
     // droplets flung out across the floor
     const dp = sm(0, 0.35, u);
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < lodN(22, 10); i++) {
       const an = hs(i * 4 + s.seed) * TAU, d = R * (0.45 + 1.0 * hs(i + 70)) * (1 - Math.pow(1 - dp, 2));
       g.globalAlpha = (1 - sm(0.2, 0.6, u)) * 0.9 * Math.min(1, L.splash);
       g.fillStyle = i % 3 ? L.lt : L.acc;
@@ -98,7 +99,7 @@ export function psyFlat(g: G, s: PsySig) {
     g.save();
     g.rotate(s.t * 0.3);
     g.strokeStyle = L.lt; g.lineWidth = 1.4; g.globalAlpha = a * 0.9;
-    for (let i = 0; i < 36; i++) { const an = (i / 36) * TAU; g.beginPath(); g.moveTo(Math.cos(an) * R * 0.78, Math.sin(an) * R * 0.78); g.lineTo(Math.cos(an) * R * (i % 3 ? 0.82 : 0.86), Math.sin(an) * R * (i % 3 ? 0.82 : 0.86)); g.stroke(); }
+    for (let i = 0, N36 = lodN(36, 18); i < N36; i++) { const an = (i / N36) * TAU; g.beginPath(); g.moveTo(Math.cos(an) * R * 0.78, Math.sin(an) * R * 0.78); g.lineTo(Math.cos(an) * R * (i % 3 ? 0.82 : 0.86), Math.sin(an) * R * (i % 3 ? 0.82 : 0.86)); g.stroke(); }
     g.rotate(-s.t * 0.75);
     // the star, drawn as one stroke {n/2}
     const n = L.star;
@@ -110,7 +111,7 @@ export function psyFlat(g: G, s: PsySig) {
     g.save();
     g.rotate(s.t * 0.55);
     g.strokeStyle = L.lt; g.lineWidth = 1.5;
-    const nr = 10;
+    const nr = lodN(10, 6);
     for (let i = 0; i < nr; i++) {
       const an = (i / nr) * TAU;
       g.save(); g.translate(Math.cos(an) * R * 0.6, Math.sin(an) * R * 0.6); g.rotate(an + Math.PI / 2);
@@ -208,7 +209,7 @@ export function psyItems(s: PsySig, push: (x: number, y: number, dy: number, dra
   if (L.tend > 0.05 && fade > 0.01) {
     push(s.x, s.y, 0.4, (g) => {
       g.save(); g.translate(s.x, s.y); g.globalCompositeOperation = "lighter"; g.lineCap = "round"; g.lineJoin = "round";
-      const n = Math.round(6 * L.tend + 2);
+      const n = lodN(Math.round(6 * L.tend + 2), 3);
       for (let i = 0; i < n; i++) {
         const a0 = hs(i * 6 + s.seed) * TAU, r0 = R * (0.25 + 0.45 * hs(i + 11)), H = R * (0.9 + 0.9 * hs(i + 31)) * sm(0, 0.25, u);
         const sp = 0.6 + hs(i + 3), ph = s.seed + i * 1.9;
@@ -226,11 +227,11 @@ export function psyItems(s: PsySig, push: (x: number, y: number, dy: number, dra
   if (L.rib > 0.05 && fade > 0.01) {
     push(s.x, s.y, 0.7, (g) => {
       g.save(); g.translate(s.x, s.y); g.globalCompositeOperation = "lighter"; g.lineCap = "round";
-      const n = Math.round(3 + 2 * L.rib);
+      const n = lodN(Math.round(3 + 2 * L.rib), 2);
       for (let i = 0; i < n; i++) {
         const a0 = (i / n) * TAU + hs(i + s.seed) * 0.6, dir = i % 2 ? 1 : -1;
         const head = Math.min(1.1, s.t * (0.9 + 0.3 * hs(i + 8)) + i * 0.04);
-        const SEG = 14;
+        const SEG = lodN(14, 7);
         for (let k = 0; k < SEG; k++) {
           const q = head - (k / SEG) * 0.4; if (q < 0 || q > 1) continue;
           const q2 = head - ((k + 1) / SEG) * 0.4;
@@ -249,7 +250,7 @@ export function psyItems(s: PsySig, push: (x: number, y: number, dy: number, dra
   if (L.ember > 0.05 && fade > 0.01) {
     push(s.x, s.y, 0.5, (g) => {
       g.save(); g.translate(s.x, s.y); g.globalCompositeOperation = "lighter";
-      const n = Math.round(26 * L.ember);
+      const n = lodN(Math.round(26 * L.ember), 6);
       for (let i = 0; i < n; i++) {
         const p = (s.t * (0.4 + 0.3 * hs(i + 2)) + hs(i * 3)) % 1;
         const x = (hs(i * 3 + 1) - 0.5) * R * 1.5 + Math.sin(s.t * 2 + i) * 8, y = -p * R * (0.6 + 0.9 * hs(i + 9)) + R * 0.05;
