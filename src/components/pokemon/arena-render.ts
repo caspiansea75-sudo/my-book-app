@@ -1936,6 +1936,18 @@ export class ArenaRenderer {
     // what lies on the floor under a signature move; the parts that stand up are put among the Pokémon below
     // how much detail the heavy effects draw: less while several overlap (everyone casting at once) or the device is behind; it drops quickly and climbs back slowly
     {
+      // a hard ceiling on the big effects alive together (a room full of players all casting): the oldest ones are cut short, the newest keep playing
+      {
+        const lists = [this.sigs, this.hells, this.psys, this.drakes, this.dusks, this.wyrms, this.fx13] as unknown[][];
+        const cost = [0.5, 1, 2, 2, 1, 2, 1];
+        let tot = lists.reduce((a, l, i) => a + l.length * cost[i]!, 0);
+        while (tot > 9) {
+          let bi = -1, bt = Infinity;
+          lists.forEach((l, i) => { const o = l[0] as { t: number; life: number } | undefined; if (o && o.life - o.t < bt) { bt = o.life - o.t; bi = i; } });
+          if (bi < 0) break;
+          lists[bi]!.shift(); tot -= cost[bi]!;
+        }
+      }
       const heavy = this.sigs.length * 0.5 + this.hells.length + this.psys.length * 2 + this.drakes.length * 2 + this.dusks.length + this.wyrms.length * 2 + this.fx13.length;
       const target = Math.min(this.q, heavy <= 2.5 ? 1 : heavy <= 4.5 ? 0.75 : 0.5);
       this.lod += (target - this.lod) * Math.min(1, dtReal * (target < this.lod ? 8 : 1.2));
