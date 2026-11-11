@@ -5463,9 +5463,11 @@ export class ArenaRenderer {
       if (this.tilted && !p.beam && DRAKE_SHOTS.has(p.mv)) {
         // the dragon stands up in the tilted and player views; only its rune strip lies on the floor
         const ang = Math.atan2(p.vy, p.vx), age = S.time - p.born;
-        this.at(g, p.x, p.y, "fl", () => drawDrakeGround(g, p.mv, ang, age, this.t));
+        // (the 45° view draws in world units, so the picture is moved to the shot; the player view has already put its origin there)
+        const mv0 = (fn: () => void, up = 0) => { if (this.v3) return fn(); g.save(); g.translate(p.x, p.y - up); fn(); g.restore(); };
+        this.at(g, p.x, p.y, "fl", () => mv0(() => drawDrakeGround(g, p.mv, ang, age, this.t)));
         const sa = this.v3 ? ang - this.yaw - Math.PI / 2 : ang;
-        this.at(g, p.x, p.y, "bb", () => drawDrakeBody(g, p.mv, sa, age, this.t), "p", drakeShotLift(p.mv));
+        this.at(g, p.x, p.y, "bb", () => mv0(() => drawDrakeBody(g, p.mv, sa, age, this.t), drakeShotLift(p.mv)), "p", drakeShotLift(p.mv));
       } else this.at(g, p.x, p.y, "mix", () => drawShot(g, p, S.time - p.born, this.t), "p", this.v3 ? 32 : 0);
       if (!specShotTrail(p, this.sctx)) {
         const tmd = MOVES[p.mv];
