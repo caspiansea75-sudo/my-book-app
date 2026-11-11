@@ -1754,11 +1754,12 @@ export class ArenaRenderer {
     this.t += dtReal;
     this.dtr = dtReal;
     if (dtReal > 0 && dtReal < 0.5) {
-      this.frameEma += (dtReal - this.frameEma) * 0.05;
-      if (this.t - this.qAt > 1.4 && !this.z && !this.tint && !this.clean) {
-        if (this.frameEma > 0.027 && this.q > 0.55) { this.q = Math.max(0.55, this.q - 0.15); this.qAt = this.t; this.resize(); }
-        else if (this.frameEma < 0.017 && this.q < 1 && this.t - this.qAt > 12) { this.q = Math.min(1, this.q + 0.15); this.qAt = this.t; this.resize(); }
-        if (this.q <= 0.55) this.hi = false; else if (this.q >= 1) this.hi = true;
+      this.frameEma += (dtReal - this.frameEma) * 0.02;
+      // Quality only ever steps DOWN, and only when the game is clearly slow for a good while. It never climbs back by itself: the old
+      // down-then-up cycle made the ground go blurry, then sharp, then blurry again every few seconds.
+      if (this.t > 6 && this.t - this.qAt > 5 && !this.z && !this.tint && !this.clean) {
+        if (this.frameEma > 0.032 && this.q > 0.7) { this.q = Math.max(0.7, this.q - 0.15); this.qAt = this.t; this.resize(); }
+        if (this.q <= 0.7) this.hi = false;
       }
     }
     if (this.later.length) {

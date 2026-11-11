@@ -674,13 +674,7 @@ function lights(g: G, S: State, t: number) {
   switch (S.stage) {
     case "grass":
     case "meadow": {
-      // sunbeams through the leaves, and soft patches of light sliding over the ground
-      for (let i = 0; i < 4; i++) {
-        const x0 = 150 + i * 220 + Math.sin(t * 0.35 + i) * 24;
-        g.globalAlpha = 0.12 + 0.05 * Math.sin(t * 0.8 + i * 2);
-        const gr = g.createLinearGradient(x0, 0, x0 + 150, H); gr.addColorStop(0, "rgba(255,250,190,1)"); gr.addColorStop(1, "rgba(255,250,190,0)");
-        g.fillStyle = gr; g.beginPath(); g.moveTo(x0, 0); g.lineTo(x0 + 70, 0); g.lineTo(x0 + 250, H); g.lineTo(x0 + 120, H); g.closePath(); g.fill();
-      }
+      // soft patches of light sliding over the ground (the hard-edged sunbeam bands are gone: they looked like stripes drifting over the grass)
       for (let i = 0; i < 9; i++) soft(g, (i * 211 + t * 9) % W, M + ((i * 137 + Math.sin(t * 0.3 + i) * 40 + 600) % (H - 2 * M)), 50, "rgba(255,255,170,.7)", 0.1);
       break;
     }
