@@ -172,7 +172,7 @@ function frameIndex(name: string, n: number, dur: number[] | null, clock: number
  * @param form  a Mega, Gigantamax or other form: the part of its id after the species name ("megax", "gmax", "black" ...), omitted for the base form
  * @param t     for walk and idle the running clock in seconds; for hurt, attack, shoot and rumble how far through it is (0..1)
  */
-export function pmdFrame(num: number, state: PmdState, fa: number, t: number, form?: string): PmdFrame | null {
+function pmdFrame0(num: number, state: PmdState, fa: number, t: number, form?: string): PmdFrame | null {
   if (!pmdEnabled() || !(num > 0 && num <= 1025)) return null;
   let sub = "";
   if (form) {
@@ -183,7 +183,7 @@ export function pmdFrame(num: number, state: PmdState, fa: number, t: number, fo
   const skey = `${num}/${sub}`;
   let sh = SHEETS.get(skey);
   if (!sh) sh = begin(skey, num, sub);
-  else if (sh.failed) { if (performance.now() - sh.at < 30000) return null; SHEETS.delete(skey); return null; }
+  else if (sh.failed) { if (sub) NOART.add(skey); if (performance.now() - sh.at < 30000 || sub) return null; SHEETS.delete(skey); return null; }
   const walk = sh.imgs.get("Walk");
   if (!walk || !sh.xmlDone) return null;
   if (!sh.can) {
@@ -237,4 +237,23 @@ export function pmdFrame(num: number, state: PmdState, fa: number, t: number, fo
     if (FRAMES.size > 4000) FRAMES.delete(FRAMES.keys().next().value as string);
   }
   return { el: cv, k: sh.k, oy: sh.oy };
+}
+
+/** Forms whose picture folder does not exist at PMDCollab (many Megas are not drawn there), so they are not asked for again. */
+const NOART = new Set<string>();
+/**
+ * The picture for a Pokémon right now, or null. A form that PMDCollab has not drawn (no entry in its list, or an empty folder) gets null for good,
+ * so the old (SDN) sprite is used for it and its folder is not asked for again. While the list or pictures are still loading it also returns null. */
+export function pmdFrame(num: number, state: PmdState, fa: number, t: number, form?: string): PmdFrame | null {
+  if (!form) return pmdFrame0(num, state, fa, t);
+  if (!pmdEnabled() || !(num > 0 && num <= 1025)) return null;
+  const fo = formFolder(num, form);
+  if (fo === undefined) return null; // still loading the list
+  const skey = `${num}/${fo ?? ""}`;
+  if (fo !== null && !NOART.has(skey)) {
+    const r = pmdFrame0(num, state, fa, t, form);
+    if (r) return r;
+    if (!NOART.has(skey)) return null; // its pictures are still arriving
+  }
+  return null; // PMD has not drawn this form: the caller keeps the old (SDN) sprite
 }
