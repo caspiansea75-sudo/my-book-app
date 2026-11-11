@@ -245,15 +245,6 @@ function build(stage: StageKind, pad: Pad): HTMLCanvasElement[] {
     x.globalCompositeOperation = "source-atop";
     x.fillStyle = look.tint;
     x.fillRect(0, 0, cw, ch);
-    // floodlights: soft glows near the four corners and mid-sides, a little darker toward the outer edge
-    x.globalCompositeOperation = "lighter";
-    x.setTransform(SC, 0, 0, SC, pad.l * SC, pad.t * SC);
-    for (const [gx, gy, gr] of [[0, 0, 240], [W, 0, 240], [0, H, 240], [W, H, 240], [W / 2, -60, 300], [W / 2, H + 60, 300]] as const) {
-      const gl = x.createRadialGradient(gx, gy, 0, gx, gy, gr);
-      gl.addColorStop(0, look.glow); gl.addColorStop(1, "rgba(0,0,0,0)");
-      x.fillStyle = gl;
-      x.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
-    }
     x.globalCompositeOperation = "source-atop";
     x.setTransform(SC, 0, 0, SC, pad.l * SC, pad.t * SC);
     // fade toward the outer edge so the stands do not end in a hard line

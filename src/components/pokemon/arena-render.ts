@@ -2034,12 +2034,6 @@ export class ArenaRenderer {
       {
         const T = this.q > 0.5 ? 6 : 4;
         const look = STAND_LOOK[S.stage] ?? STAND_LOOK.grass!;
-        // floodlight towers at the four corners and the middle of the long sides, behind the top tier
-        {
-          const o = 440;
-          const spots: [number, number][] = [[INS - o, INS - o], [ARENA.W - INS + o, INS - o], [ARENA.W - INS + o, ARENA.H - INS + o], [INS - o, ARENA.H - INS + o], [ARENA.W / 2, INS - o - 10], [ARENA.W / 2, ARENA.H - INS + o + 10]];
-          for (const [lx, ly] of spots) things.push({ y: dk(lx, ly) - 20, draw: () => this.drawLight(g, lx, ly, look) });
-        }
         const ring = (tier: number) => { const o = 22 + tier * (400 / 6), z = 44 + tier * (300 / 6); return { o, z, c: [[INS - o, INS - o], [ARENA.W - INS + o, INS - o], [ARENA.W - INS + o, ARENA.H - INS + o], [INS - o, ARENA.H - INS + o]] as [number, number][] }; };
         for (let t = 0; t < T; t++) {
           const r0 = ring(t * (6 / T)), r1 = ring((t + 1) * (6 / T));
