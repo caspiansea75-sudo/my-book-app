@@ -333,6 +333,8 @@ export type State = {
   itemT: number;
   hazardT: number;
   field: FieldKind;
+  /** seconds left of a weather that an ability or a Max Move set (it ends by itself); 0 = lasts until something changes it */
+  fieldT?: number;
   perks: string[]; // the three offered
   taken: string[]; // perks picked so far
   storm: { r: number; on: boolean };
@@ -1122,7 +1124,7 @@ export function newMpQuick(a: MpSquad, b: MpSquad, arena: StageKind | "random" =
   S.fighters = [mine[0]!, theirs[0]!];
   const kind = arena === "random" ? ARENAS[Math.floor(Math.random() * ARENAS.length)]! : arena;
   buildStage(S, kind);
-  S.field = "none";
+  S.field = "none"; S.fieldT = 0;
   unstick(S);
   return S;
 }
@@ -1142,6 +1144,7 @@ function spawnWave(S: State) {
   const bossId = w % 10 === 0 ? "rayquaza" : "mewtwo";
   const fields: FieldKind[] = ["sun", "rain", "sand", "hail"];
   S.field = w >= 2 && w % 2 === 0 ? fields[Math.floor(Math.random() * fields.length)]! : "none";
+  S.fieldT = 0;
   S.events.push({ t: "field", kind: S.field });
   // co-op: knocked-out teammates get back up (a little hurt) and the foes grow with the size of the team
   const humans = S.fighters.filter((f) => f.isPlayer);
@@ -1343,6 +1346,7 @@ function abilityEnterFx(S: State, f: Fighter) {
   }
   if (fx.weather && S.field !== fx.weather) {
     S.field = fx.weather;
+    S.fieldT = WEATHER_SECS;
     S.events.push({ t: "field", kind: S.field });
     abPop(S, f);
   }
@@ -1412,7 +1416,7 @@ function abilityReact(S: State, src: Fighter, dst: Fighter, crit: boolean, type:
   if (fx.sandSpit && !(dst.abx.t.sand > 0)) {
     dst.abx.t.sand = 20;
     if (S.field !== "sand") {
-      S.field = "sand";
+      S.field = "sand"; S.fieldT = WEATHER_SECS;
       S.events.push({ t: "field", kind: "sand" });
       abPop(S, dst);
     }
@@ -1660,7 +1664,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     const w: Record<string, FieldKind> = { Fire: "sun", Water: "rain", Ice: "hail", Rock: "sand" };
     const kind = w[mv.type];
     if (kind && S.field !== kind) {
-      S.field = kind;
+      S.field = kind; S.fieldT = WEATHER_SECS;
       S.events.push({ t: "field", kind });
     }
     if (f.gmax && mv.kind !== "heal" && mv.kind !== "guard" && mv.kind !== "buff") {
@@ -2679,6 +2683,9 @@ export function predictMove(S: State, f: Fighter, dt: number) {
  * Advance the fight. `input` steers the first fighter; in a multiplayer fight `others` holds the input of every other
  * human, by fighter id.
  */
+/** How long a weather made by an ability or a Max Move lasts. */
+const WEATHER_SECS = 30;
+
 export function step(S: State, input: Input, realDt: number, others?: Map<number, Input>) {
   curField = S.field;
   const dt0 = Math.min(realDt, 0.05);
@@ -2695,6 +2702,10 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
   const dt = dt0 * (S.slow > 0 ? 0.32 : 1);
   S.slow = Math.max(0, S.slow - dt0);
   S.time += dt;
+  if ((S.fieldT ?? 0) > 0 && S.field !== "none") {
+    S.fieldT = S.fieldT! - dt;
+    if (S.fieldT <= 0) { S.fieldT = 0; S.field = "none"; S.events.push({ t: "field", kind: "none" }); }
+  }
   const p = playerOf(S);
 
   if (S.phase === "over" || S.phase === "perks") return;
@@ -3282,7 +3293,7 @@ export function newQuickGame(picks: QuickPick[], arena: StageKind | "random", le
   S.ventT = 5;
   S.spotT = rnd(8, 11);
   S.tideT = 0;
-  S.field = "none";
+  S.field = "none"; S.fieldT = 0;
   unstick(S);
   return S;
 }
