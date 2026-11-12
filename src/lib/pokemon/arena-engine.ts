@@ -178,6 +178,9 @@ export type Proj = {
   aoe: number;
   mv: string; // the move it came from (the picture depends on it)
   born: number;
+  /** seconds it is still being formed and held by its owner before it flies (the Mega Greninja shuriken) */
+  hold?: number;
+  holdMax?: number;
 };
 
 export type Zone = {
@@ -231,6 +234,7 @@ export type Ev =
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
+  | { t: "shurikenForm"; id: number; x: number; y: number; dur: number }
   | { t: "mega"; x: number; y: number; id: number; name: string; z: boolean; type: string; origin?: boolean }
   | { t: "zstart"; x: number; y: number; type: string; name: string }
   | { t: "zhit"; x: number; y: number; type: string }
@@ -1691,6 +1695,14 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
   }
   switch (mv.kind) {
     case "proj":
+      if (mv.id === "megashuriken") {
+        // the clones feed their shurikens into one giant one, held by Greninja while it forms, then thrown
+        spawnProj(S, f, mv, dx, dy, { speed: 620, r: 44, life: 3, dmg: baseDamage(f, mv) });
+        const sp = S.projs[S.projs.length - 1]!;
+        sp.hold = 0.95; sp.holdMax = 0.95; sp.aoe = 95; sp.kb = 380;
+        S.events.push({ t: "shurikenForm", id: f.id, x: f.x, y: f.y, dur: 0.95 });
+        break;
+      }
       spawnProj(S, f, mv, dx, dy);
       break;
     case "homing":
@@ -2230,6 +2242,8 @@ function doMega(S: State, f: Fighter) {
   if (form.origin) {
     const o = ALT_BURST[form.id] ?? [`${form.name} Burst`, type];
     f.override[3] = { id: "megaburst", name: o[0]!, type: o[1]!, kind: "nova", power: 3.1, cd: 4.2, range: 240, desc: "The alternate forme unleashes its full power all around you." };
+  } else if (form.id === "greninja-mega") {
+    f.override[3] = { id: "megashuriken", name: "Giant Water Shuriken", type: "Water", kind: "proj", power: 3.5, cd: 4.6, speed: 620, windup: 0, desc: "Double Team clones hand over their shurikens: one giant Water Shuriken is formed and thrown at the foe." };
   } else f.override[3] = { id: "megaburst", name: `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: "An explosion of Mega energy all around you." };
   f.cd[3] = 0;
   S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type, origin: !!form.origin });
@@ -2951,6 +2965,35 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
 
   // ---- projectiles
   for (const pr of S.projs) {
+    if ((pr.hold ?? 0) > 0) {
+      // being formed: it stays with its owner (nothing hits it, nothing runs out) until it is thrown at the nearest foe
+      const own = S.fighters.find((f) => f.id === pr.owner);
+      if (!own || !own.alive) { pr.life = 0; continue; }
+      const a0 = Math.atan2(pr.vy, pr.vx);
+      pr.x = own.x + Math.cos(a0) * own.r * 0.9;
+      pr.y = own.y + Math.sin(a0) * own.r * 0.9;
+      pr.hold = pr.hold! - dt;
+      if (pr.hold! <= 0) {
+        pr.hold = 0;
+        const sp = len(pr.vx, pr.vy);
+        let best: Fighter | null = null;
+        let bs = Infinity;
+        for (const o of S.fighters) {
+          if (!o.alive || o.team === pr.team) continue;
+          let da = Math.atan2(o.y - own.y, o.x - own.x) - a0;
+          while (da > Math.PI) da -= Math.PI * 2;
+          while (da < -Math.PI) da += Math.PI * 2;
+          if (Math.abs(da) > 0.9) continue; // only a foe in front of where it was aimed
+          const sc = Math.abs(da) * 300 + len(o.x - own.x, o.y - own.y);
+          if (sc < bs) { bs = sc; best = o; }
+        }
+        const a1 = best ? Math.atan2(best.y - own.y, best.x - own.x) : a0;
+        pr.vx = Math.cos(a1) * sp; pr.vy = Math.sin(a1) * sp;
+        pr.born = S.time;
+        own.face = a1;
+      }
+      continue;
+    }
     pr.life -= dt;
     if (pr.homing) {
       let best: Fighter | null = null;

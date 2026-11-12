@@ -21,6 +21,7 @@ import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { DRAKE_BOLTS, DRAKE_SHOTS, drakeFlat, drakeItems, drakeShotLift, drawDrakeBody, drawDrakeGround, type DrakeSig } from "./arena-drake";
 import { pmdEnabled, pmdFrame, type PmdState } from "./arena-pmd";
+import { drawShuriken } from "./arena-shuriken";
 import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
@@ -180,6 +181,8 @@ const NAME_COLORS = ["#ff8a8a", "#74c0fc", "#ffe066", "#d0bfff", "#69dbb2"];
 const SHOW_SCORCH = false;
 export type View = "top" | "third" | "first";
 type Cam3 = { px: number; py: number; H: number; phi: number; cp: number; sp: number; fl: number; hz: number; fx: number; fy: number; rx: number; ry: number };
+let WARP_C: HTMLCanvasElement | null = null;
+
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
   private parts: Parti[] = [];
@@ -204,6 +207,8 @@ export class ArenaRenderer {
     back?: boolean;
     /** -1 .. 1, eased: the picture turns round through its edge instead of flipping */
     fd?: number;
+    /** Showdown pictures only: eased width / height / lean for the eight headings */
+    h8?: { w: number; h: number; l: number; p: number };
     /** the picture it is changing from, and how much of that change is left (a cross-fade between its front and back views) */
     fade?: number;
     fadeIm?: Pic;
@@ -219,6 +224,10 @@ export class ArenaRenderer {
   /** Scorch marks left on the floor by blasts; they fade slowly. */
   private meleeFx = new MeleeFx();
   private clones = new Map<number, number>();
+  /** Mega Greninja's giant shuriken while its clones feed it: when it began and how long it takes */
+  private shurForm = new Map<number, { t0: number; dur: number }>();
+  /** where each giant shuriken was last seen, so a splash can burst where it ends */
+  private shurLast = new Map<number, { x: number; y: number; R: number; held: boolean }>();
   private dances = new Map<number, { until: number; kind: string }>();
   /** Rocks lifted off the floor by a psychic pulse. */
   private waves: { x: number; y: number; r: number; t: number; life: number; kind: string }[] = [];
@@ -1449,6 +1458,10 @@ export class ArenaRenderer {
           break;
         case "throw":
           for (let i = 0; i < 10; i++) this.parts.push({ kind: "streak", x: e.x ?? 0, y: e.y ?? 0, vx: e.dx * 700 + rnd(-60, 60), vy: e.dy * 700 + rnd(-60, 60), g: 0, life: 0.3, max: 0.3, size: 7, grow: 0, color: i % 2 ? "#ffffff" : "#ff9be6" });
+          break;
+        case "shurikenForm":
+          this.shurForm.set(e.id, { t0: this.t, dur: e.dur });
+          this.ring(e.x, e.y, "#7fd0ff", 180, 0.6);
           break;
         case "buff":
           if (e.fx === "clones") this.clones.set(e.id, this.t + 6);
@@ -5453,6 +5466,30 @@ export class ArenaRenderer {
   }
 
   private drawProjs(g: CanvasRenderingContext2D, S: State) {
+    if (this.shurLast.size) {
+      const alive = new Set<number>();
+      for (const p of S.projs) if (p.mv === "megashuriken") alive.add(p.id);
+      for (const [id, v] of this.shurLast) {
+        if (alive.has(id)) continue;
+        this.shurLast.delete(id);
+        if (v.held) continue;
+        // it is spent: a burst of water, a ring, spray thrown up and a cloud of mist
+        this.ring(v.x, v.y, "#e9f8ff", v.R * 3.2, 0.5);
+        this.ring(v.x, v.y, "#59b8ff", v.R * 2.4, 0.75);
+        this.parts.push({ kind: "glow", x: v.x, y: v.y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: v.R * 0.4, grow: v.R * 2.2, color: "#5fb4ff" });
+        for (let i = 0; i < 34; i++) {
+          const a = Math.random() * Math.PI * 2, sp = rnd(120, 520);
+          this.parts.push({ kind: "dot", x: v.x, y: v.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 520, life: rnd(0.4, 0.9), max: 0.9, size: rnd(2, 5), grow: 0, color: i % 3 ? "#cfeeff" : "#ffffff" });
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2;
+          this.parts.push({ kind: "glow", x: v.x + Math.cos(a) * v.R * 0.5, y: v.y + Math.sin(a) * v.R * 0.5, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, g: 0, life: 0.7, max: 0.7, size: v.R * 0.2, grow: v.R * 1.1, color: "#4aa8ff" });
+        }
+        for (let i = 0; i < 6; i++) this.parts.push({ kind: "star", x: v.x, y: v.y, vx: rnd(-260, 260), vy: rnd(-260, 60), g: 200, life: 0.7, max: 0.7, size: rnd(4, 7), grow: 0, color: "#ffffff", rot: 0, vr: 9 });
+        this.shake = Math.max(this.shake, 8);
+        this.shakeT = Math.max(this.shakeT, 0.25);
+      }
+    }
     // streams (Hydro Pump, Flamethrower, Ice Beam...) are drawn as one continuous jet from the mouth, not as separate dots
     const streams = new Map<number, Proj[]>();
     for (const p of S.projs) {
@@ -5471,6 +5508,48 @@ export class ArenaRenderer {
           g.ellipse(p.x, p.y, 9, 9, 0, 0, Math.PI * 2);
           g.fill();
         });
+      }
+      if (p.mv === "megashuriken") {
+        const held = (p.hold ?? 0) > 0;
+        const q = held ? 1 - (p.hold ?? 0) / (p.holdMax || 1) : 1;
+        const sc = held ? 0.12 + 0.88 * (1 - (1 - q) ** 3) : 1;
+        const R = p.r * 2.0 * sc;
+        const age = S.time - p.born;
+        const spin = this.t * (held ? 6 + q * 8 : 16);
+        const up = held ? 30 + q * 14 : 14;
+        this.at(g, p.x, p.y, "mix", () => drawShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t), "p", this.v3 ? 32 + (held ? 14 : 0) : 0);
+        // spray flung off the blade tips as it spins, bubbles and mist round it, motes drawn in while it forms
+        {
+          const ang0 = Math.atan2(p.vy, p.vx);
+          const cy0 = p.y - (this.v3 ? 0 : up);
+          const nTip = held ? 1 : 2;
+          for (let i = 0; i < nTip; i++) {
+            const k = Math.floor(Math.random() * 4);
+            const a = spin + (k * Math.PI) / 2;
+            const tx = p.x + Math.cos(a) * R * 0.95, ty = cy0 + Math.sin(a) * R * 0.95;
+            const tang = a + Math.PI / 2;
+            const fl = held ? 110 : 190;
+            this.parts.push({ kind: "dot", x: tx, y: ty, vx: Math.cos(tang) * fl + (held ? 0 : Math.cos(ang0) * 60) + rnd(-30, 30), vy: Math.sin(tang) * fl + (held ? 0 : Math.sin(ang0) * 60) + rnd(-30, 30), g: 180, life: rnd(0.35, 0.65), max: 0.65, size: rnd(1.8, 3.6), grow: 0, color: i % 2 ? "#e9f8ff" : "#8fd0ff" });
+          }
+          if (Math.random() < 0.35) {
+            const a = Math.random() * Math.PI * 2;
+            this.parts.push({ kind: "glow", x: p.x + Math.cos(a) * R * 0.9, y: cy0 + Math.sin(a) * R * 0.9, vx: Math.cos(a) * 30, vy: Math.sin(a) * 30 - 20, g: 0, life: 0.6, max: 0.6, size: R * 0.1, grow: R * 0.45, color: "#5fb4ff" });
+          }
+          if (Math.random() < 0.25) this.parts.push({ kind: "ring", x: p.x + rnd(-R, R) * 0.8, y: cy0 + rnd(-R, R) * 0.8, vx: 0, vy: -40, g: 0, life: 0.7, max: 0.7, size: 2, grow: 12, color: "#d8f2ff" });
+          if (held && Math.random() < 0.7) {
+            // water motes pulled in from the ring around it
+            const a = Math.random() * Math.PI * 2, d = R * rnd(1.8, 2.8), tm = 0.3;
+            this.parts.push({ kind: "dot", x: p.x + Math.cos(a) * d, y: cy0 + Math.sin(a) * d, vx: -Math.cos(a) * d / tm, vy: -Math.sin(a) * d / tm, g: 0, life: tm, max: tm, size: rnd(1.6, 3), grow: 0, color: "#cfeeff" });
+          }
+          this.shurLast.set(p.id, { x: p.x, y: cy0, R, held });
+        }
+        if (!held && Math.random() < 0.9) {
+          // a wet wake: droplets and spray thrown off behind it
+          const ang = Math.atan2(p.vy, p.vx);
+          for (let i = 0; i < 2; i++) this.parts.push({ kind: i ? "dot" : "glow", x: p.x - Math.cos(ang) * R * 0.5 + rnd(-8, 8), y: p.y - Math.sin(ang) * R * 0.5 - up + rnd(-8, 8), vx: -Math.cos(ang) * 120 + rnd(-60, 60), vy: -Math.sin(ang) * 120 + rnd(-60, 60), g: i ? 260 : 0, life: 0.4, max: 0.4, size: i ? rnd(2, 4) : 10, grow: i ? 0 : 40, color: i ? "#cfeeff" : "#3f9cff" });
+        }
+        void age;
+        continue;
       }
       if (this.tilted && !p.beam && DRAKE_SHOTS.has(p.mv)) {
         // the dragon stands up in the tilted and player views; only its rune strip lies on the floor
@@ -5786,7 +5865,7 @@ export class ArenaRenderer {
   }
 
   /** Draws a Pokémon's picture at a place, turned, stretched and tinted as asked. */
-  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean | number, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }, rig?: { st: RigState; p: Persona; o: Omit<RigOpts, "wk" | "face" | "q"> }) {
+  private body(g: CanvasRenderingContext2D, im: Pic, id: string, x: number, y: number, size: number, faceLeft: boolean | number, sx: number, sy: number, rot: number, tint?: string, alpha = 1, wk?: { p: number; a: number }, rig?: { st: RigState; p: Persona; o: Omit<RigOpts, "wk" | "face" | "q"> }, warp?: { c: number; p: number }) {
     // 1 = faces left, -1 = faces right, and anything between while it turns round
     const dir = typeof faceLeft === "number" ? faceLeft : faceLeft ? 1 : -1;
     g.save();
@@ -5797,29 +5876,58 @@ export class ArenaRenderer {
     const k = size / Math.max(picW(im), picH(im), 1);
     const w = picW(im) * k;
     const h = picH(im) * k;
-    g.imageSmoothingEnabled = false;
     const src = tint ? this.tinted(id, im, tint) : im;
     const x0 = -w / 2;
     const y0 = -h / 2 - size * 0.05;
-    if (rig) {
-      drawRigged(g, src, picW(im), picH(im), x0, y0, w, h, rig.st, rig.p, { ...rig.o, wk, face: dir >= 0 ? 1 : -1, q: this.q });
-    } else if (wk) {
-      // a walking puppet: the body bobs, and the lower part is cut into a left and a right foot that step in turn
-      const sw = picW(im);
-      const sh = picH(im);
-      const cut = 0.6;
-      const a = wk.a * size;
-      const bob = -Math.abs(Math.sin(wk.p)) * a * 0.5;
-      g.drawImage(src, 0, 0, sw, sh * cut, x0, y0 + bob, w, h * cut);
-      for (const side of [0, 1]) {
-        const sn = Math.sin(wk.p + side * Math.PI);
-        const lift = Math.max(0, sn) * a * 1.4;
-        const swing = sn * a * 0.5;
-        const sx0 = side * (sw / 2) - (side ? 1 : 0);
-        const sww = sw / 2 + 1;
-        g.drawImage(src, sx0, sh * cut - 1, sww, sh * (1 - cut) + 1, x0 + side * (w / 2) - (side ? w / sw : 0) + swing, y0 + h * cut - lift + bob * 0.4 - 1, sww * (w / sw), h * (1 - cut) + 1);
+    // paints the picture (with its walk or rig) onto any canvas, with the same origin
+    const paint = (c: CanvasRenderingContext2D) => {
+      c.imageSmoothingEnabled = false;
+      if (rig) {
+        drawRigged(c, src, picW(im), picH(im), x0, y0, w, h, rig.st, rig.p, { ...rig.o, wk, face: dir >= 0 ? 1 : -1, q: this.q });
+      } else if (wk) {
+        // a walking puppet: the body bobs, and the lower part is cut into a left and a right foot that step in turn
+        const sw = picW(im);
+        const sh = picH(im);
+        const cut = 0.6;
+        const a = wk.a * size;
+        const bob = -Math.abs(Math.sin(wk.p)) * a * 0.5;
+        c.drawImage(src, 0, 0, sw, sh * cut, x0, y0 + bob, w, h * cut);
+        for (const side of [0, 1]) {
+          const sn = Math.sin(wk.p + side * Math.PI);
+          const lift = Math.max(0, sn) * a * 1.4;
+          const swing = sn * a * 0.5;
+          const sx0 = side * (sw / 2) - (side ? 1 : 0);
+          const sww = sw / 2 + 1;
+          c.drawImage(src, sx0, sh * cut - 1, sww, sh * (1 - cut) + 1, x0 + side * (w / 2) - (side ? w / sw : 0) + swing, y0 + h * cut - lift + bob * 0.4 - 1, sww * (w / sw), h * (1 - cut) + 1);
+        }
+      } else c.drawImage(src, x0, y0, w, h);
+    };
+    if (warp && (warp.c < 0.995 || Math.abs(warp.p) > 0.004)) {
+      // a turn of the body: the picture is painted flat, then cut into thin strips. The strips narrow (it turns away) and the side that is
+      // nearer to us stands taller than the far side, so the figure reads as rotating, not as a card that is squashed.
+      const S2 = Math.ceil(Math.max(w, h) * 1.7) + 8;
+      if (!WARP_C) WARP_C = document.createElement("canvas");
+      if (WARP_C.width !== S2 || WARP_C.height !== S2) { WARP_C.width = S2; WARP_C.height = S2; }
+      const sg = WARP_C.getContext("2d")!;
+      sg.setTransform(1, 0, 0, 1, 0, 0);
+      sg.clearRect(0, 0, S2, S2);
+      sg.translate(S2 / 2, S2 / 2);
+      paint(sg);
+      g.imageSmoothingEnabled = false;
+      const N = clamp(Math.round(w / 3), 14, 32);
+      const sw0 = w / N;
+      const feet = y0 + h;
+      for (let i = 0; i < N; i++) {
+        const u = ((i + 0.5) / N) * 2 - 1;
+        const f = 1 - warp.p * u;
+        const dw = sw0 * warp.c;
+        const dh = h * f;
+        g.drawImage(WARP_C, S2 / 2 + x0 + i * sw0, S2 / 2 + y0, sw0 + 0.5, h, u * (w / 2) * warp.c - dw / 2, feet - dh, dw + 0.6, dh);
       }
-    } else g.drawImage(src, x0, y0, w, h);
+    } else {
+      g.imageSmoothingEnabled = false;
+      paint(g);
+    }
     g.restore();
   }
 
@@ -6341,6 +6449,31 @@ export class ArenaRenderer {
     // afterimages behind a rush or a roll
     const hist = this.hist.get(f.id) ?? [];
     // Double Team / Agility: copies circle the Pokémon
+    // Mega Greninja's giant shuriken: clones circle in, each with a small shuriken, and hand them over to the big one
+    const sfm = this.shurForm.get(f.id);
+    if (sfm && im && !under) {
+      const q = (this.t - sfm.t0) / sfm.dur;
+      if (q > 1.2) this.shurForm.delete(f.id);
+      else if (q <= 1) {
+        const ease = q * q * (3 - 2 * q);
+        const rad = f.r * (4.8 * (1 - ease) + 0.5);
+        const hx = f.x + Math.cos(f.face) * f.r * 0.9;
+        const hy = f.y - f.r * 0.6 - lift - 30 - q * 14;
+        for (let i = 0; i < 5; i++) {
+          const an = this.t * 3.4 + (i * Math.PI * 2) / 5;
+          const cx = f.x + Math.cos(an) * rad;
+          const cy = f.y + Math.sin(an) * rad * 0.55 - f.r * 0.6 - lift;
+          this.body(g, im, usedId, cx, cy, size * 0.92, Math.cos(an) < 0 ? 1 : -1, sx, sy, rot, "#7fd0ff", 0.45 * (1 - 0.8 * ease));
+          // each clone holds its own small shuriken until it is given up
+          if (q < 0.8) drawShuriken(g, cx, cy - f.r * 0.5, f.r * 0.5 * (1 - q * 0.6), this.t * 10 + i, this.t, 0.4, 1 - q * 0.6);
+          // the shurikens streaming into the big one
+          if (Math.random() < 0.5) {
+            const tm = 0.22;
+            this.parts.push({ kind: "star", x: cx, y: cy - f.r * 0.5, vx: (hx - cx) / tm, vy: (hy - (cy - f.r * 0.5)) / tm, g: 0, life: tm, max: tm, size: 4, grow: 0, color: i % 2 ? "#cfeeff" : "#59b8ff", rot: 0, vr: 14 });
+          }
+        }
+      }
+    }
     const cloneUntil = this.clones.get(f.id) ?? 0;
     if (im && !under && cloneUntil > this.t) {
       const fade = Math.min(1, (cloneUntil - this.t) / 0.6);
@@ -6455,8 +6588,26 @@ export class ArenaRenderer {
     }
     const px = f.x + ox;
     const py = f.y - f.r * 0.6 - lift + oy;
-    const sxx = sx * stretch;
-    const syy = sy / (stretch * 0.95 + 0.05);
+    // Showdown pictures only have a front and a back view, so the other headings are suggested: eight sectors, each with its own width,
+    // height and lean (side-on is narrower and leans into the run, up the screen is a touch shorter, down the screen a touch taller)
+    let w8 = 1, h8 = 1, l8 = 0;
+    let wp: { c: number; p: number } | undefined;
+    if (!pmd) {
+      const k8 = ((Math.round(fa / (Math.PI / 4)) % 8) + 8) % 8;
+      // E, SE, S, SW, W, NW, N, NE (as drawn: down the screen is towards us): [how narrow, height, lean, nearness of the facing side]
+      // the facing side is the near one when it turns towards us (front view) and the far one when it turns away (back view)
+      const T8: [number, number, number, number][] = [[0.8, 1, 0.07, 0.04], [0.88, 1.01, 0.035, 0.12], [0.97, 1.04, 0, 0], [0.88, 1.01, -0.035, 0.12], [0.8, 1, -0.07, 0.04], [0.88, 0.98, -0.035, -0.12], [0.97, 0.95, 0, 0], [0.88, 0.98, 0.035, -0.12]];
+      const [tw, th, tl, tp] = T8[k8]!;
+      const cur = ps.h8 ?? { w: tw, h: th, l: tl, p: tp };
+      const e = 1 - Math.exp(-this.dtr * 12);
+      cur.w += (tw - cur.w) * e; cur.h += (th - cur.h) * e; cur.l += (tl - cur.l) * e; cur.p += (tp - (cur.p ?? 0)) * e;
+      ps.h8 = cur;
+      h8 = cur.h; l8 = cur.l;
+      wp = { c: cur.w, p: cur.p };
+      rot += l8;
+    }
+    const sxx = sx * stretch * w8;
+    const syy = (sy / (stretch * 0.95 + 0.05)) * h8;
     if ((f.grabT > 0 || f.flyT > 0) && !under) {
       g.save();
       g.globalCompositeOperation = "lighter";
@@ -6487,7 +6638,7 @@ export class ArenaRenderer {
       const view = (gg: CanvasRenderingContext2D, dirv: number, am: number) => {
         // one picture at a time, never two blended; a turn gives it a small squash
         const sq = ps.tp ? 1 - 0.1 * Math.sin(Math.min(1, ps.tp) * Math.PI) : 1;
-        this.body(gg, imMain, usedId, px, pyB, size, dirv, sxx * sq, syy, rotMain, undefined, am, wk, rigA);
+        this.body(gg, imMain, usedId, px, pyB, size, dirv, sxx * sq, syy, rotMain, undefined, am, wk, rigA, wp);
       };
       // Turning round (in every view): a single picture that narrows to its edge and widens on the other side. It used to blend with its
       // mirror image in the player views, and a Pokémon that keeps changing direction (walking in a circle) then always showed a faint
@@ -6500,18 +6651,18 @@ export class ArenaRenderer {
         const T = this.q > 0.88 && side > 0.35 ? clamp(size * 0.05, 2.5, 6) * side * Math.min(1, Math.abs(faceN)) ** 3 : 0;
         this.shaded(g, px, pyB, size * 1.1 + 34, drawMain, T ? [-Math.sign(cf) * T, T * 0.25] : undefined);
       } else drawMain(g);
-      if (f.flash > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA);
-      else if (f.status.frz > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA);
-      else if (f.tera) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA);
+      if (f.flash > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA, wp);
+      else if (f.status.frz > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA, wp);
+      else if (f.tera) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA, wp);
       // held by a mind attack: a glowing outline all round
       if (ps.aura) {
         const al = Math.min(1, ps.aura.t * 3) * (0.7 + Math.sin(t * 20) * 0.2);
-        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8);
+        for (const [dx, dy] of [[-3, 0], [3, 0], [0, -3], [0, 3], [-2, -2], [2, 2], [-2, 2], [2, -2]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, ps.aura.c, al * 0.8, undefined, undefined, wp);
       }
       // a form whose picture is not there: the plain body, outlined and shimmering so the change still shows
       if (formMissing && !morph && !pmd) {
         const pulse = 0.55 + Math.sin(t * 5) * 0.25;
-        for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse);
+        for (const [dx, dy] of [[-2.5, 0], [2.5, 0], [0, -2.5], [0, 2.5]] as const) this.body(g, im, usedId, px + dx, pyB + dy, size, pmd ? 1 : faceLeft, sxx, syy, rot + spin, f.dyna > 0 ? "#ff3b5c" : f.form?.z ? "#ffd54a" : "#ff9be6", 0.5 * pulse, undefined, undefined, wp);
       }
       // while it changes: a white (or red, or crystal) silhouette that builds, then fades into the new body
       if (morph) {
