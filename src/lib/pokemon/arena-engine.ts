@@ -3,6 +3,7 @@
  * and `state.events` tells the screen what to show and play. Because it is plain data, a whole fight can be
  * simulated headless (the CPU can even play the player's side).
  */
+import { MEGA_MOVES } from "./arena-megamoves";
 import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, movePool, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 import { MOBILITY, mobilityOf, type Mobility } from "@/lib/pokemon/arena-mobility";
@@ -2241,10 +2242,13 @@ function doMega(S: State, f: Fighter) {
   // the Mega form's own special move: a huge burst of its type all around it
   if (form.origin) {
     const o = ALT_BURST[form.id] ?? [`${form.name} Burst`, type];
-    f.override[3] = { id: "megaburst", name: o[0]!, type: o[1]!, kind: "nova", power: 3.1, cd: 4.2, range: 240, desc: "The alternate forme unleashes its full power all around you." };
+    f.override[3] = { id: "megaburst:" + form.id, name: o[0]!, type: o[1]!, kind: "nova", power: 3.1, cd: 4.2, range: 240, desc: "The alternate forme unleashes its full power all around you." };
   } else if (form.id === "greninja-mega") {
     f.override[3] = { id: "megashuriken", name: "Giant Water Shuriken", type: "Water", kind: "proj", power: 3.5, cd: 4.6, speed: 620, windup: 0, desc: "Double Team clones hand over their shurikens: one giant Water Shuriken is formed and thrown at the foe." };
-  } else f.override[3] = { id: "megaburst", name: `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: "An explosion of Mega energy all around you." };
+  } else {
+    const mm = MEGA_MOVES[form.id];
+    f.override[3] = { id: "megaburst:" + form.id, name: mm?.name ?? `Mega ${type} Burst`, type, kind: "nova", power: 2.7, cd: 4.2, range: 215, desc: mm?.desc ?? "An explosion of Mega energy all around you." };
+  }
   f.cd[3] = 0;
   S.events.push({ t: "mega", x: f.x, y: f.y, id: f.id, name: form.name, z: !!form.z, type, origin: !!form.origin });
   boom(S, f.x, f.y, 190, type, undefined, true);

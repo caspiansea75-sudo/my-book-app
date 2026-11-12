@@ -22,6 +22,8 @@ import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { DRAKE_BOLTS, DRAKE_SHOTS, drakeFlat, drakeItems, drakeShotLift, drawDrakeBody, drawDrakeGround, type DrakeSig } from "./arena-drake";
 import { pmdEnabled, pmdFrame, type PmdState } from "./arena-pmd";
 import { drawShuriken } from "./arena-shuriken";
+import { playMegaLook } from "./arena-megafx";
+import { MEGA_MOVES, STYLE_OF_TYPE } from "@/lib/pokemon/arena-megamoves";
 import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
 import { addPlate, drawPlates, type Plate } from "./arena-ice";
 import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
@@ -2817,7 +2819,18 @@ export class ArenaRenderer {
   /** The effects of the special moves that come with Mega Evolution, Dynamax / Gigantamax and Terastallization. */
   private specialCast(e: Extract<Ev, { t: "cast" }>) {
     const c = col(e.type);
-    if (e.mv === "megaburst") {
+    if (e.mv.startsWith("megaburst:")) {
+      // every Mega form's special move has its own look (colours and style from its table entry; forms without one go by their type)
+      const mm = MEGA_MOVES[e.mv.slice(10)];
+      const style = mm?.style ?? STYLE_OF_TYPE[e.type] ?? "cosmic";
+      playMegaLook(style, {
+        P: (p) => this.parts.push({ vx: 0, vy: 0, g: 0, grow: 0, max: (p.life as number) ?? 0.5, ...p } as Parti),
+        ring: (x, y, c, r, l) => this.ring(x, y, c, r, l),
+        later: (t, fn) => this.later.push({ t, fn }),
+        shake: (a, t) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, t); },
+        flash: (t) => { this.flashT = Math.max(this.flashT, t); },
+      }, e.x, e.y, mm?.c1 ?? c, mm?.c2 ?? "#ffffff", 230);
+    } else if (e.mv === "megaburst") {
       this.ring(e.x, e.y, "#ffffff", 250, 0.45);
       this.ring(e.x, e.y, c, 200, 0.7);
       this.ring(e.x, e.y, "#ff9be6", 150, 0.9);
