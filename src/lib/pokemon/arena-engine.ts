@@ -1651,7 +1651,17 @@ function spawnProj(S: State, f: Fighter, mv: MoveDef, dx: number, dy: number, o:
 }
 
 function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: number, ty: number) {
-  const mv = moveOf(f, slot);
+  let mv = moveOf(f, slot);
+  if (mv.id === "metronome") {
+    // a random move from the whole list (no specialties, nothing that copies itself)
+    const pool = Object.values(MOVES).filter((x) => !x.spec && x.id !== "metronome" && x.kind !== "heal");
+    mv = pool[Math.floor(Math.random() * pool.length)] ?? mv;
+  } else if (mv.id === "weatherball") {
+    const t = ({ sun: "Fire", rain: "Water", sand: "Rock", hail: "Ice", none: "Normal" } as Record<string, string>)[S.field] ?? "Normal";
+    mv = { ...mv, type: t, fx: t === "Normal" ? undefined : mv.fx };
+  } else if (mv.id === "courtchange") {
+    S.hazards = S.hazards.filter((h) => h.team === f.team);
+  }
   f.face = Math.atan2(dy, dx);
   S.events.push({ t: "cast", id: f.id, dir: f.face, mv: mv.id, tx, ty, x: f.x, y: f.y, type: mv.type, kind: mv.kind, byPlayer: f.isPlayer });
   // an icy beam laid across water freezes a path along its whole length
@@ -1776,6 +1786,10 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       break;
     }
     case "buff":
+      if (mv.weather && S.field !== mv.weather) {
+        S.field = mv.weather; S.fieldT = WEATHER_SECS;
+        S.events.push({ t: "field", kind: mv.weather });
+      }
       if (mv.boost) applyBoost(S, f, mv);
       else {
         f.buffT = 6;
