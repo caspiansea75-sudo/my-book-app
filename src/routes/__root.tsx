@@ -7,6 +7,7 @@ import { ThemeRoot } from "@/components/book/theme-root";
 import { MessageToasts } from "@/components/chat/message-toasts";
 import { PresenceHeartbeat } from "@/components/presence/presence";
 import { JoinPrompt } from "@/components/members/join-prompt";
+import { InstallCapture } from "@/components/members/install-capture";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "গল্প সংগ্রহ";
@@ -26,6 +27,10 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: APP_NAME },
       { name: "theme-color", content: "#0c1016" },
+      { name: "application-name", content: "BookofCaspi" },
+      { name: "apple-mobile-web-app-title", content: "BookofCaspi" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "mobile-web-app-capable", content: "yes" },
       {
         name: "description",
         content: "একটি নৈশ লাইব্রেরি — গল্প পড়ুন, ছবি ও ভিডিও যোগ করুন।",
@@ -34,18 +39,13 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
-      { rel: "manifest", href: "/__grok/manifest.webmanifest" },
-      { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
+      { rel: "manifest", href: "/api/pwa/manifest.webmanifest" },
+      { rel: "apple-touch-icon", href: "/api/pwa/icon-180.png" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap",
-      },
-      // Story fonts (studio: ফন্ট). Separate request on purpose; each file only downloads when a story uses it.
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Tiro+Bangla:ital@0;1&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Galada&family=Caveat:wght@500;700&family=Atma:wght@500;700&family=Courier+Prime:wght@400;700&display=swap",
       },
     ],
   }),
@@ -63,6 +63,7 @@ export const Route = createRootRoute({
             <MessageToasts />
             <PresenceHeartbeat />
             <JoinPrompt />
+            <InstallCapture />
           </ThemeRoot>
         </AuthProvider>
         <Scripts />

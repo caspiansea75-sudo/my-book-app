@@ -34,6 +34,7 @@ import { Route as StudioBookSlugRouteImport } from './routes/studio.$bookSlug'
 import { Route as UUsernameRouteImport } from './routes/u.$username'
 import { Route as ApiChatImageIdRouteImport } from './routes/api/chat-image.$id'
 import { Route as ApiMediaIdRouteImport } from './routes/api/media.$id'
+import { Route as ApiPwaNameRouteImport } from './routes/api/pwa.$name'
 import { Route as MangaSeriesSlugIndexRouteImport } from './routes/manga.$seriesSlug.index'
 import { Route as MangaSeriesSlugChapterSlugRouteImport } from './routes/manga.$seriesSlug.$chapterSlug'
 import { Route as PokemonBattleIdRouteImport } from './routes/pokemon.battle.$id'
@@ -168,6 +169,11 @@ const ApiMediaIdRoute = ApiMediaIdRouteImport.update({
   path: '/api/media/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPwaNameRoute = ApiPwaNameRouteImport.update({
+  id: '/api/pwa/$name',
+  path: '/api/pwa/$name',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MangaSeriesSlugIndexRoute = MangaSeriesSlugIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -238,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/studio/': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
+  '/api/pwa/$name': typeof ApiPwaNameRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/pokemon/battle/$id': typeof PokemonBattleIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
@@ -268,6 +275,7 @@ export interface FileRoutesByTo {
   '/studio': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
+  '/api/pwa/$name': typeof ApiPwaNameRoute
   '/pokemon/battle/$id': typeof PokemonBattleIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
   '/studio/$bookSlug/$slug': typeof StudioBookSlugSlugRoute
@@ -303,6 +311,7 @@ export interface FileRoutesById {
   '/studio/': typeof StudioIndexRoute
   '/api/chat-image/$id': typeof ApiChatImageIdRoute
   '/api/media/$id': typeof ApiMediaIdRoute
+  '/api/pwa/$name': typeof ApiPwaNameRoute
   '/manga/$seriesSlug/$chapterSlug': typeof MangaSeriesSlugChapterSlugRouteWithChildren
   '/pokemon/battle/$id': typeof PokemonBattleIdRoute
   '/read/$bookSlug/$slug': typeof ReadBookSlugSlugRoute
@@ -340,6 +349,7 @@ export interface FileRouteTypes {
     | '/studio/'
     | '/api/chat-image/$id'
     | '/api/media/$id'
+    | '/api/pwa/$name'
     | '/manga/$seriesSlug/$chapterSlug'
     | '/pokemon/battle/$id'
     | '/read/$bookSlug/$slug'
@@ -370,6 +380,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/chat-image/$id'
     | '/api/media/$id'
+    | '/api/pwa/$name'
     | '/pokemon/battle/$id'
     | '/read/$bookSlug/$slug'
     | '/studio/$bookSlug/$slug'
@@ -404,6 +415,7 @@ export interface FileRouteTypes {
     | '/studio/'
     | '/api/chat-image/$id'
     | '/api/media/$id'
+    | '/api/pwa/$name'
     | '/manga/$seriesSlug/$chapterSlug'
     | '/pokemon/battle/$id'
     | '/read/$bookSlug/$slug'
@@ -431,6 +443,7 @@ export interface RootRouteChildren {
   UUsernameRoute: typeof UUsernameRoute
   ApiChatImageIdRoute: typeof ApiChatImageIdRoute
   ApiMediaIdRoute: typeof ApiMediaIdRoute
+  ApiPwaNameRoute: typeof ApiPwaNameRoute
   ReadBookSlugSlugRoute: typeof ReadBookSlugSlugRoute
 }
 
@@ -611,6 +624,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMediaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/pwa/$name': {
+      id: '/api/pwa/$name'
+      path: '/api/pwa/$name'
+      fullPath: '/api/pwa/$name'
+      preLoaderRoute: typeof ApiPwaNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/manga/$seriesSlug/': {
       id: '/manga/$seriesSlug/'
       path: '/'
@@ -777,6 +797,7 @@ const rootRouteChildren: RootRouteChildren = {
   UUsernameRoute: UUsernameRoute,
   ApiChatImageIdRoute: ApiChatImageIdRoute,
   ApiMediaIdRoute: ApiMediaIdRoute,
+  ApiPwaNameRoute: ApiPwaNameRoute,
   ReadBookSlugSlugRoute: ReadBookSlugSlugRoute,
 }
 export const routeTree = rootRouteImport

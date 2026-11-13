@@ -1,3 +1,4 @@
+import { InstallAppSection } from "@/components/members/install-app";
 import { useRef, useState, type FormEvent } from "react";
 import { Link, createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { Camera, Eye, Trash2 } from "lucide-react";
@@ -167,6 +168,7 @@ function ProfilePage() {
           </div>
         </form>
       </section>
+      <InstallAppSection />
       <section className="mx-auto max-w-2xl px-5 pb-16 sm:px-8">
         <CreatorStatsSection stats={profile.creator} />
       </section>
