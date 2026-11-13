@@ -163,3 +163,105 @@ export function drawShuriken(g: G, x: number, y: number, R: number, spin: number
   }
   g.restore();
 }
+
+/**
+ * The Battle Bond shuriken: a huge four-pointed star of glowing water-energy with long sharp blades, a hollow hub, a bright rim
+ * and crackling light running through it, like the one Ash-Greninja throws.
+ */
+export function drawBondShuriken(g: G, x: number, y: number, R: number, spin: number, t: number, alpha = 1) {
+  if (R < 1) return;
+  g.save();
+  g.translate(x, y);
+  g.globalAlpha *= alpha;
+  // wide cyan glow
+  g.save();
+  g.globalCompositeOperation = "lighter";
+  const gl = g.createRadialGradient(0, 0, R * 0.1, 0, 0, R * 1.5);
+  gl.addColorStop(0, "rgba(90,200,255,.5)");
+  gl.addColorStop(0.5, "rgba(30,110,255,.22)");
+  gl.addColorStop(1, "rgba(0,60,255,0)");
+  g.fillStyle = gl;
+  g.beginPath();
+  g.arc(0, 0, R * 1.5, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+  g.rotate(spin);
+  const blade = () => {
+    g.beginPath();
+    g.moveTo(R * 0.17, -R * 0.2);
+    g.quadraticCurveTo(R * 0.34, -R * 0.07, R, 0);
+    g.quadraticCurveTo(R * 0.34, R * 0.07, R * 0.17, R * 0.2);
+    g.closePath();
+  };
+  // body of the star: deep blue to bright cyan, translucent
+  g.save();
+  for (let k = 0; k < 4; k++) {
+    g.save();
+    g.rotate((k * Math.PI) / 2);
+    blade();
+    const bg = g.createLinearGradient(R * 0.1, 0, R, 0);
+    bg.addColorStop(0, "rgba(12,60,200,.92)");
+    bg.addColorStop(0.55, "rgba(30,120,255,.88)");
+    bg.addColorStop(1, "rgba(150,235,255,.95)");
+    g.fillStyle = bg;
+    g.fill();
+    // crackling light inside the blade: a jagged line that changes several times a second
+    g.save();
+    g.clip();
+    const seed = Math.floor(t * 14) + k * 17;
+    const hs = (n: number) => { const v = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return v - Math.floor(v); };
+    for (let l = 0; l < 3; l++) {
+      g.beginPath();
+      let px = R * (0.2 + 0.1 * l), py = (hs(seed + l) - 0.5) * R * 0.1;
+      g.moveTo(px, py);
+      for (let s = 0; s < 7; s++) {
+        px += R * (0.09 + 0.05 * hs(seed + s * 3 + l));
+        py = (hs(seed * 1.3 + s * 5 + l * 9) - 0.5) * R * 0.14 * (1 - px / R);
+        g.lineTo(px, py);
+      }
+      g.strokeStyle = l ? "rgba(190,245,255,.8)" : "rgba(255,255,255,.95)";
+      g.lineWidth = Math.max(1, R * (l ? 0.012 : 0.02));
+      g.stroke();
+    }
+    g.restore();
+    // bright rim
+    blade();
+    g.lineJoin = "round";
+    g.strokeStyle = "rgba(170,240,255,.95)";
+    g.lineWidth = Math.max(1.4, R * 0.022);
+    g.stroke();
+    // a hot streak along each edge
+    g.globalCompositeOperation = "lighter";
+    g.strokeStyle = "rgba(120,220,255,.6)";
+    g.lineWidth = Math.max(2, R * 0.05);
+    g.stroke();
+    g.globalCompositeOperation = "source-over";
+    g.restore();
+  }
+  g.restore();
+  // the hub: a hollow ring with a dark centre
+  g.beginPath();
+  g.arc(0, 0, R * 0.2, 0, Math.PI * 2);
+  g.fillStyle = "rgba(10,40,150,.95)";
+  g.fill();
+  g.lineWidth = Math.max(1.5, R * 0.03);
+  g.strokeStyle = "rgba(190,245,255,.95)";
+  g.stroke();
+  g.beginPath();
+  g.arc(0, 0, R * 0.11, 0, Math.PI * 2);
+  g.fillStyle = "rgba(2,14,70,.95)";
+  g.fill();
+  g.strokeStyle = "rgba(120,220,255,.7)";
+  g.lineWidth = Math.max(1, R * 0.015);
+  g.stroke();
+  // tip glints
+  g.fillStyle = "#ffffff";
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2;
+    const tw = 0.6 + 0.4 * Math.sin(t * 14 + k * 2);
+    g.beginPath();
+    g.arc(Math.cos(a) * R * 0.99, Math.sin(a) * R * 0.99, Math.max(1, R * 0.025 * tw), 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}

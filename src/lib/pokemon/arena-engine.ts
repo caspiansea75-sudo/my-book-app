@@ -1696,12 +1696,14 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
   }
   switch (mv.kind) {
     case "proj":
-      if (mv.id === "megashuriken") {
-        // the clones feed their shurikens into one giant one, held by Greninja while it forms, then thrown
-        spawnProj(S, f, mv, dx, dy, { speed: 620, r: 44, life: 3, dmg: baseDamage(f, mv) });
+      if (mv.id.startsWith("megashuriken")) {
+        // the clones feed their shurikens into one giant one (Ash-Greninja forms it alone, in its hand); it is held while it forms, then thrown
+        const ash = mv.id.endsWith(":ash");
+        const hold = ash ? 0.65 : 0.95;
+        spawnProj(S, f, mv, dx, dy, { speed: ash ? 680 : 620, r: ash ? 54 : 44, life: 3, dmg: baseDamage(f, mv) });
         const sp = S.projs[S.projs.length - 1]!;
-        sp.hold = 0.95; sp.holdMax = 0.95; sp.aoe = 95; sp.kb = 380;
-        S.events.push({ t: "shurikenForm", id: f.id, x: f.x, y: f.y, dur: 0.95 });
+        sp.hold = hold; sp.holdMax = hold; sp.aoe = ash ? 110 : 95; sp.kb = 400;
+        if (!ash) S.events.push({ t: "shurikenForm", id: f.id, x: f.x, y: f.y, dur: hold });
         break;
       }
       spawnProj(S, f, mv, dx, dy);
@@ -2240,7 +2242,9 @@ function doMega(S: State, f: Fighter) {
   f.invuln = Math.max(f.invuln, 0.5);
   const type = f.types[0] ?? "Normal";
   // the Mega form's own special move: a huge burst of its type all around it
-  if (form.origin) {
+  if (form.id === "greninja-ash") {
+    f.override[3] = { id: "megashuriken:ash", name: "Water Shuriken Barrage", type: "Water", kind: "proj", power: 3.6, cd: 4.6, speed: 680, windup: 0, desc: "Greninja forms a giant Water Shuriken in its hand, then hurls it at the foe." };
+  } else if (form.origin) {
     const o = ALT_BURST[form.id] ?? [`${form.name} Burst`, type];
     f.override[3] = { id: "megaburst:" + form.id, name: o[0]!, type: o[1]!, kind: "nova", power: 3.1, cd: 4.2, range: 240, desc: "The alternate forme unleashes its full power all around you." };
   } else if (form.id === "greninja-mega") {

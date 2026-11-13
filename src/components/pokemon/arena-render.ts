@@ -21,7 +21,7 @@ import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { DRAKE_BOLTS, DRAKE_SHOTS, drakeFlat, drakeItems, drakeShotLift, drawDrakeBody, drawDrakeGround, type DrakeSig } from "./arena-drake";
 import { pmdEnabled, pmdFrame, type PmdState } from "./arena-pmd";
-import { drawShuriken } from "./arena-shuriken";
+import { drawBondShuriken, drawShuriken } from "./arena-shuriken";
 import { playMegaLook } from "./arena-megafx";
 import { MEGA_MOVES, STYLE_OF_TYPE } from "@/lib/pokemon/arena-megamoves";
 import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
@@ -5481,15 +5481,16 @@ export class ArenaRenderer {
   private drawProjs(g: CanvasRenderingContext2D, S: State) {
     if (this.shurLast.size) {
       const alive = new Set<number>();
-      for (const p of S.projs) if (p.mv === "megashuriken") alive.add(p.id);
+      for (const p of S.projs) if (p.mv.startsWith("megashuriken")) alive.add(p.id);
       for (const [id, v] of this.shurLast) {
         if (alive.has(id)) continue;
         this.shurLast.delete(id);
         if (v.held) continue;
+        v.R = Math.min(v.R, 90); // a very large one must not wash the whole screen out
         // it is spent: a burst of water, a ring, spray thrown up and a cloud of mist
         this.ring(v.x, v.y, "#e9f8ff", v.R * 3.2, 0.5);
         this.ring(v.x, v.y, "#59b8ff", v.R * 2.4, 0.75);
-        this.parts.push({ kind: "glow", x: v.x, y: v.y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: v.R * 0.4, grow: v.R * 2.2, color: "#5fb4ff" });
+        this.parts.push({ kind: "glow", x: v.x, y: v.y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: v.R * 0.3, grow: v.R * 1.6, color: "#3f94ff" });
         for (let i = 0; i < 34; i++) {
           const a = Math.random() * Math.PI * 2, sp = rnd(120, 520);
           this.parts.push({ kind: "dot", x: v.x, y: v.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 520, life: rnd(0.4, 0.9), max: 0.9, size: rnd(2, 5), grow: 0, color: i % 3 ? "#cfeeff" : "#ffffff" });
@@ -5522,15 +5523,16 @@ export class ArenaRenderer {
           g.fill();
         });
       }
-      if (p.mv === "megashuriken") {
+      if (p.mv.startsWith("megashuriken")) {
+        const ash = p.mv.endsWith(":ash");
         const held = (p.hold ?? 0) > 0;
         const q = held ? 1 - (p.hold ?? 0) / (p.holdMax || 1) : 1;
         const sc = held ? 0.12 + 0.88 * (1 - (1 - q) ** 3) : 1;
-        const R = p.r * 2.0 * sc;
+        const R = p.r * (ash ? 2.5 : 2.0) * sc;
         const age = S.time - p.born;
-        const spin = this.t * (held ? 6 + q * 8 : 16);
-        const up = held ? 30 + q * 14 : 14;
-        this.at(g, p.x, p.y, "mix", () => drawShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t), "p", this.v3 ? 32 + (held ? 14 : 0) : 0);
+        const spin = ash ? (held ? 0.35 + q * 0.5 : this.t * 12) : this.t * (held ? 6 + q * 8 : 16);
+        const up = ash ? (held ? R * 0.9 + 12 : 18) : held ? 30 + q * 14 : 14;
+        this.at(g, p.x, p.y, "mix", () => (ash ? drawBondShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t) : drawShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t)), "p", this.v3 ? (ash && held ? 32 + R * 0.9 : 32 + (held ? 14 : 0)) : 0);
         // spray flung off the blade tips as it spins, bubbles and mist round it, motes drawn in while it forms
         {
           const ang0 = Math.atan2(p.vy, p.vx);
@@ -5542,7 +5544,7 @@ export class ArenaRenderer {
             const tx = p.x + Math.cos(a) * R * 0.95, ty = cy0 + Math.sin(a) * R * 0.95;
             const tang = a + Math.PI / 2;
             const fl = held ? 110 : 190;
-            this.parts.push({ kind: "dot", x: tx, y: ty, vx: Math.cos(tang) * fl + (held ? 0 : Math.cos(ang0) * 60) + rnd(-30, 30), vy: Math.sin(tang) * fl + (held ? 0 : Math.sin(ang0) * 60) + rnd(-30, 30), g: 180, life: rnd(0.35, 0.65), max: 0.65, size: rnd(1.8, 3.6), grow: 0, color: i % 2 ? "#e9f8ff" : "#8fd0ff" });
+            this.parts.push({ kind: ash ? "spark" : "dot", x: tx, y: ty, vx: Math.cos(tang) * fl + (held ? 0 : Math.cos(ang0) * 60) + rnd(-30, 30), vy: Math.sin(tang) * fl + (held ? 0 : Math.sin(ang0) * 60) + rnd(-30, 30), g: 180, life: rnd(0.35, 0.65), max: 0.65, size: rnd(1.8, 3.6), grow: 0, color: i % 2 ? "#e9f8ff" : "#8fd0ff" });
           }
           if (Math.random() < 0.35) {
             const a = Math.random() * Math.PI * 2;
