@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Download, Check, Smartphone } from "lucide-react";
-import { APK_URL } from "@/lib/pwa-config";
+import { Download, Check, Monitor, Smartphone } from "lucide-react";
+import { APK_URL, WINDOWS_URL } from "@/lib/pwa-config";
 import { installState, promptInstall, startInstallCapture, subscribeInstall } from "@/lib/pwa-install";
 
 /** Profile section: put the site on the phone / computer as an app called BookofCaspi. */
@@ -62,6 +62,19 @@ export function InstallAppSection() {
             </div>
           )}
         </div>
+        {WINDOWS_URL ? (
+          <div className="mt-4 border-t border-border pt-4">
+            <a
+              href={WINDOWS_URL}
+              download="BookofCaspi-windows.zip"
+              className="pressable inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface-2 px-5 font-sans text-sm hover:text-fg"
+            >
+              <Monitor className="size-4" strokeWidth={1.75} />
+              Windows অ্যাপ ডাউনলোড করুন
+            </a>
+            <p className="mt-2 font-sans text-xs text-muted">জিপ ফাইলটি খুলে install.ps1-এ রাইট-ক্লিক করে “Run with PowerShell” দিন।</p>
+          </div>
+        ) : null}
         {APK_URL ? (
           <div className="mt-4 border-t border-border pt-4">
             <a

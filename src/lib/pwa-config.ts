@@ -7,3 +7,6 @@
  * folder, a GitHub release, Google Drive direct link…) and paste that link here.
  */
 export const APK_URL = "/BookofCaspi.apk";
+
+/** The Windows installer (zip with install.ps1), put in the public folder. Empty hides the button. */
+export const WINDOWS_URL = "/BookofCaspi-windows.zip";

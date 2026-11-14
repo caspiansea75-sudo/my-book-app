@@ -2,6 +2,8 @@
 // Only keys that are NOT in the other dictionaries live here (those win if a key is in both).
 export const FIXES_EXACT: Record<string, string> = {
   // profile: install the site as an app
+  "Windows অ্যাপ ডাউনলোড করুন": "Download Windows app",
+  "জিপ ফাইলটি খুলে install.ps1-এ রাইট-ক্লিক করে “Run with PowerShell” দিন।": "Extract the zip, then right-click install.ps1 and choose “Run with PowerShell”.",
   "BookofCaspi অ্যাপ": "BookofCaspi app",
   "ফোন বা কম্পিউটারে অ্যাপের মতো ইনস্টল করুন — হোম স্ক্রিন থেকে এক ট্যাপে খুলুন।": "Install it like an app on your phone or computer — open it from your home screen in one tap.",
   "অ্যাপটি ইনস্টল করা আছে": "The app is installed",
