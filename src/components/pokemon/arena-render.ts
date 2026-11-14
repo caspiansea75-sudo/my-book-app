@@ -1095,8 +1095,132 @@ export class ArenaRenderer {
     this.parts.push({ kind: "text", x, y: y - 24, vx: rnd(-14, 14), vy: -70, g: 90, life: 0.95, max: 0.95, size, grow: 0, color, text, weight });
   }
 
+  /** Draw something centred on world (x, y), `lift` units above the floor, in whichever view is on. */
+  private pxAt(g: CanvasRenderingContext2D, x: number, y: number, lift: number, fn: () => void) {
+    this.at(g, x, y, "bb", () => {
+      g.save();
+      g.translate(x, y - (this.v3 ? 0 : lift));
+      fn();
+      g.restore();
+    }, "p", this.v3 ? lift : 0);
+  }
+
+  /** Which pixel-art shot a projectile gets (by its type), and how it sits: its size, whether it is round, its colour. */
+  private static SHOT: Record<string, { id: PxId; k: number; round?: boolean; tint?: string; lift: number }> = {
+    Fire: { id: "fire/fireball", k: 0.075, lift: 26 },
+    Water: { id: "water/water-orb", k: 0.045, round: true, lift: 24 },
+    Electric: { id: "projectiles/plasma-shot", k: 0.07, tint: "#ffe14d", lift: 26 },
+    Ice: { id: "ice/ice-lance", k: 0.07, lift: 26 },
+    Dark: { id: "shadow/void-orb", k: 0.022, round: true, lift: 24 },
+    Ghost: { id: "shadow/void-orb", k: 0.022, round: true, tint: "#8a6ad8", lift: 24 },
+    Psychic: { id: "projectiles/energy-disc", k: 0.07, tint: "#e86bff", lift: 26 },
+    Fairy: { id: "projectiles/energy-disc", k: 0.07, tint: "#ff9fd8", lift: 26 },
+    Dragon: { id: "projectiles/laser-bolt", k: 0.07, tint: "#7a6bff", lift: 26 },
+    Steel: { id: "projectiles/energy-disc", k: 0.065, tint: "#b8c4d6", lift: 26 },
+  };
+
+  /** The pixel-art look of a shot, when it has one and its frames are ready. */
+  private pxShot(p: State["projs"][number]) {
+    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || DRAKE_SHOTS.has(p.mv)) return null;
+    const sp = ArenaRenderer.SHOT[p.type];
+    if (!sp || this.pfx.tier >= 3) return null;
+    const sh = this.pfx.sheet(sp.id, sp.tint);
+    return sh?.ready ? { sp, sh } : null;
+  }
+
+  private static ITEMPX: Record<string, { id: PxId; k: number; tint?: string; beam?: boolean }> = {
+    heal: { id: "pickups/heart-pickup", k: 0.9 },
+    orb: { id: "pickups/xp-orb", k: 0.8, tint: "#ffe14d" },
+    boots: { id: "pickups/potion", k: 0.9, tint: "#7fe3ff" },
+    crystal: { id: "pickups/power-star", k: 0.8, tint: "#d28bff", beam: true },
+  };
+  private pxItem(kind: string) {
+    const sp = ArenaRenderer.ITEMPX[kind];
+    if (!sp || this.pfx.tier >= 2) return null;
+    const sh = this.pfx.sheet(sp.id, sp.tint);
+    return sh?.ready ? { sp, sh } : null;
+  }
+
+  private static STATUSPX: { when: (f: Fighter) => boolean; id: PxId; a: number }[] = [
+    { when: (f) => f.status.frz > 0, id: "status/frozen", a: 0.62 },
+    { when: (f) => f.status.slp > 0, id: "status/sleep", a: 1 },
+    { when: (f) => f.status.par > 0 || f.stun > 0, id: "status/stunned", a: 1 },
+    { when: (f) => f.status.cnf > 0, id: "status/confused", a: 1 },
+    { when: (f) => f.status.brn > 0, id: "status/burning", a: 1 },
+    { when: (f) => f.status.psn > 0, id: "status/poisoned", a: 0.55 },
+    { when: (f) => f.haste > 0, id: "status/haste", a: 0.85 },
+  ];
+
+  /** Pixel-art shots in flight, status marks on Pokémon and pickups: loops drawn from cached frames, so cheap however many there are. */
+  private pixelWorld(S: State, things: { y: number; draw: () => void }[], g: CanvasRenderingContext2D, dk: (x: number, y: number) => number) {
+    const P = this.pfx;
+    P.pump(P.tier >= 2 ? 0.8 : 1.8);
+    // shots
+    let n = 0;
+    for (const p of S.projs) {
+      if (n >= 24) break;
+      const px = this.pxShot(p);
+      if (!px) continue;
+      n++;
+      const { sp, sh } = px;
+      const k = Math.max(0.55, Math.min(2.0, p.r * sp.k * 1.7));
+      let ang = Math.atan2(p.vy, p.vx);
+      if (this.v3) {
+        // the picture faces the camera, so the heading is turned into the way the shot crosses the screen
+        const sx = p.vx * -this.c3.fy + p.vy * this.c3.fx, sd = p.vx * this.c3.fx + p.vy * this.c3.fy;
+        ang = Math.atan2(-sd * 0.45, sx);
+      }
+      const dy = sp.round ? (sh.oy - sh.h * 0.5) * k : 0;
+      things.push({ y: dk(p.x, p.y) + 0.4, draw: () => this.pxAt(g, p.x, p.y, sp.lift, () => P.drawSheet(g, sh, this.t, k, sp.round ? 0 : ang, false, 0, dy)) });
+    }
+    // status marks, on the player and the ones near
+    if (P.tier < 2) {
+      for (const f of S.fighters) {
+        if (!f.alive) continue;
+        let shown = 0;
+        for (const st of ArenaRenderer.STATUSPX) {
+          if (shown >= 2) break;
+          if (!st.when(f)) continue;
+          const sh = P.sheet(st.id);
+          if (!sh?.ready) continue;
+          shown++;
+          // your own marks are drawn smaller in the player views, so they do not cover the screen
+          const k = f.r * 0.1 * (f.dyna > 0 ? 1.6 : 1) * (f.isPlayer && this.v3 ? 0.6 : 1) * (st.id === "status/haste" ? 0.7 : 1);
+          things.push({ y: dk(f.x, f.y) + 0.5, draw: () => this.pxAt(g, f.x, f.y + f.r * 0.5, 0, () => { g.save(); g.globalAlpha *= st.a; P.drawSheet(g, sh, this.t + f.id * 0.37, k); g.restore(); }) });
+        }
+      }
+    }
+    // pickups
+    if (P.tier < 2) {
+      for (const it of S.items) {
+        const px = this.pxItem(it.kind);
+        if (!px) continue;
+        const { sp, sh } = px;
+        const blink = it.life < 3 && Math.sin(this.t * 14) <= 0 ? 0.35 : 1;
+        const beam = sp.beam ? P.sheet("pickups/loot-beam", sp.tint) : null;
+        things.push({ y: dk(it.x, it.y) + 0.2, draw: () => this.pxAt(g, it.x, it.y + 10, 0, () => { g.save(); g.globalAlpha *= blink; if (beam?.ready) P.drawSheet(g, beam, this.t, 0.5); P.drawSheet(g, sh, this.t + it.id * 0.3, sp.k * 1.1, 0, false, 0, Math.sin(this.t * 4 + it.id) * 3 - 10); g.restore(); }) });
+      }
+    }
+  }
+
+  /** The pixel-art weather for the field in play (only while the game runs well). */
+  private pixelWeather(g: CanvasRenderingContext2D, S: State) {
+    const P = this.pfx;
+    const map: Record<string, [PxId, string | undefined, number] | undefined> = {
+      rain: ["weather/rain", undefined, 0.8],
+      hail: ["weather/snow", undefined, 0.85],
+      sun: ["weather/god-rays", "#ffd27a", 0.55],
+      sand: ["weather/fog", "#d8b06a", 0.5],
+    };
+    const m = S.field === "none" ? undefined : map[S.field];
+    P.setWeather(m ? m[0] : null, m?.[1]);
+    if (!m) return false;
+    P.drawWeather(g, SCR.W, SCR.H, m[2]);
+    return P.hasWeather;
+  }
+
   /** Pixel-art effects (lib/pixelfx) laid over the usual hit, blast, heal and power-up looks. */
-  private pixelEvent(e: Ev) {
+  private pixelEvent(e: Ev, mine?: Fighter) {
     if (this.q < 0.45) return; // a slow device keeps only the usual looks
     // hits and blasts are drawn a bit larger than life so the pixels read at a glance
     const go = (id: PxId, x: number, y: number, o: Parameters<PixelFxLayer["spawn"]>[3]) => this.pfx.spawn(id, x, y, { ...o, scale: o.scale * (e.t === "hit" ? 1.5 : 1.3) });
@@ -1137,7 +1261,20 @@ export class ArenaRenderer {
         if (e.amt > 0) go("nature/healing-bloom", e.x, e.y + 6, { scale: 0.5, speed: 1.5, max: 1.4 });
         break;
       case "ko":
-        go("spawn/poof", e.x, e.y + 6, { scale: 0.9, speed: 1.3, max: 1.0, lift: 8 });
+        if (e.boss) go("spawn/shatter-death", e.x, e.y + 8, { scale: 1.3, speed: 1.5, max: 2.0, lift: 6 });
+        else {
+          go("spawn/poof", e.x, e.y + 6, { scale: 0.8, speed: 1.4, max: 0.8, lift: 8 });
+          go("spawn/soul-rise", e.x, e.y + 6, { scale: 0.75, speed: 1.4, max: 2.0, lift: 10 });
+        }
+        break;
+      case "swap":
+        if (!e.faint) go("spawn/respawn-beam", e.x, e.y + 8, { scale: 0.8, speed: 1.4, max: 1.6 });
+        break;
+      case "combo":
+        if (mine && (e.finish || (e.n >= 5 && e.n % 5 === 0))) go("ui/combo-counter", mine.x, mine.y - 10, { scale: 0.7, speed: 1.2, max: 1.2, lift: 70, extra: { count: e.n, label: e.finish ? "FINISH" : "COMBO" } });
+        break;
+      case "wave":
+        if (mine) go("ui/quest-complete", mine.x, mine.y - 10, { scale: 0.7, speed: 1.1, max: 2.2, lift: 90, extra: { text: e.boss ? "BOSS WAVE" : `WAVE ${e.n}` } });
         break;
       case "crate":
         go("pickups/collect-burst", e.x, e.y + 4, { scale: 0.8, speed: 1.2, lift: 12 });
@@ -1171,7 +1308,7 @@ export class ArenaRenderer {
     for (const e of events) {
       stamp();
       from = this.parts.length;
-      this.pixelEvent(e);
+      this.pixelEvent(e, mine);
       lift = e.t === "hit" || e.t === "cast" ? 34 : 0;
       switch (e.t) {
         case "cast": {
@@ -2072,6 +2209,7 @@ export class ArenaRenderer {
       if (d.t >= d.life) this.dusks.splice(i, 1);
       else duskFlat(G, d);
     }
+    this.pfx.govern(dtRaw);
     this.pfx.update(dt);
     for (let i = this.fx13.length - 1; i >= 0; i--) {
       const d = this.fx13[i]!;
@@ -2110,7 +2248,8 @@ export class ArenaRenderer {
       }
       things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => { const va = md?.kind === "vanish" && mv ? this.vanishAlpha(mv.t / mv.total) : this.dashAlpha(f); if (va <= 0.01) return; g.save(); g.globalAlpha *= va; this.drawFighter(g, f, S, f === you); g.restore(); }, "f") });
     }
-    this.pfx.items((x, y, lift, draw) => things.push({ y: dk(x, y) + 0.6, draw: () => this.at(g, x, y, "bb", () => draw(g), "p", lift) }));
+    this.pixelWorld(S, things, g, dk);
+    this.pfx.items((x, y, lift, draw) => things.push({ y: dk(x, y) + 0.6, draw: () => this.pxAt(g, x, y, lift, () => draw(g)) }));
     for (const d of this.fx13) items13(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
@@ -3069,6 +3208,10 @@ export class ArenaRenderer {
       g.beginPath();
       g.ellipse(it.x, it.y + 14, 13, 5, 0, 0, Math.PI * 2);
       g.fill();
+      if (this.pxItem(it.kind)) {
+        g.restore();
+        continue; // the pixel-art pickup is drawn with the other things
+      }
       g.globalCompositeOperation = "lighter";
       const gr = g.createRadialGradient(it.x, it.y + bob, 0, it.x, it.y + bob, 34);
       gr.addColorStop(0, d.color);
@@ -3193,6 +3336,7 @@ export class ArenaRenderer {
 
   /** Weather over the whole screen: a tint and a few things falling or drifting. */
   private drawField(g: CanvasRenderingContext2D, S: State) {
+    const px = this.pixelWeather(g, S);
     if (S.field === "none") return;
     g.save();
     if (S.field === "sun") {
@@ -3207,7 +3351,7 @@ export class ArenaRenderer {
       g.strokeStyle = "rgba(190,215,255,.45)";
       g.lineWidth = 1.5;
       g.beginPath();
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < (px ? 0 : 70); i++) {
         const x = (i * 97 + this.t * 140) % (SCR.W + 80) - 40;
         const y = (i * 53 + this.t * 900) % (SCR.H + 40) - 20;
         g.moveTo(x, y);
@@ -3218,7 +3362,7 @@ export class ArenaRenderer {
       g.fillStyle = "rgba(190,140,70,.2)";
       g.fillRect(0, 0, SCR.W, SCR.H);
       g.fillStyle = "rgba(235,200,140,.5)";
-      for (let i = 0; i < 90; i++) {
+      for (let i = 0; i < (px ? 0 : 90); i++) {
         const x = (i * 131 + this.t * 420) % (SCR.W + 40) - 20;
         const y = (i * 71 + Math.sin(this.t * 2 + i) * 14) % SCR.H;
         g.fillRect(x, y, 3, 2);
@@ -3227,7 +3371,7 @@ export class ArenaRenderer {
       g.fillStyle = "rgba(170,220,255,.14)";
       g.fillRect(0, 0, SCR.W, SCR.H);
       g.fillStyle = "rgba(240,250,255,.8)";
-      for (let i = 0; i < 80; i++) {
+      for (let i = 0; i < (px ? 0 : 80); i++) {
         const x = (i * 113 + Math.sin(this.t + i) * 22 + this.t * 30) % SCR.W;
         const y = (i * 61 + this.t * 120) % (SCR.H + 20);
         g.beginPath();
@@ -4206,6 +4350,9 @@ export class ArenaRenderer {
       this.drawWaterSand(g, z, fx, grow, fade);
       return;
     }
+    // the other storms (Leaf Storm, Hurricane…) have their own look from the signature-effects layer; the rings below are
+    // fire-coloured, and were drawn over them as a red-orange spinning line
+    if (SIG_MOVES[fx]) return;
     g.save();
     g.globalAlpha = fade;
     // the footprint
@@ -5591,6 +5738,7 @@ export class ArenaRenderer {
           g.fill();
         });
       }
+      if (this.pxShot(p)) continue; // drawn as a pixel-art shot instead (see pixelWorld)
       if (p.mv.startsWith("megashuriken")) {
         const ash = p.mv.endsWith(":ash");
         const held = (p.hold ?? 0) > 0;
