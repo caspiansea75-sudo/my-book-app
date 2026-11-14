@@ -6,4 +6,4 @@
  * download the package, then upload the .apk somewhere that gives a direct link (the site's own public
  * folder, a GitHub release, Google Drive direct link…) and paste that link here.
  */
-export const APK_URL = "";
+export const APK_URL = "/BookofCaspi.apk";
