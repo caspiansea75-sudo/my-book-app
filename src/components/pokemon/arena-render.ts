@@ -1253,7 +1253,7 @@ export class ArenaRenderer {
           case "Fairy": go("holy/feather-burst", e.x, e.y + 4, { ...base, scale: k * 1.1, speed: 1.4, max: 1.6 }); break;
           case "Dragon": go("explosions/plasma-explosion", e.x, e.y + 6, { ...base, scale: k * 1.0, speed: 1.2, max: 1.4 }); break;
           case "Steel": go("scifi/emp-blast", e.x, e.y + 6, { ...base, scale: k * 1.1, speed: 1.5, max: 1.5 }); break;
-          default: go("explosions/cartoon-pow", e.x, e.y - 10, { ...base, lift: 10, scale: k * 0.9, speed: 1.2, max: 0.9, tint: e.type === "Flying" ? col("Flying") : undefined });
+          default: break; // Normal, Flying and the rest keep their original blast art
         }
         break;
       }
