@@ -39,6 +39,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 import { setLod } from "./arena-lod";
+import { PixelFxLayer, preloadPixelfx, type PxId } from "./arena-pixelfx";
 
 const BEAM_PAL: Record<string, [string, string, string]> = {
   Grass: ["#7be04a", "#fff3a0", "#ffffff"],
@@ -241,6 +242,7 @@ export class ArenaRenderer {
   private dusks: DuskSig[] = [];
   private wyrms: WyrmSig[] = [];
   private fx13: F13[] = [];
+  private pfx = new PixelFxLayer();
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
   private later: { t: number; fn: () => void }[] = [];
@@ -371,6 +373,7 @@ export class ArenaRenderer {
   private shy = 0;
 
   constructor(readonly canvas: HTMLCanvasElement, private sources: SpriteSource = defaultSources) {
+    preloadPixelfx();
     this.ctx = canvas.getContext("2d")!;
     try {
       const v = Number(localStorage.getItem("arena-brawl-tilt"));
@@ -1092,6 +1095,68 @@ export class ArenaRenderer {
     this.parts.push({ kind: "text", x, y: y - 24, vx: rnd(-14, 14), vy: -70, g: 90, life: 0.95, max: 0.95, size, grow: 0, color, text, weight });
   }
 
+  /** Pixel-art effects (lib/pixelfx) laid over the usual hit, blast, heal and power-up looks. */
+  private pixelEvent(e: Ev) {
+    if (this.q < 0.45) return; // a slow device keeps only the usual looks
+    // hits and blasts are drawn a bit larger than life so the pixels read at a glance
+    const go = (id: PxId, x: number, y: number, o: Parameters<PixelFxLayer["spawn"]>[3]) => this.pfx.spawn(id, x, y, { ...o, scale: o.scale * (e.t === "hit" ? 1.5 : 1.3) });
+    switch (e.t) {
+      case "hit": {
+        if (e.dmg <= 0) break;
+        const o = { lift: 30, flip: e.dx < 0, tint: undefined as string | undefined };
+        if (e.crit) go("impacts/crit-hit", e.x, e.y, { ...o, scale: 0.55, speed: 1.1 });
+        else if (e.heavy && (e.type === "Ground" || e.type === "Rock" || e.type === "Fighting")) go("impacts/ground-slam", e.x, e.y + 6, { scale: 0.5, speed: 1.6, max: 1.1 });
+        else if (e.type === "Electric") go("lightning/zap-hit", e.x, e.y, { ...o, scale: 0.55 });
+        else if (e.type === "Normal" || e.type === "Fighting" || e.type === "Rock" || e.type === "Ground") go("impacts/blunt-hit", e.x, e.y, { ...o, scale: 0.5 });
+        else go("impacts/hit-spark", e.x, e.y, { ...o, scale: e.heavy ? 0.6 : 0.45, tint: col(e.type) });
+        break;
+      }
+      case "explode": {
+        const r = e.r;
+        const k = Math.max(0.35, Math.min(1.5, r / 110));
+        const base = { lift: 0 };
+        switch (e.type) {
+          case "Fire": go(r >= 90 ? "explosions/big-explosion" : "explosions/small-explosion", e.x, e.y + 8, { ...base, scale: r >= 90 ? k * 0.8 : k * 1.1, speed: 1.7, max: 2.2 }); break;
+          case "Water": go(r >= 90 ? "water/geyser" : "water/splash", e.x, e.y + 8, { ...base, scale: k * 1.0, speed: 1.5, max: 2.0 }); break;
+          case "Electric": go("lightning/zap-hit", e.x, e.y + 4, { ...base, lift: 10, scale: k * 1.4, speed: 1.2, max: 0.9 }); break;
+          case "Grass": case "Bug": go("nature/spore-burst", e.x, e.y + 4, { ...base, scale: k * 0.9, speed: 1.5, max: 1.8, tint: e.type === "Bug" ? "#a8c93a" : undefined }); break;
+          case "Poison": go("nature/acid-splash", e.x, e.y + 6, { ...base, scale: k * 1.0, speed: 1.4, max: 1.6 }); break;
+          case "Ice": go("ice/snowflake-burst", e.x, e.y + 8, { ...base, scale: k * 1.1, speed: 1.4, max: 1.8 }); break;
+          case "Ground": go("explosions/dirt-explosion", e.x, e.y + 8, { ...base, scale: k * 0.9, speed: 1.6, max: 2.0 }); break;
+          case "Rock": go("impacts/ground-slam", e.x, e.y + 8, { ...base, scale: k * 0.7, speed: 1.6, max: 1.2 }); break;
+          case "Dark": case "Ghost": go("shadow/dark-explosion", e.x, e.y + 8, { ...base, scale: k * 0.8, speed: 1.7, max: 1.8 }); break;
+          case "Psychic": go("arcane/mana-burst", e.x, e.y + 6, { ...base, scale: k * 1.0, speed: 1.5, max: 1.4 }); break;
+          case "Fairy": go("holy/feather-burst", e.x, e.y + 4, { ...base, scale: k * 1.1, speed: 1.4, max: 1.6 }); break;
+          case "Dragon": go("explosions/plasma-explosion", e.x, e.y + 6, { ...base, scale: k * 1.0, speed: 1.2, max: 1.4 }); break;
+          case "Steel": go("scifi/emp-blast", e.x, e.y + 6, { ...base, scale: k * 1.1, speed: 1.5, max: 1.5 }); break;
+          default: go("explosions/cartoon-pow", e.x, e.y - 10, { ...base, lift: 10, scale: k * 0.9, speed: 1.2, max: 0.9, tint: e.type === "Flying" ? col("Flying") : undefined });
+        }
+        break;
+      }
+      case "heal":
+        if (e.amt > 0) go("nature/healing-bloom", e.x, e.y + 6, { scale: 0.5, speed: 1.5, max: 1.4 });
+        break;
+      case "ko":
+        go("spawn/poof", e.x, e.y + 6, { scale: 0.9, speed: 1.3, max: 1.0, lift: 8 });
+        break;
+      case "crate":
+        go("pickups/collect-burst", e.x, e.y + 4, { scale: 0.8, speed: 1.2, lift: 12 });
+        break;
+      case "shield":
+      case "clash":
+        go("impacts/parry", e.x, e.y, { scale: 0.7, lift: 26 });
+        break;
+      case "mega": case "tera": case "awaken": case "dynamax":
+        go("arcane/mana-burst", e.x, e.y + 8, { scale: 1.2, speed: 1.2, max: 1.8 });
+        break;
+      case "zstart":
+        go("arcane/star-fall", e.x, e.y + 8, { scale: 1.0, speed: 1.3, max: 2.0 });
+        break;
+      case "zhit":
+        go("holy/smite", e.x, e.y + 8, { scale: 0.9, speed: 1.4, max: 1.6 });
+        break;
+    }
+  }
   feed(events: Ev[], mine: Fighter | undefined) {
     // in the player views what a hit or a cast throws out starts at body height, not on the floor
     let from = this.parts.length;
@@ -1106,6 +1171,7 @@ export class ArenaRenderer {
     for (const e of events) {
       stamp();
       from = this.parts.length;
+      this.pixelEvent(e);
       lift = e.t === "hit" || e.t === "cast" ? 34 : 0;
       switch (e.t) {
         case "cast": {
@@ -2006,6 +2072,7 @@ export class ArenaRenderer {
       if (d.t >= d.life) this.dusks.splice(i, 1);
       else duskFlat(G, d);
     }
+    this.pfx.update(dt);
     for (let i = this.fx13.length - 1; i >= 0; i--) {
       const d = this.fx13[i]!;
       d.t += dt;
@@ -2043,6 +2110,7 @@ export class ArenaRenderer {
       }
       things.push({ y: dk(f.x, f.y), draw: () => this.at(g, f.x, f.y, "bb", () => { const va = md?.kind === "vanish" && mv ? this.vanishAlpha(mv.t / mv.total) : this.dashAlpha(f); if (va <= 0.01) return; g.save(); g.globalAlpha *= va; this.drawFighter(g, f, S, f === you); g.restore(); }, "f") });
     }
+    this.pfx.items((x, y, lift, draw) => things.push({ y: dk(x, y) + 0.6, draw: () => this.at(g, x, y, "bb", () => draw(g), "p", lift) }));
     for (const d of this.fx13) items13(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));

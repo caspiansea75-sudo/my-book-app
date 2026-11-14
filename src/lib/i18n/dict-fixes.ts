@@ -1,6 +1,16 @@
 // English text for interface strings that were still showing Bengali in English mode.
 // Only keys that are NOT in the other dictionaries live here (those win if a key is in both).
 export const FIXES_EXACT: Record<string, string> = {
+  // profile: install the site as an app
+  "BookofCaspi অ্যাপ": "BookofCaspi app",
+  "ফোন বা কম্পিউটারে অ্যাপের মতো ইনস্টল করুন — হোম স্ক্রিন থেকে এক ট্যাপে খুলুন।": "Install it like an app on your phone or computer — open it from your home screen in one tap.",
+  "অ্যাপটি ইনস্টল করা আছে": "The app is installed",
+  "অ্যাপ ইনস্টল করুন": "Install app",
+  "অপেক্ষা করুন…": "Please wait…",
+  "আইফোনে: Safari-তে নিচের শেয়ার বোতাম (⬆︎) চেপে “Add to Home Screen” বা “হোম স্ক্রিনে যোগ করুন” বেছে নিন।": "On iPhone: in Safari, tap the Share button (⬆︎) at the bottom and choose “Add to Home Screen”.",
+  "ব্রাউজারের মেনু (⋮) খুলে “Install app” বা “অ্যাপ ইনস্টল করুন” (কখনো “Add to Home screen”) বেছে নিন। বিকল্পটি না দেখালে সাইটটি Chrome বা Edge-এ খুলুন।": "Open the browser menu (⋮) and choose “Install app” (sometimes “Add to Home screen”). If you don’t see it, open the site in Chrome or Edge.",
+  "APK ডাউনলোড করুন (Android)": "Download APK (Android)",
+  "ডাউনলোড হলে ফাইলটি খুলুন। ফোন জিজ্ঞেস করলে “অজানা উৎস থেকে ইনস্টল” অনুমতি দিন।": "Open the file once it has downloaded. If your phone asks, allow “install from unknown sources”.",
   // single words inside split headings ("আপনার লাইব্রেরি", "ছবি ও ভিডিও")
   "ও": "and",
   "আপনার": "Your",

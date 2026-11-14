@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Download, Check } from "lucide-react";
+import { Download, Check, Smartphone } from "lucide-react";
+import { APK_URL } from "@/lib/pwa-config";
 import { installState, promptInstall, startInstallCapture, subscribeInstall } from "@/lib/pwa-install";
 
 /** Profile section: put the site on the phone / computer as an app called BookofCaspi. */
@@ -61,6 +62,19 @@ export function InstallAppSection() {
             </div>
           )}
         </div>
+        {APK_URL ? (
+          <div className="mt-4 border-t border-border pt-4">
+            <a
+              href={APK_URL}
+              download="BookofCaspi.apk"
+              className="pressable inline-flex h-11 items-center gap-2 rounded-lg border border-border bg-surface-2 px-5 font-sans text-sm hover:text-fg"
+            >
+              <Smartphone className="size-4" strokeWidth={1.75} />
+              APK ডাউনলোড করুন (Android)
+            </a>
+            <p className="mt-2 font-sans text-xs text-muted">ডাউনলোড হলে ফাইলটি খুলুন। ফোন জিজ্ঞেস করলে “অজানা উৎস থেকে ইনস্টল” অনুমতি দিন।</p>
+          </div>
+        ) : null}
       </div>
     </section>
   );

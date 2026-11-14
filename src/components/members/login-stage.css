@@ -712,3 +712,40 @@
   text-align: center;
   color: var(--book-subtle);
 }
+
+/* Phones and in-app browsers (Messenger, Facebook, Instagram…): their web views draw stacked blur,
+   3D transforms and endless animations as grey blocks, flicker and lag. Keep the look, drop the heavy parts. */
+@media (hover: none), (max-width: 760px) {
+  .ls-window {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: color-mix(in oklab, var(--book-surface) 90%, var(--book-bg));
+    transition: border-color 300ms ease;
+    transform: translateZ(0);
+  }
+  .ls-tilt {
+    transform: none;
+    transform-style: flat;
+    transition: none;
+  }
+  .ls-float,
+  .ls-drift,
+  .ls-glow,
+  .ls-halo {
+    animation: none;
+  }
+  .ls-halo {
+    filter: none;
+    opacity: 0.4;
+    inset: -20px;
+  }
+  .ls-site {
+    filter: none;
+    transition: none;
+    transform: scale(1.02);
+    opacity: 0.5;
+  }
+  .ls-switch a[aria-current="page"] {
+    box-shadow: none;
+  }
+}
