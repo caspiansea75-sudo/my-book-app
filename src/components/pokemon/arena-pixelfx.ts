@@ -78,6 +78,14 @@ const LOAD: Record<string, () => Promise<Mod>> = {
   "weather/storm": () => L(import("@/lib/pixelfx/fx/weather/storm.js")),
   "weather/fog": () => L(import("@/lib/pixelfx/fx/weather/fog.js")),
   "weather/god-rays": () => L(import("@/lib/pixelfx/fx/weather/god-rays.js")),
+  "projectiles/arrow": () => L(import("@/lib/pixelfx/fx/projectiles/arrow.js")),
+  "projectiles/bullet-tracer": () => L(import("@/lib/pixelfx/fx/projectiles/bullet-tracer.js")),
+  "projectiles/rocket": () => L(import("@/lib/pixelfx/fx/projectiles/rocket.js")),
+  "fire/flamethrower": () => L(import("@/lib/pixelfx/fx/fire/flamethrower.js")),
+  "fire/fire-breath": () => L(import("@/lib/pixelfx/fx/fire/fire-breath.js")),
+  "water/water-jet": () => L(import("@/lib/pixelfx/fx/water/water-jet.js")),
+  "ice/frost-breath": () => L(import("@/lib/pixelfx/fx/ice/frost-breath.js")),
+  "arcane/arcane-beam": () => L(import("@/lib/pixelfx/fx/arcane/arcane-beam.js")),
   "ui/combo-counter": () => L(import("@/lib/pixelfx/fx/ui/combo-counter.js")),
   "ui/quest-complete": () => L(import("@/lib/pixelfx/fx/ui/quest-complete.js")),
 };
@@ -145,6 +153,11 @@ function blobActor() {
   return BLOB;
 }
 
+/** A stand-in body from a silhouette: `data` is 1 where the Pokémon is, w x h pixels, feet at the bottom middle. */
+export function actorFromMask(w: number, h: number, data: Uint8Array) {
+  return { mask: { w, h, data }, pixels: null, x: -Math.floor(w / 2), y: -h, w, h, k: 2, head: [0, -h + 2], chest: [0, -Math.round(h * 0.5)] };
+}
+
 type Live = {
   fx: ReturnType<typeof createFx>;
   frame: ReturnType<typeof createFrame>;
@@ -180,15 +193,32 @@ export type Sheet = {
   img: ImageData | null;
   mod: Mod;
   step: number;
+  used: number;
 };
 
 const STEP = 1 / 30;
-const MAX_SHEETS = 40;
+const MAX_SHEETS = 140;
 
 export class PixelFxLayer {
   live: Live[] = [];
   sheets = new Map<string, Sheet>();
   private queue: Sheet[] = [];
+  private useClock = 0;
+
+  /** Drop the sheet that has gone unused the longest (never one that is still being drawn). */
+  private evict() {
+    let old: Sheet | null = null;
+    for (const sh of this.sheets.values()) if (sh.ready && (!old || sh.used < old.used)) old = sh;
+    if (!old) return false;
+    this.sheets.delete(old.key);
+    return true;
+  }
+
+  /** A sheet that exists and is ready, without starting one. */
+  peek(id: PxId, tint?: string, bodyKey?: string): Sheet | null {
+    const sh = this.sheets.get(id + "|" + (tint ?? "") + (bodyKey ? "|" + bodyKey : ""));
+    return sh?.ready ? sh : null;
+  }
 
   /** 0: everything. 1: no weather. 2: also no status marks or pickups, fewer one-shots. 3: only shots and hits. */
   tier = 0;
@@ -264,21 +294,25 @@ export class PixelFxLayer {
    * The looping effect `id`, drawn into frames. Returns it at once; `ready` turns true once every frame is drawn
    * (a frame or two at a time, see pump). `blob` makes the status marks hug a stand-in body.
    */
-  sheet(id: PxId, tint?: string): Sheet | null {
-    const key = id + "|" + (tint ?? "");
+  sheet(id: PxId, tint?: string, body?: { key: string; actor: () => unknown }): Sheet | null {
+    const key = id + "|" + (tint ?? "") + (body ? "|" + body.key : "");
     const got = this.sheets.get(key);
-    if (got) return got.bad ? null : got;
+    if (got) {
+      got.used = ++this.useClock;
+      return got.bad ? null : got;
+    }
     const mod = cache.get(id);
     if (!mod) {
       preloadPixelfx([id]);
       return null;
     }
-    if (typeof document === "undefined" || this.sheets.size >= MAX_SHEETS) return null;
+    if (typeof document === "undefined") return null;
+    if (this.sheets.size >= MAX_SHEETS && !this.evict()) return null;
     const [w, h] = mod.meta.size;
     const [ox, oy] = mod.meta.origin;
     const n = Math.max(8, Math.min(24, Math.round(mod.meta.duration * 12)));
     const opts: Record<string, unknown> = { x: ox, y: oy, seed: 3 };
-    if (mod.meta.actor) opts.actor = blobActor();
+    if (mod.meta.actor) opts.actor = body ? body.actor() : blobActor();
     if (tint && mod.meta.options?.palette) opts.palette = rampOf(tint, mod.meta.options.palette.length);
     let fx: ReturnType<typeof createFx> | null = null;
     try {
@@ -286,7 +320,7 @@ export class PixelFxLayer {
     } catch {
       fx = null;
     }
-    const sh: Sheet = { key, w, h, ox, oy, n, fps: n / mod.meta.duration, frames: [], ready: false, bad: !fx, fx, frame: fx ? createFrame(w, h) : null, img: fx ? new ImageData(w, h) : null, mod, step: 0 };
+    const sh: Sheet = { key, w, h, ox, oy, n, fps: n / mod.meta.duration, frames: [], ready: false, bad: !fx, fx, frame: fx ? createFrame(w, h) : null, img: fx ? new ImageData(w, h) : null, mod, step: 0, used: ++this.useClock };
     this.sheets.set(key, sh);
     if (fx) this.queue.push(sh);
     return sh.bad ? null : sh;

@@ -30,7 +30,7 @@ import { BEAM_STYLE, drawBeamStyle } from "./arena-beams";
 import { Scars } from "./arena-scars";
 import { CROWD_FRAMES, crowdFrames } from "./arena-crowd";
 import { drawIceSheet, drawOcean } from "./arena-water";
-import { ARENA, DIVE_DASH, VANISH_DASH, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
+import { ARENA, DIVE_DASH, VANISH_DASH, moveOf, type Ev, type Fighter, type Proj, type StageKind, type State } from "@/lib/pokemon/arena-engine";
 import { drawRigged, newRig, personaOf, stepRig, type Persona, type RigOpts, type RigState } from "@/components/pokemon/arena-rig";
 import { drawHazard } from "@/components/pokemon/arena-hazard";
 import { organic, sigil, smooth as smoothPath } from "@/components/pokemon/arena-shape";
@@ -39,7 +39,7 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 import { setLod } from "./arena-lod";
-import { PixelFxLayer, preloadPixelfx, type PxId } from "./arena-pixelfx";
+import { PixelFxLayer, actorFromMask, preloadPixelfx, type PxId } from "./arena-pixelfx";
 
 const BEAM_PAL: Record<string, [string, string, string]> = {
   Grass: ["#7be04a", "#fff3a0", "#ffffff"],
@@ -1117,7 +1117,67 @@ export class ArenaRenderer {
     Fairy: { id: "projectiles/energy-disc", k: 0.07, tint: "#ff9fd8", lift: 26 },
     Dragon: { id: "projectiles/laser-bolt", k: 0.07, tint: "#7a6bff", lift: 26 },
     Steel: { id: "projectiles/energy-disc", k: 0.065, tint: "#b8c4d6", lift: 26 },
+    Normal: { id: "projectiles/energy-disc", k: 0.065, tint: "#efe6c8", lift: 26 },
+    Fighting: { id: "projectiles/energy-disc", k: 0.07, tint: "#e8683c", lift: 26 },
+    Bug: { id: "projectiles/arrow", k: 0.09, tint: "#a8c93a", lift: 26 },
+    Flying: { id: "projectiles/arrow", k: 0.09, tint: "#d8ecff", lift: 26 },
+    Ground: { id: "projectiles/bullet-tracer", k: 0.05, tint: "#b08a5a", lift: 22 },
+    Rock: { id: "projectiles/rocket", k: 0.04, tint: "#b8a888", lift: 24 },
+    Poison: { id: "projectiles/plasma-shot", k: 0.07, tint: "#a43cc8", lift: 26 },
+    // Grass keeps its leaf art
   };
+
+  /** Beams held open by a Pokémon: a stream of pixel art from its mouth. */
+  private static STREAM: Record<string, { id: PxId; tint?: string }> = {
+    Fire: { id: "fire/flamethrower" },
+    Water: { id: "water/water-jet" },
+    Ice: { id: "ice/frost-breath" },
+    Electric: { id: "arcane/arcane-beam", tint: "#ffe14d" },
+    Psychic: { id: "arcane/arcane-beam", tint: "#e86bff" },
+    Fairy: { id: "arcane/arcane-beam", tint: "#ff9fd8" },
+    Ghost: { id: "arcane/arcane-beam", tint: "#8a6ad8" },
+    Dark: { id: "arcane/arcane-beam", tint: "#7a5ac8" },
+    Steel: { id: "arcane/arcane-beam", tint: "#b8c4d6" },
+    Dragon: { id: "fire/fire-breath", tint: "#7a6bff" },
+    Poison: { id: "fire/fire-breath", tint: "#a43cc8" },
+  };
+  private pxStreams = new Set<number>();
+  private pxDrawn = new Set<string>();
+  private fpose = new Map<number, { dx: number; dy: number; size: number; im: Pic; id: string; dir: number }>();
+  private silh = new Map<string, { w: number; h: number; data: Uint8Array } | null>();
+
+  /** The outline of a Pokémon's picture, as a small mask the status marks can hug. */
+  private silhouette(id: string, im: Pic) {
+    if (this.silh.has(id)) return this.silh.get(id)!;
+    let out: { w: number; h: number; data: Uint8Array } | null = null;
+    try {
+      const iw = picW(im), ih = picH(im), M = 34, sc = M / Math.max(iw, ih, 1);
+      const w = Math.max(8, Math.round(iw * sc)), h = Math.max(8, Math.round(ih * sc));
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const x = c.getContext("2d", { willReadFrequently: true })!;
+      x.drawImage(im, 0, 0, w, h);
+      const d = x.getImageData(0, 0, w, h).data;
+      const data = new Uint8Array(w * h);
+      let n = 0;
+      for (let i = 0; i < w * h; i++) if (d[i * 4 + 3]! > 70) { data[i] = 1; n++; }
+      if (n >= 40) out = { w, h, data };
+      else if (im instanceof HTMLCanvasElement) return null; // a moving picture caught on an empty frame: look again later
+    } catch {
+      out = null; // a picture from another site that may not be read: the plain body is used
+    }
+    if (this.silh.size > 300) this.silh.clear();
+    this.silh.set(id, out);
+    return out;
+  }
+
+  /** Which way a shot or a beam crosses the screen. In the player views the picture faces the camera, so the heading is turned to match. */
+  private screenAng(vx: number, vy: number) {
+    if (!this.v3) return Math.atan2(vy, vx);
+    const sx = vx * -this.c3.fy + vy * this.c3.fx, sd = vx * this.c3.fx + vy * this.c3.fy;
+    return Math.atan2(-sd * 0.45, sx);
+  }
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
@@ -1164,29 +1224,58 @@ export class ArenaRenderer {
       n++;
       const { sp, sh } = px;
       const k = Math.max(0.55, Math.min(2.0, p.r * sp.k * 1.7));
-      let ang = Math.atan2(p.vy, p.vx);
-      if (this.v3) {
-        // the picture faces the camera, so the heading is turned into the way the shot crosses the screen
-        const sx = p.vx * -this.c3.fy + p.vy * this.c3.fx, sd = p.vx * this.c3.fx + p.vy * this.c3.fy;
-        ang = Math.atan2(-sd * 0.45, sx);
-      }
+      const ang = this.screenAng(p.vx, p.vy);
       const dy = sp.round ? (sh.oy - sh.h * 0.5) * k : 0;
       things.push({ y: dk(p.x, p.y) + 0.4, draw: () => this.pxAt(g, p.x, p.y, sp.lift, () => P.drawSheet(g, sh, this.t, k, sp.round ? 0 : ang, false, 0, dy)) });
     }
-    // status marks, on the player and the ones near
+    // beams being held open: a stream from the mouth
+    this.pxStreams.clear();
+    if (P.tier < 3) {
+      for (const f of S.fighters) {
+        if (!f.alive || !f.channel) continue;
+        const mv = moveOf(f, f.channel.slot);
+        const sp = ArenaRenderer.STREAM[mv.type];
+        if (!sp) continue;
+        const sh = P.sheet(sp.id, sp.tint);
+        if (!sh?.ready) continue;
+        this.pxStreams.add(f.id);
+        const { dx, dy } = f.channel;
+        const k = Math.max(0.7, Math.min(1.3, (mv.range ?? 260) / (sh.w - sh.ox)));
+        const mx = f.x + dx * f.r * 0.8, my = f.y + dy * f.r * 0.8;
+        const ang = this.screenAng(dx, dy);
+        const a = Math.min(1, f.channel.t / 0.12);
+        things.push({ y: dk(mx, my) + 0.3, draw: () => this.pxAt(g, mx, my, 24, () => { g.save(); g.globalAlpha *= a; P.drawSheet(g, sh, this.t + f.id * 0.21, k, ang); g.restore(); }) });
+      }
+    }
+    // status marks, hugging each Pokémon's own outline (the plain body is used until its picture is known)
+    this.pxDrawn.clear();
     if (P.tier < 2) {
       for (const f of S.fighters) {
         if (!f.alive) continue;
         let shown = 0;
+        const pose = this.fpose.get(f.id);
+        const sil = pose ? this.silhouette(pose.id, pose.im) : null;
+        const body = sil && pose ? { key: "s:" + pose.id, actor: () => actorFromMask(sil.w, sil.h, sil.data) } : undefined;
         for (const st of ArenaRenderer.STATUSPX) {
           if (shown >= 2) break;
           if (!st.when(f)) continue;
-          const sh = P.sheet(st.id);
+          const sh = P.sheet(st.id, undefined, body);
           if (!sh?.ready) continue;
           shown++;
-          // your own marks are drawn smaller in the player views, so they do not cover the screen
-          const k = f.r * 0.1 * (f.dyna > 0 ? 1.6 : 1) * (f.isPlayer && this.v3 ? 0.6 : 1) * (st.id === "status/haste" ? 0.7 : 1);
-          things.push({ y: dk(f.x, f.y) + 0.5, draw: () => this.pxAt(g, f.x, f.y + f.r * 0.5, 0, () => { g.save(); g.globalAlpha *= st.a; P.drawSheet(g, sh, this.t + f.id * 0.37, k); g.restore(); }) });
+          this.pxDrawn.add(f.id + ":" + st.id);
+          let k: number, ax: number, ay: number, flip = false;
+          if (sil && pose) {
+            k = pose.size / Math.max(sil.w, sil.h);
+            ax = f.x + pose.dx;
+            ay = f.y + pose.dy - pose.size * 0.05 + (sil.h * k) / 2; // the picture is centred a little above the feet point
+            flip = pose.dir < 0;
+          } else {
+            k = f.r * 0.1 * (f.dyna > 0 ? 1.6 : 1) * (f.isPlayer && this.v3 ? 0.6 : 1);
+            ax = f.x;
+            ay = f.y + f.r * 0.5;
+          }
+          if (st.id === "status/haste") k *= 0.7;
+          things.push({ y: dk(f.x, f.y) + 0.5, draw: () => this.pxAt(g, ax, ay, 0, () => { g.save(); g.globalAlpha *= st.a; P.drawSheet(g, sh, this.t + f.id * 0.37, k, 0, flip); g.restore(); }) });
         }
       }
     }
@@ -4910,33 +4999,42 @@ export class ArenaRenderer {
     g.save();
     if (st.brn > 0) {
       badges.push(["BRN", "#ff7a2e"]);
+      if (!this.pxDrawn.has(f.id + ":status/burning")) { // the pixel-art mark replaces this look
       g.globalCompositeOperation = "lighter";
       for (let k = 0; k < 4; k++) { const bx = f.x + (k - 1.5) * f.r * 0.55, h = f.r * (0.7 + Math.sin(t * 14 + k * 2) * 0.25); g.fillStyle = k % 2 ? "#ffb04d" : "#ff5a1a"; g.beginPath(); g.moveTo(bx - 5, f.y + f.r * 0.3); g.quadraticCurveTo(bx - 2, f.y - h * 0.5, bx, f.y - h); g.quadraticCurveTo(bx + 3, f.y - h * 0.4, bx + 5, f.y + f.r * 0.3); g.fill(); }
       g.globalCompositeOperation = "source-over";
+      }
     }
     if (st.psn > 0) {
       badges.push(["PSN", "#b259d6"]);
+      if (!this.pxDrawn.has(f.id + ":status/poisoned")) { // the pixel-art mark replaces this look
       for (let k = 0; k < 4; k++) { const ph = (t * 0.9 + k * 0.25) % 1; g.globalAlpha = 1 - ph; g.strokeStyle = "#d28bff"; g.fillStyle = "rgba(160,70,210,.35)"; g.lineWidth = 2; g.beginPath(); g.arc(f.x + Math.sin(k * 3 + t * 2) * f.r * 0.8, f.y + f.r * 0.2 - ph * f.r * 2, 3 + (k % 2) * 2, 0, Math.PI * 2); g.fill(); g.stroke(); }
       g.globalAlpha = 1;
+      }
     }
     if (st.par > 0) {
       badges.push(["PAR", "#e8c400"]);
+      if (!this.pxDrawn.has(f.id + ":status/stunned")) { // the pixel-art mark replaces this look
       g.globalCompositeOperation = "lighter"; g.strokeStyle = "#ffe14d"; g.lineWidth = 2; g.lineJoin = "round";
       const sd = Math.floor(t * 20);
       for (let b = 0; b < 3; b++) { g.beginPath(); for (let i = 0; i <= 5; i++) { const v = Math.sin((b * 9 + i) * 12.9 + sd * 78.2) * 43758.5; const j = v - Math.floor(v); const an = (b / 3) * Math.PI * 2 + i * 0.5 + j * 0.4; const rr = f.r * (0.8 + j * 0.5); const x = f.x + Math.cos(an) * rr, y = f.y - f.r * 0.2 + Math.sin(an) * rr * 0.8; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
       g.globalCompositeOperation = "source-over";
+      }
     }
     if (st.frz > 0) {
       badges.push(["FRZ", "#5fc8f0"]);
+      if (!this.pxDrawn.has(f.id + ":status/frozen")) { // the pixel-art mark replaces this look
       // an ice block with a shine and cracks over the whole Pokémon
       const w = f.r * 1.7, h = f.r * 2.0;
       g.fillStyle = "rgba(160,225,255,.45)"; g.strokeStyle = "#e8fbff"; g.lineWidth = 2.5;
       g.beginPath(); g.moveTo(f.x - w, f.y - h * 0.8); g.lineTo(f.x + w * 0.8, f.y - h); g.lineTo(f.x + w, f.y + h * 0.3); g.lineTo(f.x + w * 0.6, f.y + h * 0.6); g.lineTo(f.x - w * 0.9, f.y + h * 0.55); g.closePath(); g.fill(); g.stroke();
       g.strokeStyle = "rgba(255,255,255,.85)"; g.lineWidth = 3; g.beginPath(); g.moveTo(f.x - w * 0.6, f.y - h * 0.55); g.lineTo(f.x - w * 0.2, f.y - h * 0.8); g.stroke();
       g.strokeStyle = "rgba(255,255,255,.5)"; g.lineWidth = 1.5; g.beginPath(); g.moveTo(f.x + w * 0.1, f.y - h * 0.3); g.lineTo(f.x + w * 0.35, f.y); g.lineTo(f.x + w * 0.1, f.y + h * 0.3); g.stroke();
+      }
     }
     if (st.cnf > 0) {
       badges.push(["CNF", "#ff7ad0"]);
+      if (!this.pxDrawn.has(f.id + ":status/confused")) { // the pixel-art mark replaces this look
       // dizzy stars circling the head and a wobbling question mark
       for (let k = 0; k < 3; k++) {
         const an = t * 4 + k * 2.094, x = f.x + Math.cos(an) * f.r * 0.95, y = top + Math.sin(an) * f.r * 0.28;
@@ -4944,11 +5042,14 @@ export class ArenaRenderer {
         g.beginPath(); for (let i = 0; i < 10; i++) { const rr = i % 2 ? 2.5 : 6; const aa = (i / 10) * Math.PI * 2 - Math.PI / 2; i ? g.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr) : g.moveTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr); } g.closePath(); g.fill();
       }
       g.globalAlpha = 1; g.fillStyle = "#ffe6fb"; g.font = "800 15px system-ui, sans-serif"; g.textAlign = "center"; g.fillText("?", f.x + Math.sin(t * 6) * 4, top - 12);
+      }
     }
     if (st.slp > 0) {
       badges.push(["SLP", "#8fa4ff"]);
+      if (!this.pxDrawn.has(f.id + ":status/sleep")) { // the pixel-art mark replaces this look
       for (let k = 0; k < 3; k++) { const ph = (t * 0.7 + k / 3) % 1; g.globalAlpha = Math.sin(ph * Math.PI); g.fillStyle = "#cfd8ff"; g.font = `800 ${11 + k * 4}px system-ui, sans-serif`; g.textAlign = "center"; g.fillText("Z", f.x + f.r * 0.5 + ph * 18 + k * 4, top + 6 - ph * 28 - k * 4); }
       g.globalAlpha = 0.25; g.fillStyle = "#1a2050"; g.beginPath(); g.ellipse(f.x, f.y - f.r * 0.1, f.r * 1.2, f.r * 1.3, 0, 0, Math.PI * 2); g.fill();
+      }
     }
     // the badge row: one small pill per condition, above the head
     if (badges.length) {
@@ -5738,7 +5839,7 @@ export class ArenaRenderer {
           g.fill();
         });
       }
-      if (this.pxShot(p)) continue; // drawn as a pixel-art shot instead (see pixelWorld)
+      if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
       if (p.mv.startsWith("megashuriken")) {
         const ash = p.mv.endsWith(":ash");
         const held = (p.hold ?? 0) > 0;
@@ -6882,6 +6983,7 @@ export class ArenaRenderer {
         const T = this.q > 0.88 && side > 0.35 ? clamp(size * 0.05, 2.5, 6) * side * Math.min(1, Math.abs(faceN)) ** 3 : 0;
         this.shaded(g, px, pyB, size * 1.1 + 34, drawMain, T ? [-Math.sign(cf) * T, T * 0.25] : undefined);
       } else drawMain(g);
+      this.fpose.set(f.id, { dx: px - f.x, dy: pyB - f.y, size, im, id: usedId, dir: faceN });
       if (f.flash > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#ffffff", Math.min(1, f.flash * 9), wk, rigA, wp);
       else if (f.status.frz > 0) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, "#8ee8ff", 0.55, wk, rigA, wp);
       else if (f.tera) this.body(g, im, usedId, px, pyB, size, faceN, sxx, syy, rot + spin, col(f.tera.type), 0.3 + Math.sin(t * 4) * 0.08, wk, rigA, wp);

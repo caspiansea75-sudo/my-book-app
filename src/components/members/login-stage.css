@@ -749,3 +749,24 @@
     box-shadow: none;
   }
 }
+
+/* Moving between Log in and New member: no second entrance. The ghost site and the window are simply there,
+   and only the form contents ease in. */
+.ls-stage.is-resumed .ls-site,
+.ls-stage.is-resumed .ls-window {
+  animation: none;
+}
+.ls-stage.is-resumed .ls-body {
+  animation: ls-body-in 260ms ease both;
+}
+@keyframes ls-body-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ls-stage.is-resumed .ls-body {
+    animation: none;
+  }
+}

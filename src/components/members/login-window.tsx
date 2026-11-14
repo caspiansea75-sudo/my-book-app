@@ -1,4 +1,4 @@
-import type { CSSProperties, FormEvent, ReactNode, RefObject } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from "react";
 import { ArrowRight, BookOpen, Eye, EyeOff, Loader2, Lock, LogIn, ShieldCheck, Smile, User, UserPlus, UserRound } from "lucide-react";
 import { FxWords } from "@/components/media/fx";
 import { LoginBackdrop } from "@/components/members/login-backdrop";
@@ -35,9 +35,22 @@ export type LoginWindowProps = {
  * Sign-in as a floating glass window over a ghost of the main site.
  * Pure presentation: the form logic lives in AuthForm.
  */
+/**
+ * Log in and New member are two pages, so moving between them mounts a new stage. The slow entrance (the ghost site fading in
+ * from blur, then the window rising) is for the first arrival only; replaying it on every tab switch blanked the screen.
+ */
+let introPlayed = false;
+
 export function LoginWindow(p: LoginWindowProps) {
   const isLogin = p.mode === "login";
-  const stageClass = ["ls-stage", p.shake ? "is-shake" : "", p.leaving ? "is-leaving" : ""].filter(Boolean).join(" ");
+  const [resumed] = useState(() => introPlayed);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      introPlayed = true;
+    }, 1400);
+    return () => window.clearTimeout(id);
+  }, []);
+  const stageClass = ["ls-stage", resumed ? "is-resumed" : "", p.shake ? "is-shake" : "", p.leaving ? "is-leaving" : ""].filter(Boolean).join(" ");
 
   return (
     <main
