@@ -1262,7 +1262,10 @@ export class ArenaRenderer {
         const mx = f.x + dx * f.r * 0.8, my = f.y + dy * f.r * 0.8;
         const ang = this.screenAng(dx, dy);
         const a = Math.min(1, f.channel.t / 0.12);
-        things.push({ y: dk(mx, my) + 0.3, draw: () => this.pxAt(g, mx, my, 24, () => { g.save(); g.globalAlpha *= a; P.drawSheet(g, sh, this.t + f.id * 0.21, k, ang); g.restore(); }) });
+        // the art's body sits a little above the point it is drawn from: bring it down onto the line the old stream ran along
+        const body = (({ "arcane/arcane-beam": 25.5, "fire/fire-breath": 18.2, "water/water-jet": -6.7, "ice/frost-breath": -2.3 } as Record<string, number>)[sp.id] ?? 0) * k;
+        const lift = this.v3 ? 26 : 2;
+        things.push({ y: dk(mx, my) + 0.3, draw: () => this.pxAt(g, mx, my, lift, () => { g.save(); g.globalAlpha *= a; P.drawSheet(g, sh, this.t + f.id * 0.21, k, ang, false, 0, body); g.restore(); }) });
       }
     }
     // status marks, hugging each Pokémon's own outline (the plain body is used until its picture is known)
@@ -1407,8 +1410,11 @@ export class ArenaRenderer {
         if (at === "line") {
           // a beam's body sits a little above the point it is drawn from; bring its middle down onto the line the move strikes along
           const body = ({ "arcane/arcane-beam": 25.5, "fire/fire-breath": 18.2, "water/water-jet": -6.7, "ice/frost-breath": -2.3 } as Record<string, number>)[id] ?? 0;
-          const q = { ...base, delay: boltWind, angle: o.ang === false ? 0 : ang, lift: (o.lift ?? 6) - body * scale, max: o.dur ?? o.max ?? 0.55 };
-          this.pfx.spawn(pid, x + cx * 26, y + cy * 26, { ...q, scale });
+          const q = { ...base, delay: boltWind, angle: o.ang === false ? 0 : ang, lift: o.lift ?? 6, max: o.dur ?? o.max ?? 0.55 };
+          // from the player cameras the same art sits differently on its line, so the correction is smaller there
+          const v3k = this.v3 ? ({ "arcane/arcane-beam": 0.85, "fire/fire-breath": 0.14, "water/water-jet": 0, "ice/frost-breath": 0 } as Record<string, number>)[id] ?? 0 : 1;
+          // slid sideways in the world (not just up) so it holds for any aim and from the player cameras
+          this.pfx.spawn(pid, x + cx * 26 - cy * body * scale * v3k, y + cy * 26 + cx * body * scale * v3k, { ...q, scale });
         } else if (at === "end") {
           const ex = Math.max(0, Math.min(A.W, x + cx * range));
           const ey = Math.max(0, Math.min(A.H, y + cy * range));
