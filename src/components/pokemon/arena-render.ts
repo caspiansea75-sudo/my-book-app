@@ -39,7 +39,8 @@ import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, draw
 import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 import { setLod } from "./arena-lod";
-import { PixelFxLayer, actorFromMask, preloadPixelfx, type PxId } from "./arena-pixelfx";
+import { PixelFxLayer, actorFromMask, preloadPixelfx, targetX, type PxId } from "./arena-pixelfx";
+import { MOVE_FX, STRIKE_AT, type FxE } from "./arena-movefx";
 
 const BEAM_PAL: Record<string, [string, string, string]> = {
   Grass: ["#7be04a", "#fff3a0", "#ffffff"],
@@ -1144,12 +1145,20 @@ export class ArenaRenderer {
   private pxStreams = new Set<number>();
   private pxDrawn = new Set<string>();
   private fpose = new Map<number, { dx: number; dy: number; size: number; im: Pic; id: string; dir: number }>();
-  private silh = new Map<string, { w: number; h: number; data: Uint8Array } | null>();
+  private silh = new Map<string, { w: number; h: number; data: Uint8Array; pix: Uint32Array } | null>();
+
+  /** Where an effect shaped to a Pokémon's outline stands, and how big: its feet point and the size of one outline pixel. */
+  private bodyAnchor(x: number, y: number, pose: { dx: number; dy: number; size: number }, sil: { w: number; h: number }) {
+    const k = pose.size / Math.max(sil.w, sil.h);
+    // from above the picture is centred a little over the feet point; in the player views it stands on the floor point itself
+    if (this.v3) return { k, ax: x, ay: y };
+    return { k, ax: x + pose.dx, ay: y + pose.dy - pose.size * 0.05 + (sil.h * k) / 2 };
+  }
 
   /** The outline of a Pokémon's picture, as a small mask the status marks can hug. */
   private silhouette(id: string, im: Pic) {
     if (this.silh.has(id)) return this.silh.get(id)!;
-    let out: { w: number; h: number; data: Uint8Array } | null = null;
+    let out: { w: number; h: number; data: Uint8Array; pix: Uint32Array } | null = null;
     try {
       const iw = picW(im), ih = picH(im), M = 34, sc = M / Math.max(iw, ih, 1);
       const w = Math.max(8, Math.round(iw * sc)), h = Math.max(8, Math.round(ih * sc));
@@ -1160,9 +1169,15 @@ export class ArenaRenderer {
       x.drawImage(im, 0, 0, w, h);
       const d = x.getImageData(0, 0, w, h).data;
       const data = new Uint8Array(w * h);
+      const pix = new Uint32Array(w * h);
       let n = 0;
-      for (let i = 0; i < w * h; i++) if (d[i * 4 + 3]! > 70) { data[i] = 1; n++; }
-      if (n >= 40) out = { w, h, data };
+      for (let i = 0; i < w * h; i++)
+        if (d[i * 4 + 3]! > 70) {
+          data[i] = 1;
+          n++;
+          pix[i] = (255 << 24) | (d[i * 4 + 2]! << 16) | (d[i * 4 + 1]! << 8) | d[i * 4]!; // the pixel's own colour, as the effects read it
+        }
+      if (n >= 40) out = { w, h, data, pix };
       else if (im instanceof HTMLCanvasElement) return null; // a moving picture caught on an empty frame: look again later
     } catch {
       out = null; // a picture from another site that may not be read: the plain body is used
@@ -1182,7 +1197,8 @@ export class ArenaRenderer {
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
     if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || DRAKE_SHOTS.has(p.mv)) return null;
-    const sp = ArenaRenderer.SHOT[p.type];
+    const ms = MOVE_FX[p.mv]?.shot;
+    const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
     if (!sp || this.pfx.tier >= 3) return null;
     const sh = this.pfx.sheet(sp.id, sp.tint);
     return sh?.ready ? { sp, sh } : null;
@@ -1215,6 +1231,7 @@ export class ArenaRenderer {
   private pixelWorld(S: State, things: { y: number; draw: () => void }[], g: CanvasRenderingContext2D, dk: (x: number, y: number) => number) {
     const P = this.pfx;
     P.pump(P.tier >= 2 ? 0.8 : 1.8);
+    for (const f of S.fighters) this.preloadMoves(f);
     // shots
     let n = 0;
     for (const p of S.projs) {
@@ -1234,13 +1251,14 @@ export class ArenaRenderer {
       for (const f of S.fighters) {
         if (!f.alive || !f.channel) continue;
         const mv = moveOf(f, f.channel.slot);
-        const sp = ArenaRenderer.STREAM[mv.type];
+        const ms = MOVE_FX[mv.id]?.stream;
+        const sp = ms ? { id: ms.id as PxId, tint: ms.tint ?? undefined, s: ms.s } : ArenaRenderer.STREAM[mv.type] ? { ...ArenaRenderer.STREAM[mv.type]!, s: 1 } : null;
         if (!sp) continue;
         const sh = P.sheet(sp.id, sp.tint);
         if (!sh?.ready) continue;
         this.pxStreams.add(f.id);
         const { dx, dy } = f.channel;
-        const k = Math.max(0.7, Math.min(1.3, (mv.range ?? 260) / (sh.w - sh.ox)));
+        const k = Math.max(0.7, Math.min(1.3, (mv.range ?? 260) / (sh.w - sh.ox))) * sp.s;
         const mx = f.x + dx * f.r * 0.8, my = f.y + dy * f.r * 0.8;
         const ang = this.screenAng(dx, dy);
         const a = Math.min(1, f.channel.t / 0.12);
@@ -1249,7 +1267,9 @@ export class ArenaRenderer {
     }
     // status marks, hugging each Pokémon's own outline (the plain body is used until its picture is known)
     this.pxDrawn.clear();
-    if (P.tier < 2) {
+    // the pixel status marks are switched off: statuses keep their original art. Set PIXEL_STATUS_MARKS to true to bring them back.
+    const PIXEL_STATUS_MARKS = false as boolean;
+    if (PIXEL_STATUS_MARKS && P.tier < 2) {
       for (const f of S.fighters) {
         if (!f.alive) continue;
         let shown = 0;
@@ -1262,12 +1282,10 @@ export class ArenaRenderer {
           const sh = P.sheet(st.id, undefined, body);
           if (!sh?.ready) continue;
           shown++;
-          this.pxDrawn.add(f.id + ":" + st.id);
+          // the old status art is kept too, so a status shows both looks (add f.id + ":" + st.id to pxDrawn to hide the old one)
           let k: number, ax: number, ay: number, flip = false;
           if (sil && pose) {
-            k = pose.size / Math.max(sil.w, sil.h);
-            ax = f.x + pose.dx;
-            ay = f.y + pose.dy - pose.size * 0.05 + (sil.h * k) / 2; // the picture is centred a little above the feet point
+            ({ k, ax, ay } = this.bodyAnchor(f.x, f.y, pose, sil));
             flip = pose.dir < 0;
           } else {
             k = f.r * 0.1 * (f.dyna > 0 ? 1.6 : 1) * (f.isPlayer && this.v3 ? 0.6 : 1);
@@ -1308,14 +1326,128 @@ export class ArenaRenderer {
     return P.hasWeather;
   }
 
+  private pxSeen = new Set<string>();
+  /** Start loading the art for the moves a fighter brought, once. */
+  private preloadMoves(f: Fighter) {
+    const list = f.loadout ?? f.sp.moves;
+    const key = list.join(",");
+    if (this.pxSeen.has(key)) return;
+    this.pxSeen.add(key);
+    const ids = new Set<string>();
+    for (const m of list) {
+      const d = MOVE_FX[m];
+      if (!d) continue;
+      if (d.shot) ids.add(d.shot.id);
+      if (d.stream) ids.add(d.stream.id);
+      for (const l of [d.cast, d.hit, d.blast]) l?.forEach((e) => ids.add(e[0]));
+    }
+    if (ids.size) preloadPixelfx([...ids]);
+  }
+
+  /** Play a move's list of effects. `at` is where it lands or strikes; `ctx` says what happened. */
+  private pxMoveFx(list: FxE[], ctx: { kind: "hit" | "blast" | "cast"; x: number; y: number; flip?: boolean; r?: number; mv?: string; id?: number; dir?: number; tx?: number; ty?: number; byPlayer?: boolean }) {
+    const P = this.pfx;
+    const md = ctx.mv ? MOVES[ctx.mv] : undefined;
+    const A = ARENA;
+    const lobWind = (md?.windup ?? 0.55) * (ctx.byPlayer ? 0.6 : 1);
+    const boltWind = (md?.windup ?? 0.5) * (ctx.byPlayer ? 0.35 : 1);
+    const mul = ctx.kind === "hit" ? 1.5 : 1.3;
+    const rk = ctx.r ? Math.max(0.4, Math.min(1.5, ctx.r / 110)) : 1;
+    for (const [id, s0, tint, o] of list) {
+      const pid = id as PxId;
+      let scale = s0 * mul * (ctx.kind === "blast" && o.rel !== 0 ? rk : 1);
+      const base = { tint: tint ?? undefined, lift: o.lift ?? 0, max: o.max, delay: 0, flip: !!ctx.flip, speed: 1, angle: 0 } as { tint?: string; lift: number; max?: number; delay: number; flip: boolean; speed: number; angle: number; extra?: Record<string, unknown> };
+      let x = ctx.x;
+      let y = ctx.y;
+      const at = o.at ?? "self";
+      const dir = ctx.dir ?? 0;
+      const range = Math.min(md?.range ?? 480, 600);
+      const place = (px: number, py: number, d: number, n: number) => {
+        const q = { ...base, delay: d };
+        let sx = px;
+        const tx = targetX(id);
+        if (tx && ctx.kind === "hit") sx = px - (ctx.flip ? -1 : 1) * tx * scale;
+        const yy = py + (ctx.kind === "blast" ? 8 : ctx.kind === "hit" ? 10 : 6);
+        if (o.strike) {
+          const w = at === "land" ? lobWind : boltWind;
+          q.speed = Math.max(0.6, Math.min(3, (STRIKE_AT[id] ?? 0.5) / Math.max(0.15, w)));
+          q.delay = 0;
+          q.max = q.max ?? 2.2;
+        }
+        this.pfx.spawn(pid, sx, yy, { ...q, scale: scale * (n > 1 ? 0.95 : 1) });
+      };
+      if (o.actor) {
+        const pose = ctx.id !== undefined ? this.fpose.get(ctx.id) : undefined;
+        const sil = pose ? this.silhouette(pose.id, pose.im) : null;
+        if (pose && sil) {
+          const an = this.bodyAnchor(ctx.x, ctx.y, pose, sil);
+          const k = an.k * s0;
+          P.spawn(pid, an.ax, an.ay, { ...base, scale: k, flip: pose.dir < 0, max: o.max, extra: { actor: actorFromMask(sil.w, sil.h, sil.data, new Uint32Array(sil.w * sil.h)) } });
+        } else P.spawn(pid, ctx.x, ctx.y + 10, { ...base, scale: scale * 0.8, max: o.max });
+        continue;
+      }
+      if (at === "self") place(x, y, 0, 1);
+      else if (at === "land" || at === "aim") {
+        let lx = ctx.tx ?? x;
+        let ly = ctx.ty ?? y;
+        if (at === "land") {
+          const d = Math.hypot(lx - x, ly - y);
+          const k = d > (md?.range ?? 320) ? (md?.range ?? 320) / d : 1;
+          lx = x + (lx - x) * k;
+          ly = y + (ly - y) * k;
+        }
+        lx = Math.max(0, Math.min(A.W, lx));
+        ly = Math.max(0, Math.min(A.H, ly));
+        if (!o.strike && at === "land") base.delay = lobWind;
+        place(lx, ly, base.delay, 1);
+      } else {
+        const cx = Math.cos(dir);
+        const cy = Math.sin(dir);
+        const ang = this.screenAng(cx, cy);
+        if (at === "line") {
+          const q = { ...base, delay: boltWind, angle: o.ang === false ? 0 : ang, lift: o.lift ?? 24, max: o.dur ?? o.max ?? 0.55 };
+          this.pfx.spawn(pid, x + cx * 26, y + cy * 26, { ...q, scale });
+        } else if (at === "end") {
+          const ex = Math.max(0, Math.min(A.W, x + cx * range));
+          const ey = Math.max(0, Math.min(A.H, y + cy * range));
+          this.pfx.spawn(pid, ex, ey + 6, { ...base, delay: boltWind, scale });
+        } else if (at === "along") {
+          const n = Math.max(1, o.n ?? 3);
+          for (let i = 0; i < n; i++) {
+            const f = ((i + 1) / n) * 0.92;
+            const px = Math.max(0, Math.min(A.W, x + cx * range * f));
+            const py = Math.max(0, Math.min(A.H, y + cy * range * f));
+            const q = { ...base, delay: boltWind + i * 0.07 };
+            if (o.strike) {
+              q.speed = Math.max(0.6, Math.min(3, (STRIKE_AT[id] ?? 0.5) / Math.max(0.15, boltWind)));
+              q.delay = i * 0.07;
+              q.max = q.max ?? 2.0;
+            }
+            this.pfx.spawn(pid, px, py + 6, { ...q, scale });
+          }
+        }
+      }
+    }
+  }
+
   /** Pixel-art effects (lib/pixelfx) laid over the usual hit, blast, heal and power-up looks. */
   private pixelEvent(e: Ev, mine?: Fighter) {
     if (this.q < 0.45) return; // a slow device keeps only the usual looks
     // hits and blasts are drawn a bit larger than life so the pixels read at a glance
     const go = (id: PxId, x: number, y: number, o: Parameters<PixelFxLayer["spawn"]>[3]) => this.pfx.spawn(id, x, y, { ...o, scale: o.scale * (e.t === "hit" ? 1.5 : 1.3) });
     switch (e.t) {
+      case "cast": {
+        const mf = MOVE_FX[e.mv]?.cast;
+        if (mf) this.pxMoveFx(mf, { kind: "cast", x: e.x, y: e.y, mv: e.mv, id: e.id, dir: e.dir, tx: e.tx, ty: e.ty, byPlayer: e.byPlayer });
+        break;
+      }
       case "hit": {
         if (e.dmg <= 0) break;
+        const mh = e.mv ? MOVE_FX[e.mv]?.hit : undefined;
+        if (mh) {
+          this.pxMoveFx(mh, { kind: "hit", x: e.x, y: e.y, flip: e.dx < 0, mv: e.mv });
+          break;
+        }
         const o = { lift: 30, flip: e.dx < 0, tint: undefined as string | undefined };
         if (e.crit) go("impacts/crit-hit", e.x, e.y, { ...o, scale: 0.55, speed: 1.1 });
         else if (e.heavy && (e.type === "Ground" || e.type === "Rock" || e.type === "Fighting")) go("impacts/ground-slam", e.x, e.y + 6, { scale: 0.5, speed: 1.6, max: 1.1 });
@@ -1325,6 +1457,11 @@ export class ArenaRenderer {
         break;
       }
       case "explode": {
+        const mb = MOVE_FX[e.mv ?? e.fx ?? ""]?.blast;
+        if (mb) {
+          this.pxMoveFx(mb, { kind: "blast", x: e.x, y: e.y, r: e.r, mv: e.mv });
+          break;
+        }
         const r = e.r;
         const k = Math.max(0.35, Math.min(1.5, r / 110));
         const base = { lift: 0 };
