@@ -278,6 +278,7 @@ export const MOVE_FX: Record<string, MoveFx> = {
   "darkpulse": {"shot":{"id":"shadow/void-orb","k":0.018,"tint":"#7a5ac8","round":true,"lift":26},"hit":[["shadow/dark-explosion",0.1,"#7a5ac8",{}]]},
   "stoneedge": {"shot":{"id":"pickups/crystal-shard","k":0.091,"tint":"#b8a888","round":true,"lift":26},"hit":[["ice/ice-shatter",0.3,"#b8a888",{}]]},
   "airslash": {"shot":{"id":"projectiles/energy-disc","k":0.06,"tint":"#cfe4ff","round":false,"lift":26},"hit":[["impacts/hit-spark",0.4,"#ffffff",{}]]},
+  "watershuriken": {"shot":{"id":"projectiles/water-shuriken","k":0.095,"tint":null,"round":false,"lift":26},"hit":[["water/splash",0.25,"#6ab8ff",{}]]},
   "hurricanegale": {"shot":{"id":"ice/blizzard-vortex","k":0.0338,"tint":"#b8d8ff","round":true,"lift":26},"hit":[["holy/feather-burst",0.3,"#cfe4ff",{}]]},
   "swarmburst": {"shot":{"id":"critters/butterfly","k":0.0455,"tint":"#a8c93a","round":true,"lift":26},"hit":[["impacts/hit-spark",0.3,"#d8e86a",{}]]},
   "originpulse": {"shot":{"id":"scifi/energy-core","k":0.0494,"tint":"#4a9aff","round":true,"lift":26},"hit":[["water/splash",0.3,"#4a9aff",{}],["arcane/mana-burst",0.15,"#9fd0ff",{}]]},

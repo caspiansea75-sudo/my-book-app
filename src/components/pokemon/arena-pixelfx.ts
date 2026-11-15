@@ -536,7 +536,7 @@ export class PixelFxLayer {
     if (!sh.ready) return false;
     const f = sh.frames[Math.floor(t * sh.fps) % sh.n]!;
     g.save();
-    g.imageSmoothingEnabled = false;
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; // smooth, not blocky: the art is built small and enlarged
     if (angle) g.rotate(angle);
     if (flip) g.scale(-1, 1);
     g.drawImage(f, -sh.ox * k + dx, -sh.oy * k + dy, sh.w * k, sh.h * k);
@@ -582,7 +582,7 @@ export class PixelFxLayer {
     const wx = this.weather;
     if (!wx || this.tier > 0) return;
     g.save();
-    g.imageSmoothingEnabled = false;
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; // smooth, not blocky: the art is built small and enlarged
     g.globalAlpha *= alpha;
     g.drawImage(wx.cv, 0, 0, W, H);
     g.restore();
@@ -655,7 +655,7 @@ export class PixelFxLayer {
         this.paint(l);
         const k = l.o.scale;
         g.save();
-        g.imageSmoothingEnabled = false;
+        g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; // smooth, not blocky: the art is built small and enlarged
         g.drawImage(l.cv, -l.ox * k, -l.oy * k, l.cv.width * k, l.cv.height * k);
         g.restore();
       });

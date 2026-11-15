@@ -1196,7 +1196,7 @@ export class ArenaRenderer {
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
-    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || DRAKE_SHOTS.has(p.mv)) return null;
+    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || DRAKE_SHOTS.has(p.mv)) return null;
     const ms = MOVE_FX[p.mv]?.shot;
     const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
     if (!sp || this.pfx.tier >= 3) return null;
@@ -1315,7 +1315,10 @@ export class ArenaRenderer {
 
   /** The pixel-art weather for the field in play (only while the game runs well). */
   private pixelWeather(g: CanvasRenderingContext2D, S: State) {
+    // switched off: the weather is the original one (tint and falling drops, sand, snow and sun); flip this to bring the pixel art back
+    const PIXEL_WEATHER = false as boolean;
     const P = this.pfx;
+    if (!PIXEL_WEATHER) { P.setWeather(null); return false; }
     const map: Record<string, [PxId, string | undefined, number] | undefined> = {
       rain: ["weather/rain", undefined, 0.8],
       hail: ["weather/snow", undefined, 0.85],
@@ -6009,16 +6012,6 @@ export class ArenaRenderer {
         });
       }
       if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
-      if (p.mv === "watershuriken") {
-        // smooth art (a sharp star of rippling water), spinning as it flies, with spray and sparkles behind it
-        const R = Math.max(20, p.r * 2.2), up = 18, ang = Math.atan2(p.vy, p.vx);
-        this.at(g, p.x, p.y, "mix", () => drawShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, this.t * 16 + p.id, this.t), "p", this.v3 ? 32 : 0);
-        if (Math.random() < 0.8) {
-          const cy0 = p.y - (this.v3 ? 0 : up);
-          for (let i = 0; i < 2; i++) this.parts.push({ kind: i ? "star" : "dot", x: p.x - Math.cos(ang) * R * 0.5 + rnd(-5, 5), y: cy0 - Math.sin(ang) * R * 0.5 + rnd(-5, 5), vx: -Math.cos(ang) * 110 + rnd(-50, 50), vy: -Math.sin(ang) * 110 + rnd(-50, 50), g: i ? 0 : 220, life: rnd(0.3, 0.55), max: 0.55, size: i ? rnd(2.5, 4) : rnd(1.6, 3), grow: 0, color: i ? "#ffffff" : "#bfe8ff", rot: 0, vr: 10 });
-        }
-        continue;
-      }
       if (p.mv.startsWith("megashuriken")) {
         const ash = p.mv.endsWith(":ash");
         const dyna = p.mv.endsWith(":dyna"); // Dynamax Greninja: a huge shuriken over its head that turns orange before it is thrown
