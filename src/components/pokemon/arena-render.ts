@@ -1405,7 +1405,9 @@ export class ArenaRenderer {
         const cy = Math.sin(dir);
         const ang = this.screenAng(cx, cy);
         if (at === "line") {
-          const q = { ...base, delay: boltWind, angle: o.ang === false ? 0 : ang, lift: o.lift ?? 24, max: o.dur ?? o.max ?? 0.55 };
+          // a beam's body sits a little above the point it is drawn from; bring its middle down onto the line the move strikes along
+          const body = ({ "arcane/arcane-beam": 25.5, "fire/fire-breath": 18.2, "water/water-jet": -6.7, "ice/frost-breath": -2.3 } as Record<string, number>)[id] ?? 0;
+          const q = { ...base, delay: boltWind, angle: o.ang === false ? 0 : ang, lift: (o.lift ?? 6) - body * scale, max: o.dur ?? o.max ?? 0.55 };
           this.pfx.spawn(pid, x + cx * 26, y + cy * 26, { ...q, scale });
         } else if (at === "end") {
           const ex = Math.max(0, Math.min(A.W, x + cx * range));
