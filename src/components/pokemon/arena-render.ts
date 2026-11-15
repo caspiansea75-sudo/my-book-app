@@ -21,7 +21,7 @@ import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
 import { DRAKE_BOLTS, DRAKE_SHOTS, drakeFlat, drakeItems, drakeShotLift, drawDrakeBody, drawDrakeGround, type DrakeSig } from "./arena-drake";
 import { pmdEnabled, pmdFrame, type PmdState } from "./arena-pmd";
-import { drawBondShuriken, drawShuriken } from "./arena-shuriken";
+import { drawBondShuriken, drawShuriken, drawWaterKunai } from "./arena-shuriken";
 import { playMegaLook } from "./arena-megafx";
 import { MEGA_MOVES, STYLE_OF_TYPE } from "@/lib/pokemon/arena-megamoves";
 import { PSY_IDS, psyFlat, psyItems, psyLife, type PsySig } from "./arena-psy";
@@ -229,9 +229,9 @@ export class ArenaRenderer {
   private meleeFx = new MeleeFx();
   private clones = new Map<number, number>();
   /** Mega Greninja's giant shuriken while its clones feed it: when it began and how long it takes */
-  private shurForm = new Map<number, { t0: number; dur: number }>();
+  private shurForm = new Map<number, { t0: number; dur: number; dyna?: boolean }>();
   /** where each giant shuriken was last seen, so a splash can burst where it ends */
-  private shurLast = new Map<number, { x: number; y: number; R: number; held: boolean }>();
+  private shurLast = new Map<number, { x: number; y: number; R: number; held: boolean; fire?: boolean }>();
   private dances = new Map<number, { until: number; kind: string }>();
   /** Rocks lifted off the floor by a psychic pulse. */
   private waves: { x: number; y: number; r: number; t: number; life: number; kind: string }[] = [];
@@ -1196,7 +1196,7 @@ export class ArenaRenderer {
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
-    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || DRAKE_SHOTS.has(p.mv)) return null;
+    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || DRAKE_SHOTS.has(p.mv)) return null;
     const ms = MOVE_FX[p.mv]?.shot;
     const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
     if (!sp || this.pfx.tier >= 3) return null;
@@ -1899,8 +1899,8 @@ export class ArenaRenderer {
           for (let i = 0; i < 10; i++) this.parts.push({ kind: "streak", x: e.x ?? 0, y: e.y ?? 0, vx: e.dx * 700 + rnd(-60, 60), vy: e.dy * 700 + rnd(-60, 60), g: 0, life: 0.3, max: 0.3, size: 7, grow: 0, color: i % 2 ? "#ffffff" : "#ff9be6" });
           break;
         case "shurikenForm":
-          this.shurForm.set(e.id, { t0: this.t, dur: e.dur });
-          this.ring(e.x, e.y, "#7fd0ff", 180, 0.6);
+          this.shurForm.set(e.id, { t0: this.t, dur: e.dur, dyna: e.dyna });
+          this.ring(e.x, e.y, e.dyna ? "#ffb060" : "#7fd0ff", e.dyna ? 260 : 180, 0.6);
           break;
         case "buff":
           if (e.fx === "clones") this.clones.set(e.id, this.t + 6);
@@ -4984,6 +4984,29 @@ export class ArenaRenderer {
   }
 
   /** Dragon rushes with their own look: a roaring dragon head (Dragon Rush), triple claw slashes (Dragon Claw), a sweeping tail (Dragon Tail). */
+  /** Greninja's water blade: a kunai of rippling water with a ring at the grip, swung in its hand during contact moves (see drawWaterKunai). */
+  private drawWaterBlade(g: CanvasRenderingContext2D, f: Fighter) {
+    const d = f.dash;
+    if (!d) return;
+    const p = Math.min(1, d.t / Math.max(0.01, d.total));
+    const side = d.dx >= 0 ? 1 : -1;
+    // it is raised, then swept across the way the move goes
+    const ang = Math.atan2(d.dy, d.dx) + side * (-1.1 + p * 2.2) * Math.min(1, p * 6 + 0.35);
+    const hx = f.x + d.dx * f.r * 0.8, hy = f.y - f.r * (this.v3 ? 1.1 : 0.25) + d.dy * f.r * 0.8;
+    const L = f.r * 2.8;
+    g.save();
+    g.translate(hx, hy);
+    g.rotate(ang);
+    drawWaterKunai(g, L, this.t);
+    g.restore();
+    // droplets and glitter flung off the point as it sweeps
+    const tx = hx + Math.cos(ang) * L, ty = hy + Math.sin(ang) * L;
+    if (Math.random() < 0.8) {
+      const tg = ang + side * Math.PI / 2;
+      this.parts.push({ kind: Math.random() < 0.5 ? "dot" : "star", x: tx, y: ty, vx: Math.cos(tg) * rnd(60, 190) + rnd(-30, 30), vy: Math.sin(tg) * rnd(60, 190) + rnd(-30, 30), g: 160, life: rnd(0.3, 0.6), max: 0.6, size: rnd(1.6, 3.4), grow: 0, color: Math.random() < 0.5 ? "#e9f8ff" : "#8fd8ff", rot: 0, vr: 10 });
+    }
+  }
+
   private drawDragonDash(g: CanvasRenderingContext2D, f: Fighter) {
     const d = f.dash;
     if (!d) return;
@@ -5949,16 +5972,17 @@ export class ArenaRenderer {
         if (v.held) continue;
         v.R = Math.min(v.R, 90); // a very large one must not wash the whole screen out
         // it is spent: a burst of water, a ring, spray thrown up and a cloud of mist
-        this.ring(v.x, v.y, "#e9f8ff", v.R * 3.2, 0.5);
-        this.ring(v.x, v.y, "#59b8ff", v.R * 2.4, 0.75);
-        this.parts.push({ kind: "glow", x: v.x, y: v.y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: v.R * 0.3, grow: v.R * 1.6, color: "#3f94ff" });
+        const k1 = v.fire ? "#fff0cf" : "#e9f8ff", k2 = v.fire ? "#ff9a3a" : "#59b8ff", k3 = v.fire ? "#ff6a1a" : "#3f94ff", k4 = v.fire ? "#ffd9a0" : "#cfeeff", k5 = v.fire ? "#ff7a20" : "#4aa8ff";
+        this.ring(v.x, v.y, k1, v.R * 3.2, 0.5);
+        this.ring(v.x, v.y, k2, v.R * 2.4, 0.75);
+        this.parts.push({ kind: "glow", x: v.x, y: v.y, vx: 0, vy: 0, g: 0, life: 0.45, max: 0.45, size: v.R * 0.3, grow: v.R * 1.6, color: k3 });
         for (let i = 0; i < 34; i++) {
           const a = Math.random() * Math.PI * 2, sp = rnd(120, 520);
-          this.parts.push({ kind: "dot", x: v.x, y: v.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 520, life: rnd(0.4, 0.9), max: 0.9, size: rnd(2, 5), grow: 0, color: i % 3 ? "#cfeeff" : "#ffffff" });
+          this.parts.push({ kind: "dot", x: v.x, y: v.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 120, g: 520, life: rnd(0.4, 0.9), max: 0.9, size: rnd(2, 5), grow: 0, color: i % 3 ? k4 : "#ffffff" });
         }
         for (let i = 0; i < 8; i++) {
           const a = (i / 8) * Math.PI * 2;
-          this.parts.push({ kind: "glow", x: v.x + Math.cos(a) * v.R * 0.5, y: v.y + Math.sin(a) * v.R * 0.5, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, g: 0, life: 0.7, max: 0.7, size: v.R * 0.2, grow: v.R * 1.1, color: "#4aa8ff" });
+          this.parts.push({ kind: "glow", x: v.x + Math.cos(a) * v.R * 0.5, y: v.y + Math.sin(a) * v.R * 0.5, vx: Math.cos(a) * 70, vy: Math.sin(a) * 70, g: 0, life: 0.7, max: 0.7, size: v.R * 0.2, grow: v.R * 1.1, color: k5 });
         }
         for (let i = 0; i < 6; i++) this.parts.push({ kind: "star", x: v.x, y: v.y, vx: rnd(-260, 260), vy: rnd(-260, 60), g: 200, life: 0.7, max: 0.7, size: rnd(4, 7), grow: 0, color: "#ffffff", rot: 0, vr: 9 });
         this.shake = Math.max(this.shake, 8);
@@ -5985,16 +6009,38 @@ export class ArenaRenderer {
         });
       }
       if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
+      if (p.mv === "watershuriken") {
+        // smooth art (a sharp star of rippling water), spinning as it flies, with spray and sparkles behind it
+        const R = Math.max(20, p.r * 2.2), up = 18, ang = Math.atan2(p.vy, p.vx);
+        this.at(g, p.x, p.y, "mix", () => drawShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, this.t * 16 + p.id, this.t), "p", this.v3 ? 32 : 0);
+        if (Math.random() < 0.8) {
+          const cy0 = p.y - (this.v3 ? 0 : up);
+          for (let i = 0; i < 2; i++) this.parts.push({ kind: i ? "star" : "dot", x: p.x - Math.cos(ang) * R * 0.5 + rnd(-5, 5), y: cy0 - Math.sin(ang) * R * 0.5 + rnd(-5, 5), vx: -Math.cos(ang) * 110 + rnd(-50, 50), vy: -Math.sin(ang) * 110 + rnd(-50, 50), g: i ? 0 : 220, life: rnd(0.3, 0.55), max: 0.55, size: i ? rnd(2.5, 4) : rnd(1.6, 3), grow: 0, color: i ? "#ffffff" : "#bfe8ff", rot: 0, vr: 10 });
+        }
+        continue;
+      }
       if (p.mv.startsWith("megashuriken")) {
         const ash = p.mv.endsWith(":ash");
+        const dyna = p.mv.endsWith(":dyna"); // Dynamax Greninja: a huge shuriken over its head that turns orange before it is thrown
         const held = (p.hold ?? 0) > 0;
         const q = held ? 1 - (p.hold ?? 0) / (p.holdMax || 1) : 1;
         const sc = held ? 0.12 + 0.88 * (1 - (1 - q) ** 3) : 1;
-        const R = p.r * (ash ? 2.5 : 2.0) * sc;
+        const R = p.r * (ash ? 2.5 : dyna ? (this.v3 ? 1.7 : 2.3) : 2.0) * sc;
         const age = S.time - p.born;
         const spin = ash ? (held ? 0.35 + q * 0.5 : this.t * 12) : this.t * (held ? 6 + q * 8 : 16);
-        const up = ash ? (held ? R * 0.9 + 12 : 18) : held ? 30 + q * 14 : 14;
-        this.at(g, p.x, p.y, "mix", () => (ash ? drawBondShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t) : drawShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t)), "p", this.v3 ? (ash && held ? 32 + R * 0.9 : 32 + (held ? 14 : 0)) : 0);
+        const own = dyna ? S.fighters.find((x) => x.id === p.owner) : undefined;
+        const headUp = (own?.r ?? 22) * 2.5 + R * 0.45;
+        const up = dyna ? (held ? headUp : 14 + (headUp - 14) * Math.max(0, 1 - age / 0.3)) : ash ? (held ? R * 0.9 + 12 : 18) : held ? 30 + q * 14 : 14;
+        // blue at first, then it heats to orange as the clones spin it up
+        const mixF = dyna ? (held ? Math.min(1, Math.max(0, (q - 0.4) / 0.4)) : 1) : 0;
+        const fire = mixF > 0.5;
+        this.at(g, p.x, p.y, "mix", () => {
+          if (ash) return drawBondShuriken(g, p.x, p.y - (this.v3 ? 0 : up), R, spin, this.t);
+          const yy = p.y - (this.v3 ? 0 : up);
+          if (mixF < 1) drawShuriken(g, p.x, yy, R, spin, this.t, 1, 1 - mixF);
+          if (mixF > 0) drawShuriken(g, p.x, yy, R, spin, this.t, 1, mixF, "fire");
+        }, "p", this.v3 ? (dyna ? 32 + up - 14 : ash && held ? 32 + R * 0.9 : 32 + (held ? 14 : 0)) : 0);
+        const cA = fire ? "#fff0c8" : "#e9f8ff", cB = fire ? "#ff9a3a" : "#8fd0ff", cG = fire ? "#ff8a2a" : "#5fb4ff", cW = fire ? "#ffd9a0" : "#cfeeff", cW2 = fire ? "#ff6a1a" : "#3f9cff";
         // spray flung off the blade tips as it spins, bubbles and mist round it, motes drawn in while it forms
         {
           const ang0 = Math.atan2(p.vy, p.vx);
@@ -6006,24 +6052,24 @@ export class ArenaRenderer {
             const tx = p.x + Math.cos(a) * R * 0.95, ty = cy0 + Math.sin(a) * R * 0.95;
             const tang = a + Math.PI / 2;
             const fl = held ? 110 : 190;
-            this.parts.push({ kind: ash ? "spark" : "dot", x: tx, y: ty, vx: Math.cos(tang) * fl + (held ? 0 : Math.cos(ang0) * 60) + rnd(-30, 30), vy: Math.sin(tang) * fl + (held ? 0 : Math.sin(ang0) * 60) + rnd(-30, 30), g: 180, life: rnd(0.35, 0.65), max: 0.65, size: rnd(1.8, 3.6), grow: 0, color: i % 2 ? "#e9f8ff" : "#8fd0ff" });
+            this.parts.push({ kind: ash ? "spark" : "dot", x: tx, y: ty, vx: Math.cos(tang) * fl + (held ? 0 : Math.cos(ang0) * 60) + rnd(-30, 30), vy: Math.sin(tang) * fl + (held ? 0 : Math.sin(ang0) * 60) + rnd(-30, 30), g: 180, life: rnd(0.35, 0.65), max: 0.65, size: rnd(1.8, 3.6), grow: 0, color: i % 2 ? cA : cB });
           }
           if (Math.random() < 0.35) {
             const a = Math.random() * Math.PI * 2;
-            this.parts.push({ kind: "glow", x: p.x + Math.cos(a) * R * 0.9, y: cy0 + Math.sin(a) * R * 0.9, vx: Math.cos(a) * 30, vy: Math.sin(a) * 30 - 20, g: 0, life: 0.6, max: 0.6, size: R * 0.1, grow: R * 0.45, color: "#5fb4ff" });
+            this.parts.push({ kind: "glow", x: p.x + Math.cos(a) * R * 0.9, y: cy0 + Math.sin(a) * R * 0.9, vx: Math.cos(a) * 30, vy: Math.sin(a) * 30 - 20, g: 0, life: 0.6, max: 0.6, size: R * 0.1, grow: R * 0.45, color: cG });
           }
           if (Math.random() < 0.25) this.parts.push({ kind: "ring", x: p.x + rnd(-R, R) * 0.8, y: cy0 + rnd(-R, R) * 0.8, vx: 0, vy: -40, g: 0, life: 0.7, max: 0.7, size: 2, grow: 12, color: "#d8f2ff" });
           if (held && Math.random() < 0.7) {
             // water motes pulled in from the ring around it
             const a = Math.random() * Math.PI * 2, d = R * rnd(1.8, 2.8), tm = 0.3;
-            this.parts.push({ kind: "dot", x: p.x + Math.cos(a) * d, y: cy0 + Math.sin(a) * d, vx: -Math.cos(a) * d / tm, vy: -Math.sin(a) * d / tm, g: 0, life: tm, max: tm, size: rnd(1.6, 3), grow: 0, color: "#cfeeff" });
+            this.parts.push({ kind: "dot", x: p.x + Math.cos(a) * d, y: cy0 + Math.sin(a) * d, vx: -Math.cos(a) * d / tm, vy: -Math.sin(a) * d / tm, g: 0, life: tm, max: tm, size: rnd(1.6, 3), grow: 0, color: cW });
           }
-          this.shurLast.set(p.id, { x: p.x, y: cy0, R, held });
+          this.shurLast.set(p.id, { x: p.x, y: cy0, R, held, fire });
         }
         if (!held && Math.random() < 0.9) {
           // a wet wake: droplets and spray thrown off behind it
           const ang = Math.atan2(p.vy, p.vx);
-          for (let i = 0; i < 2; i++) this.parts.push({ kind: i ? "dot" : "glow", x: p.x - Math.cos(ang) * R * 0.5 + rnd(-8, 8), y: p.y - Math.sin(ang) * R * 0.5 - up + rnd(-8, 8), vx: -Math.cos(ang) * 120 + rnd(-60, 60), vy: -Math.sin(ang) * 120 + rnd(-60, 60), g: i ? 260 : 0, life: 0.4, max: 0.4, size: i ? rnd(2, 4) : 10, grow: i ? 0 : 40, color: i ? "#cfeeff" : "#3f9cff" });
+          for (let i = 0; i < 2; i++) this.parts.push({ kind: i ? "dot" : "glow", x: p.x - Math.cos(ang) * R * 0.5 + rnd(-8, 8), y: p.y - Math.sin(ang) * R * 0.5 - up + rnd(-8, 8), vx: -Math.cos(ang) * 120 + rnd(-60, 60), vy: -Math.sin(ang) * 120 + rnd(-60, 60), g: i ? 260 : 0, life: 0.4, max: 0.4, size: i ? rnd(2, 4) : 10, grow: i ? 0 : 40, color: i ? cW : cW2 });
         }
         void age;
         continue;
@@ -6894,6 +6940,7 @@ export class ArenaRenderer {
     g.restore();
 
     if (f.dash && !under && (f.dash.mv.type === "Dragon" || ["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"].includes(f.dash.mv.id))) this.drawDragonDash(g, f);
+    if (f.dash && !under && f.sp.id === "greninja") this.drawWaterBlade(g, f);
     this.meleeFx.watch(f, this.t);
     this.meleeFx.draw(g, f, this.t, (q) => this.parts.push(q as unknown as Parti), (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); });
     const dn = this.dances.get(f.id);
@@ -6927,8 +6974,31 @@ export class ArenaRenderer {
     const hist = this.hist.get(f.id) ?? [];
     // Double Team / Agility: copies circle the Pokémon
     // Mega Greninja's giant shuriken: clones circle in, each with a small shuriken, and hand them over to the big one
+    // Dynamax Greninja: Double Team clones spin round a huge shuriken over its head, and water and clones heat to orange as it is spun up
+    const sfd = this.shurForm.get(f.id);
+    if (sfd?.dyna && im && !under) {
+      const q = (this.t - sfd.t0) / sfd.dur;
+      if (q > 1.05) this.shurForm.delete(f.id);
+      else {
+        const sc = 0.12 + 0.88 * (1 - (1 - Math.min(1, q)) ** 3);
+        const Rg = 46 * 2.3 * sc;
+        const cy0 = f.y - f.r * 2.5 - Rg * 0.45 - lift;
+        const rad = Rg * 1.25 + f.r * 1.1;
+        const m = Math.round(Math.min(1, Math.max(0, (q - 0.4) / 0.4)) * 5) / 5; // in steps, so only a few tinted copies of the picture are kept
+        const mixHex = (a: number[], b: number[]) => "#" + a.map((v, i) => Math.round(v * (1 - m) + b[i]! * m).toString(16).padStart(2, "0")).join("");
+        const tint = mixHex([127, 208, 255], [255, 162, 74]);
+        const spark = m > 0.5 ? ["#fff0c8", "#ff9a3a"] : ["#e9f8ff", "#8fd0ff"];
+        const N = 6, w = 4.5 + q * 9;
+        for (let i = 0; i < N; i++) {
+          const an = this.t * w + (i * Math.PI * 2) / N;
+          const cx = f.x + Math.cos(an) * rad, cyy = cy0 + Math.sin(an) * rad * 0.38;
+          this.body(g, im, usedId, cx, cyy, size * 0.95, Math.cos(an) < 0 ? 1 : -1, sx, sy, rot, tint, 0.8 * Math.min(1, q * 5));
+          if (Math.random() < 0.6) this.parts.push({ kind: Math.random() < 0.5 ? "star" : "dot", x: cx, y: cyy, vx: -Math.sin(an) * 140 + rnd(-30, 30), vy: Math.cos(an) * 50 + rnd(-30, 30), g: 0, life: rnd(0.25, 0.5), max: 0.5, size: rnd(2, 4), grow: 0, color: Math.random() < 0.5 ? spark[0]! : spark[1]!, rot: 0, vr: 12 });
+        }
+      }
+    }
     const sfm = this.shurForm.get(f.id);
-    if (sfm && im && !under) {
+    if (sfm && !sfm.dyna && im && !under) {
       const q = (this.t - sfm.t0) / sfm.dur;
       if (q > 1.2) this.shurForm.delete(f.id);
       else if (q <= 1) {

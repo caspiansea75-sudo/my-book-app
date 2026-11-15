@@ -13,7 +13,7 @@ export const meta = {
   loop: true,
   fps: 30,
   bg: "sky",
-  options: { palette: ["#06143a", "#0f3a8a", "#1f6fd8", "#3fa8ff", "#8fd8ff", "#d0f4ff", "#ffffff"], size: 12, speed: 220, seed: 5 },
+  options: { palette: ["#06143a", "#0f3a8a", "#1f6fd8", "#3fa8ff", "#8fd8ff", "#d0f4ff", "#ffffff"], size: 15, speed: 220, seed: 5 },
 };
 
 export function draw(p, t, o) {
@@ -35,19 +35,27 @@ export function draw(p, t, o) {
     if (x > left + 8 && Math.abs(y) < 26) spark(p, x, y, vx, vy, 1 - age / life, SP, 0.45, 0.014, 7);
   });
 
-  // the star: four tapering blades, bright on the leading side of each, a hollow hub in a dark collar
+  // the star: a sharp four-point star with a round hole, filled with rippling water (blobs and bright light-lines that keep moving)
+  const RI = R * 0.3, HOLE = Math.max(1.6, R * 0.16), Q = Math.PI / 2;
+  const ax = R, bx = RI * Math.SQRT1_2, by = RI * Math.SQRT1_2, nx = by, ny = -(bx - ax), cc = nx * ax; // the straight edge from a tip to the next notch
+  const T = (TAU * t) / D;
   p.shade(-R - 3, -R - 3, R + 3, R + 3, (x, y) => {
     const r = Math.hypot(x, y), th = Math.atan2(y, x);
-    if (r < 1.6) return;
-    const q = Math.cos(2 * (th - rot)), pt = Math.pow(Math.abs(q), 2.4), edge = 3.1 + (R - 3.1) * pt;
-    if (r > edge) return;
-    if (r < 2.7) return C[1];
-    const lead = Math.sin(2 * (th - rot)) > 0; // which side of the blade is turning into the water
-    const u = r / edge;
-    if (r > edge - 1.0) return lead ? WHITE : C[5];
-    if (u > 0.8) return lead ? C[5] : C[4];
-    return u > 0.5 ? (lead ? C[4] : C[3]) : lead ? C[3] : C[2];
+    let ph = (((th - rot) % Q) + Q) % Q; if (ph > Q / 2) ph = Q - ph; // angle from the nearest tip
+    const edge = cc / (nx * Math.cos(ph) + ny * Math.sin(ph));
+    if (r > edge || r < HOLE) return;
+    if (r < HOLE + 0.9) return C[5]; // the bright ring round the hole
+    if (r > edge - 1.0) return WHITE; // the bright edge
+    const lx = x * Math.cos(-rot) - y * Math.sin(-rot), ly = x * Math.sin(-rot) + y * Math.cos(-rot);
+    const f = (Math.sin(lx * 0.62 + 1.7 * Math.sin(ly * 0.45 + T)) + Math.sin(ly * 0.58 - T + 1.6 * Math.sin(lx * 0.4)) + Math.sin((lx + ly) * 0.33 + T * 2)) / 3;
+    if (Math.abs(f) < 0.16) return Math.abs(f) < 0.07 ? WHITE : C[5];
+    return f > 0.35 ? C[2] : f < -0.4 ? C[2] : C[3] ;
   });
-  p.glow(0, 0, 24, C[3], 0.35);
-  p.glow(0, 0, 5, C[5], 0.3);
+  // glints twinkling on the points
+  for (let k = 0; k < 4; k++) {
+    const a = rot + k * Q, gx = Math.cos(a) * R, gy = Math.sin(a) * R, s = Math.max(0, Math.sin(T * 2 + k * 1.9)) * 4;
+    if (s > 0.8) { p.line(gx - s, gy, gx + s, gy, WHITE, (u) => 1 - Math.abs(u - 0.5) * 1.2); p.line(gx, gy - s, gx, gy + s, WHITE, (u) => 1 - Math.abs(u - 0.5) * 1.2); }
+  }
+  p.glow(0, 0, 14, C[3], 0.18);
+  p.glow(0, 0, 3, C[5], 0.5);
 }

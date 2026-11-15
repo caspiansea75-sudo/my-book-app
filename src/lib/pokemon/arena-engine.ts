@@ -235,7 +235,7 @@ export type Ev =
   | { t: "wave"; n: number; boss: boolean }
   | { t: "perks" }
   | { t: "storm" }
-  | { t: "shurikenForm"; id: number; x: number; y: number; dur: number }
+  | { t: "shurikenForm"; id: number; x: number; y: number; dur: number; dyna?: boolean }
   | { t: "mega"; x: number; y: number; id: number; name: string; z: boolean; type: string; origin?: boolean }
   | { t: "zstart"; x: number; y: number; type: string; name: string }
   | { t: "zhit"; x: number; y: number; type: string }
@@ -1699,11 +1699,12 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       if (mv.id.startsWith("megashuriken")) {
         // the clones feed their shurikens into one giant one (Ash-Greninja forms it alone, in its hand); it is held while it forms, then thrown
         const ash = mv.id.endsWith(":ash");
-        const hold = ash ? 0.65 : 0.95;
-        spawnProj(S, f, mv, dx, dy, { speed: ash ? 680 : 620, r: ash ? 54 : 44, life: 3, dmg: baseDamage(f, mv) });
+        const dyna = mv.id.endsWith(":dyna"); // Dynamax: a huge one, formed over its head by the Double Team clones
+        const hold = dyna ? 1.5 : ash ? 0.65 : 0.95;
+        spawnProj(S, f, mv, dx, dy, { speed: dyna ? 640 : ash ? 680 : 620, r: dyna ? 46 : ash ? 54 : 44, life: 3, dmg: baseDamage(f, mv) });
         const sp = S.projs[S.projs.length - 1]!;
-        sp.hold = hold; sp.holdMax = hold; sp.aoe = ash ? 110 : 95; sp.kb = 400;
-        if (!ash) S.events.push({ t: "shurikenForm", id: f.id, x: f.x, y: f.y, dur: hold });
+        sp.hold = hold; sp.holdMax = hold; sp.aoe = dyna ? 150 : ash ? 110 : 95; sp.kb = dyna ? 480 : 400;
+        if (!ash) S.events.push({ t: "shurikenForm", id: f.id, x: f.x, y: f.y, dur: hold, dyna });
         break;
       }
       spawnProj(S, f, mv, dx, dy);
@@ -2312,7 +2313,9 @@ function doDynamax(S: State, f: Fighter) {
   f.status.brn = f.status.psn = f.status.par = f.status.frz = f.status.cnf = f.status.slp = 0;
   const type = f.types[0] ?? "Normal";
   // its own special move: a giant strike that lands where you aim
-  f.override[3] = f.gmax
+  f.override[3] = f.sp.id === "greninja"
+    ? { id: "megashuriken:dyna", name: "Max Water Shuriken", type: "Water", kind: "proj", power: 3.4, cd: 4.4, speed: 640, windup: 0, desc: "Double Team clones spin over its head and form a huge water shuriken that turns orange, then it strikes the foe." }
+    : f.gmax
     ? { id: "gmaxblast", name: `G-Max ${type}`, type, kind: "lob", power: 3.2, cd: 4.6, range: 400, windup: 0.5, desc: "A Gigantamax finisher that lands where you aim." }
     : { id: "maxstrike", name: `Max ${type}`, type, kind: "lob", power: 2.8, cd: 4.2, range: 380, windup: 0.5, desc: "A Max Move strike where you aim." };
   f.cd[3] = 0;
@@ -3070,6 +3073,23 @@ export function step(S: State, input: Input, realDt: number, others?: Map<number
     if (a.life <= 0) continue;
     for (let j = i + 1; j < beams.length; j++) {
       const b = beams[j]!;
+      if (b.life <= 0 || a.team === b.team || len(a.x - b.x, a.y - b.y) > a.r + b.r) continue;
+      a.life = 0;
+      b.life = 0;
+      if (S.time - (S.clashT ?? -9) > 0.07) {
+        S.clashT = S.time;
+        S.events.push({ t: "clash", x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+      }
+      break;
+    }
+  }
+  // shots from different sides that meet cancel each other too (a held shuriken is still forming, so it is left alone)
+  const shots = S.projs.filter((p2) => !p2.beam && p2.life > 0 && !(p2.hold && p2.hold > 0));
+  for (let i = 0; i < shots.length; i++) {
+    const a = shots[i]!;
+    if (a.life <= 0) continue;
+    for (let j = i + 1; j < shots.length; j++) {
+      const b = shots[j]!;
       if (b.life <= 0 || a.team === b.team || len(a.x - b.x, a.y - b.y) > a.r + b.r) continue;
       a.life = 0;
       b.life = 0;
