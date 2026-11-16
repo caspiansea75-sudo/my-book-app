@@ -187,6 +187,9 @@ export type View = "top" | "third" | "first";
 type Cam3 = { px: number; py: number; H: number; phi: number; cp: number; sp: number; fl: number; hz: number; fx: number; fy: number; rx: number; ry: number };
 let WARP_C: HTMLCanvasElement | null = null;
 
+/** Blade-like shots drawn as a smooth glowing crescent (not a ball): colours are [edge, body]. */
+const SLASH_SHOTS: Record<string, [string, string]> = { airslash: ["#ffffff", "#9fd4ff"], psychocut: ["#ffe6fa", "#ff6ac8"] };
+
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
   private parts: Parti[] = [];
@@ -1235,7 +1238,7 @@ export class ArenaRenderer {
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
-    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || DRAKE_SHOTS.has(p.mv)) return null;
+    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || SLASH_SHOTS[p.mv] || DRAKE_SHOTS.has(p.mv)) return null;
     const ms = MOVE_FX[p.mv]?.shot;
     const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
     if (!sp || this.pfx.tier >= 3) return null;
@@ -6060,6 +6063,39 @@ export class ArenaRenderer {
         });
       }
       if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
+      if (SLASH_SHOTS[p.mv]) {
+        // a sharp crescent of cutting air / psychic force, pointing the way it flies, with a streak behind
+        const [ce, cb] = SLASH_SHOTS[p.mv]!;
+        const R = Math.max(22, p.r * 2.6), up = 18, ang = Math.atan2(p.vy, p.vx);
+        this.at(g, p.x, p.y, "mix", () => {
+          const cy = p.y - (this.v3 ? 0 : up);
+          g.save();
+          g.translate(p.x, cy);
+          g.rotate(ang);
+          g.globalCompositeOperation = "lighter";
+          // trail
+          const tr = g.createLinearGradient(-R * 2.6, 0, 0, 0);
+          tr.addColorStop(0, "rgba(255,255,255,0)"); tr.addColorStop(1, cb);
+          g.globalAlpha = 0.45; g.fillStyle = tr;
+          g.beginPath(); g.moveTo(-R * 2.6, 0); g.lineTo(-R * 0.2, -R * 0.55); g.lineTo(-R * 0.2, R * 0.55); g.closePath(); g.fill();
+          g.globalAlpha = 0.9;
+          g.globalCompositeOperation = "source-over";
+          // crescent: a big arc minus an offset arc
+          g.beginPath();
+          g.moveTo(-R * 0.25, -R * 1.05);
+          g.quadraticCurveTo(R * 1.25, -R * 0.55, R * 1.1, 0);
+          g.quadraticCurveTo(R * 1.25, R * 0.55, -R * 0.25, R * 1.05);
+          g.quadraticCurveTo(R * 0.45, 0, -R * 0.25, -R * 1.05);
+          g.closePath();
+          const gr = g.createLinearGradient(-R * 0.3, 0, R * 1.1, 0);
+          gr.addColorStop(0, cb); gr.addColorStop(0.7, cb); gr.addColorStop(1, ce);
+          g.fillStyle = gr; g.fill();
+          g.lineWidth = 1.5; g.strokeStyle = ce; g.stroke();
+          g.restore();
+        }, "p", this.v3 ? 32 : 0);
+        if (Math.random() < 0.7) this.parts.push({ kind: "dot", x: p.x - Math.cos(ang) * R + rnd(-4, 4), y: p.y - (this.v3 ? 0 : up) - Math.sin(ang) * R + rnd(-4, 4), vx: -Math.cos(ang) * 90 + rnd(-40, 40), vy: -Math.sin(ang) * 90 + rnd(-40, 40), g: 0, life: rnd(0.25, 0.45), max: 0.45, size: rnd(1.6, 3), grow: 0, color: ce, rot: 0, vr: 0 });
+        continue;
+      }
       if (p.mv === "watershuriken") {
         // smooth art (a sharp star of rippling water), spinning as it flies, with spray and sparkles behind it
         const R = Math.max(20, p.r * 2.2), up = 18, ang = Math.atan2(p.vy, p.vx);
@@ -7338,8 +7374,12 @@ export class ArenaRenderer {
     }
     if (f.mega > 0 && !under) {
       g.save();
-      g.translate(f.x, f.y - f.r * 2.4 - lift * 0.6 + Math.sin(t * 3) * 2);
+      // above the top of the picture, so it never covers a face
+      const gp = this.fpose.get(f.id);
+      const gy = gp ? f.y + gp.dy - gp.size * 1.02 - 16 : f.y - f.r * 2.4 - lift * 0.6;
+      g.translate(f.x, gy + Math.sin(t * 3) * 2);
       g.rotate(Math.sin(t * 2) * 0.2);
+      g.scale(0.85, 0.85);
       const gem = g.createLinearGradient(-8, -10, 8, 10);
       gem.addColorStop(0, "#ff9be6");
       gem.addColorStop(0.5, "#7fe3ff");
