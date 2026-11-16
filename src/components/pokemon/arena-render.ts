@@ -36,7 +36,7 @@ import { drawHazard } from "@/components/pokemon/arena-hazard";
 import { organic, sigil, smooth as smoothPath } from "@/components/pokemon/arena-shape";
 import { SIG_MOVES, isTall, newSig, sigFlat, sigItems, type Sig } from "@/components/pokemon/arena-sigfx";
 import { blob, drawArenaFx, drawFoam, drawHole, drawLavaPit, drawLightning, drawObstacle, drawPool, drawShot, stageBackground } from "@/components/pokemon/arena-art";
-import { FIELDS, ITEMS, MOVES, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
+import { FIELDS, ITEMS, MOVES, isPhysical, moveReach, type MoveDef } from "@/lib/pokemon/arena-data";
 import { TYPE_COLOR, spriteChain } from "@/lib/pokemon/shared";
 import { setLod } from "./arena-lod";
 import { PixelFxLayer, actorFromMask, preloadPixelfx, targetX, type PxId } from "./arena-pixelfx";
@@ -1187,6 +1187,45 @@ export class ArenaRenderer {
     return out;
   }
 
+  private lastS: State | null = null;
+  private mouthC = new Map<string, { mx: number; my: number } | null>();
+  /**
+   * Where a Pokémon's mouth is, worked out from its picture: the tip of the snout in the upper part of the outline (the picture faces right).
+   * `ox`/`oy` are from its feet point as seen from above, `frac` is how far up the picture the mouth is (0 feet .. 1 top).
+   */
+  private mouthOf(id: number): { ox: number; oy: number; frac: number } | null {
+    const pose = this.fpose.get(id);
+    if (!pose) return null;
+    const sil = this.silhouette(pose.id, pose.im);
+    if (!sil) return null;
+    let m = this.mouthC.get(pose.id);
+    if (m === undefined) {
+      let best = -1;
+      const ext: number[] = [];
+      for (let y = 0; y < Math.floor(sil.h * 0.6); y++) {
+        let x = -1;
+        for (let xx = sil.w - 1; xx >= 0; xx--) if (sil.data[y * sil.w + xx]) { x = xx; break; }
+        ext[y] = x;
+        if (x > best) best = x;
+      }
+      let sy = 0, n = 0;
+      ext.forEach((x, y) => { if (x >= best - 1) { sy += y; n++; } });
+      m = best >= 0 && n ? { mx: best, my: sy / n } : null;
+      this.mouthC.set(pose.id, m);
+    }
+    if (!m) return null;
+    const { k, ax, ay } = this.bodyAnchor(0, 0, pose, sil);
+    const sg = pose.dir < 0 ? -1 : 1;
+    return { ox: ax + (m.mx - sil.w / 2) * k * sg, oy: ay - (sil.h - m.my) * k, frac: 1 - m.my / sil.h };
+  }
+  /** A line strike drawn from the mouth (from above; in the player views the beam hangs at mouth height instead). */
+  private fromMouth(z: State["zones"][number]) {
+    if (this.v3) return z;
+    const mo = this.mouthOf(z.owner);
+    const f = this.lastS?.fighters.find((x) => x.id === z.owner);
+    return mo && f ? { ...z, x: f.x + mo.ox, y: f.y + mo.oy } : z;
+  }
+
   /** Which way a shot or a beam crosses the screen. In the player views the picture faces the camera, so the heading is turned to match. */
   private screenAng(vx: number, vy: number) {
     if (!this.v3) return Math.atan2(vy, vx);
@@ -1196,7 +1235,7 @@ export class ArenaRenderer {
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
-    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || DRAKE_SHOTS.has(p.mv)) return null;
+    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || DRAKE_SHOTS.has(p.mv)) return null;
     const ms = MOVE_FX[p.mv]?.shot;
     const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
     if (!sp || this.pfx.tier >= 3) return null;
@@ -1448,6 +1487,7 @@ export class ArenaRenderer {
     const go = (id: PxId, x: number, y: number, o: Parameters<PixelFxLayer["spawn"]>[3]) => this.pfx.spawn(id, x, y, { ...o, scale: o.scale * (e.t === "hit" ? 1.5 : 1.3) });
     switch (e.t) {
       case "cast": {
+        if (e.kind && e.type && isPhysical({ kind: e.kind, type: e.type })) this.bladeHold.set(e.id, { until: this.t + 0.55, dir: e.dir });
         const mf = MOVE_FX[e.mv]?.cast;
         if (mf) this.pxMoveFx(mf, { kind: "cast", x: e.x, y: e.y, mv: e.mv, id: e.id, dir: e.dir, tx: e.tx, ty: e.ty, byPlayer: e.byPlayer });
         break;
@@ -1518,7 +1558,7 @@ export class ArenaRenderer {
         break;
       case "shield":
       case "clash":
-        go("impacts/parry", e.x, e.y, { scale: 0.7, lift: 26 });
+        go("explosions/plasma-explosion", e.x, e.y, { scale: 0.55, lift: 22 }); // a burst where they meet
         break;
       case "mega": case "tera": case "awaken": case "dynamax":
         go("arcane/mana-burst", e.x, e.y + 8, { scale: 1.2, speed: 1.2, max: 1.8 });
@@ -1829,7 +1869,9 @@ export class ArenaRenderer {
           for (let i = 0; i < 5; i++) this.parts.push({ kind: "smoke", x: e.x + rnd(-10, 10), y: e.y + rnd(-6, 6), vx: rnd(-40, 40), vy: rnd(-110, -50), g: 0, life: rnd(0.7, 1.1), max: 1.1, size: rnd(9, 14), grow: 30, color: "#e8f1ff" });
           this.burst(e.x, e.y, "#ffffff", 5, 220, "streak");
           // a proper collision: a starburst, shockwaves along the floor and a spray of sparks
-          this.parts.push({ kind: "cross", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.3, max: 0.3, size: 96, grow: 0, color: "#ffffff" });
+          // a hot core that swells and fades, with sparks thrown out all round (no cross shape)
+          this.parts.push({ kind: "glow", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.22, max: 0.22, size: 30, grow: 260, color: "#fff3c4" });
+          this.burst(e.x, e.y, "#fff3c4", 16, 340, "streak");
           this.parts.push({ kind: "gring", x: e.x, y: e.y + 6, vx: 0, vy: 0, g: 0, life: 0.5, max: 0.5, size: 8, grow: 260, color: "#ffe9a0" });
           this.parts.push({ kind: "gring", x: e.x, y: e.y + 6, vx: 0, vy: 0, g: 0, life: 0.35, max: 0.35, size: 4, grow: 190, color: "#ffffff" });
           for (let i = 0; i < 22; i++) {
@@ -3292,8 +3334,8 @@ export class ArenaRenderer {
       this.shake = Math.max(this.shake, 9);
       this.shakeT = Math.max(this.shakeT, 0.3);
       this.flashT = Math.max(this.flashT, 0.12);
-    } else if (e.mv === "maxstrike" || e.mv === "gmaxblast") {
-      const g = e.mv === "gmaxblast";
+    } else if (e.mv === "maxstrike" || e.mv?.startsWith("gmax")) {
+      const g = e.mv !== "maxstrike";
       const reach = 400;
       const dx = e.tx - e.x;
       const dy = e.ty - e.y;
@@ -3641,6 +3683,7 @@ export class ArenaRenderer {
     this.skyQ.length = 0;
     this.standQ.length = 0;
     this.beamQ.length = 0;
+    this.lastS = S;
     for (const z of S.zones) {
       const c = col(z.type);
       if (z.struck && z.team !== -1 && !SPEC_ART.has(z.mv.id) && !this.vfxSeen.has(z.id)) {
@@ -3846,7 +3889,7 @@ export class ArenaRenderer {
         } else if (z.shape === "line" && BEAM_STYLE.has(z.mv.id)) {
           // each of these big beams has its own body (arena-beams.ts); in the player views a raised copy is queued as well
           const pal = BEAM_PAL[z.type] ?? BEAM_PAL.Normal!;
-          if (this.v3) { this.beamQ.push({ z, a }); drawBeamStyle(g, z.mv.id, z, a * 0.4, this.t, pal); } else drawBeamStyle(g, z.mv.id, z, a, this.t, pal);
+          if (this.v3) { this.beamQ.push({ z, a }); drawBeamStyle(g, z.mv.id, z, a * 0.4, this.t, pal); } else drawBeamStyle(g, z.mv.id, this.fromMouth(z), a, this.t, pal);
         } else if ((z.mv.fx ?? z.mv.id) === "laser" && z.shape === "line") {
           // a thin bright laser with a glowing source
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
@@ -3874,7 +3917,7 @@ export class ArenaRenderer {
           drawLightning(g, z.x, z.y, z.x2, z.y2, "#ffe14d", a, z.id + Math.floor(this.t * 20), 5);
         } else if (z.shape === "line") {
           // in the player views the beam stands in the air at the attacker's mouth (a flat ribbon on the floor is edge-on and almost invisible)
-          if (this.v3) { this.beamQ.push({ z, a }); this.drawFancyBeam(g, z, a * 0.4); } else this.drawFancyBeam(g, z, a);
+          if (this.v3) { this.beamQ.push({ z, a }); this.drawFancyBeam(g, z, a * 0.4); } else this.drawFancyBeam(g, this.fromMouth(z), a);
         } else {
           const ang = Math.atan2(z.y2 - z.y, z.x2 - z.x);
           const L = Math.hypot(z.x2 - z.x, z.y2 - z.y);
@@ -4787,11 +4830,13 @@ export class ArenaRenderer {
       const L = Math.hypot(z.x2 - z.x, z.y2 - z.y) || 1;
       const ux = (z.x2 - z.x) / L, uy = (z.y2 - z.y) / L, nx = -uy, ny = ux;
       const [c0, c1, c2] = BEAM_PAL[z.type] ?? BEAM_PAL.Normal!;
+      const mo = this.mouthOf(z.owner);
+      const mh = mo ? Math.max(22, Math.min(58, 34 * (mo.frac / 0.55))) : 34; // mouth height
       const n = Math.max(2, Math.min(8, Math.ceil(L / 60)));
       // the ribbon at three heights, so it has some body from the side
       for (let i = 0; i < n; i++) {
         const d0 = i === 0 ? -60 : (L * i) / n - 2, d1 = i === n - 1 ? L + 60 : (L * (i + 1)) / n + 2, dm = (L * (i + 0.5)) / n;
-        for (const [lf, al] of [[16, 0.5], [34, 1], [52, 0.5]] as const) {
+        for (const [lf, al] of [[mh - 18, 0.5], [mh, 1], [mh + 18, 0.5]] as const) {
           this.at(g, z.x + ux * dm, z.y + uy * dm, "fl", () => {
             g.save();
             g.beginPath();
@@ -4988,15 +5033,17 @@ export class ArenaRenderer {
 
   /** Dragon rushes with their own look: a roaring dragon head (Dragon Rush), triple claw slashes (Dragon Claw), a sweeping tail (Dragon Tail). */
   /** Greninja's water blade: a kunai of rippling water with a ring at the grip, swung in its hand during contact moves (see drawWaterKunai). */
-  private drawWaterBlade(g: CanvasRenderingContext2D, f: Fighter) {
-    const d = f.dash;
+  /** Greninja keeps its water blade in hand for a moment after any physical move (not just dashes). */
+  private bladeHold = new Map<number, { until: number; dir: number }>();
+  private drawWaterBlade(g: CanvasRenderingContext2D, f: Fighter, hold?: { until: number; dir: number }) {
+    const d = f.dash ?? (hold ? { dx: Math.cos(hold.dir), dy: Math.sin(hold.dir), t: Math.max(0, 0.55 - (hold.until - this.t)), total: 0.55 } : null);
     if (!d) return;
     const p = Math.min(1, d.t / Math.max(0.01, d.total));
     const side = d.dx >= 0 ? 1 : -1;
     // it is raised, then swept across the way the move goes
     const ang = Math.atan2(d.dy, d.dx) + side * (-1.1 + p * 2.2) * Math.min(1, p * 6 + 0.35);
     const hx = f.x + d.dx * f.r * 0.8, hy = f.y - f.r * (this.v3 ? 1.1 : 0.25) + d.dy * f.r * 0.8;
-    const L = f.r * 2.8;
+    const L = f.r * 3.4;
     g.save();
     g.translate(hx, hy);
     g.rotate(ang);
@@ -6144,8 +6191,9 @@ export class ArenaRenderer {
     const last = sorted[sorted.length - 1]!;
     const ux = (last.x - f.x) / (last.d || 1);
     const uy = (last.y - f.y) / (last.d || 1);
-    const mx = f.x + ux * f.r * 0.9;
-    const my = f.y - f.r * 0.45 + uy * f.r * 0.5;
+    const mo = this.v3 ? null : this.mouthOf(f.id); // from above: out of the mouth read from its picture
+    const mx = mo ? f.x + mo.ox : f.x + ux * f.r * 0.9;
+    const my = mo ? f.y + mo.oy : f.y - f.r * 0.45 + uy * f.r * 0.5;
     const len = Math.hypot(last.x - mx, last.y - my);
     if (len < 6) return;
     const nx = -uy;
@@ -6943,7 +6991,11 @@ export class ArenaRenderer {
     g.restore();
 
     if (f.dash && !under && (f.dash.mv.type === "Dragon" || ["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"].includes(f.dash.mv.id))) this.drawDragonDash(g, f);
-    if (f.dash && !under && f.sp.id === "greninja") this.drawWaterBlade(g, f);
+    if (!under && f.sp.id === "greninja") {
+      const hb = this.bladeHold.get(f.id);
+      if (f.dash) this.drawWaterBlade(g, f);
+      else if (hb && hb.until > this.t) this.drawWaterBlade(g, f, hb);
+    }
     this.meleeFx.watch(f, this.t);
     this.meleeFx.draw(g, f, this.t, (q) => this.parts.push(q as unknown as Parti), (a, d) => { this.shake = Math.max(this.shake, a); this.shakeT = Math.max(this.shakeT, d); });
     const dn = this.dances.get(f.id);

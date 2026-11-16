@@ -996,6 +996,42 @@ export const MEGAS: Record<string, MegaForm[]> = {
 /** Pokémon that can Gigantamax (their Dynamax looks different and ends with an extra blast). */
 export const GMAX = new Set(["charizard", "venusaur", "blastoise", "pikachu", "gengar", "lapras", "snorlax", "machamp", "corviknight", "eevee", "kingler", "butterfree", "melmetal", "duraludon", "coalossal", "centiskorch", "drednaw", "orbeetle", "copperajah", "garbodor", "toxtricity", "cinderace", "rillaboom", "inteleon", "urshifu", "hatterene", "grimmsnarl", "alcremie", "appletun", "flapple", "sandaconda"]);
 
+/** Each Gigantamax species' own signature G-Max move (a grand strike where you aim). */
+const gm = (id: string, name: string, type: string, desc: string, o: Partial<MoveDef> = {}): MoveDef => ({ id, name, type, kind: "lob", power: 3.2, cd: 4.6, range: 400, windup: 0.55, desc, ...o });
+export const GMAX_MOVES: Record<string, MoveDef> = {
+  charizard: gm("gmaxwildfire", "G-Max Wildfire", "Fire", "A sea of flame that keeps burning where it lands.", { linger: 3, status: { kind: "brn", chance: 0.6 } }),
+  venusaur: gm("gmaxvinelash", "G-Max Vine Lash", "Grass", "Giant vines crash down and lash the whole area.", { linger: 1.5 }),
+  blastoise: gm("gmaxcannonade", "G-Max Cannonade", "Water", "A barrage of water cannon fire that leaves a soaking zone.", { linger: 3 }),
+  pikachu: gm("gmaxvoltcrash", "G-Max Volt Crash", "Electric", "A giant thunderbolt that paralyzes whatever it hits.", { status: { kind: "par", chance: 0.8 } }),
+  gengar: gm("gmaxterror", "G-Max Terror", "Ghost", "A haunting shadow that leaves foes dazed and confused.", { status: { kind: "cnf", chance: 0.8 } }),
+  lapras: gm("gmaxresonance", "G-Max Resonance", "Ice", "A wall of freezing sound that crashes down on the foe.", { status: { kind: "frz", chance: 0.35 } }),
+  snorlax: gm("gmaxreplenish", "G-Max Replenish", "Normal", "A crushing belly slam that gives back some of its HP.", { drain: 0.35 }),
+  machamp: gm("gmaxchistrike", "G-Max Chi Strike", "Fighting", "A focused, crushing strike of pure chi.", { power: 3.5 }),
+  corviknight: gm("gmaxwindrage", "G-Max Wind Rage", "Flying", "A raging gale that sweeps up the whole area.", { linger: 2, range: 420 }),
+  eevee: gm("gmaxcuddle", "G-Max Cuddle", "Normal", "A huge, sparkling hug of energy that heals Eevee.", { drain: 0.4, power: 3 }),
+  kingler: gm("gmaxfoamburst", "G-Max Foam Burst", "Water", "A burst of thick foam that slows everything it covers.", { linger: 2.5 }),
+  butterfree: gm("gmaxbefuddle", "G-Max Befuddle", "Bug", "A cloud of powder that puts foes to sleep.", { status: { kind: "slp", chance: 0.6 } }),
+  melmetal: gm("gmaxmeltdown", "G-Max Meltdown", "Steel", "Molten metal rains down and keeps burning.", { linger: 2.5, status: { kind: "brn", chance: 0.4 } }),
+  duraludon: gm("gmaxdepletion", "G-Max Depletion", "Dragon", "A towering draconic strike from above.", { power: 3.4 }),
+  coalossal: gm("gmaxvolcalith", "G-Max Volcalith", "Rock", "Blazing boulders crash down and keep hurting the ground.", { linger: 3 }),
+  centiskorch: gm("gmaxcentiferno", "G-Max Centiferno", "Fire", "A ring of fire that traps and burns foes.", { linger: 3, status: { kind: "brn", chance: 0.6 } }),
+  drednaw: gm("gmaxstonesurge", "G-Max Stonesurge", "Water", "A flood of sharp stones leaves a painful field.", { linger: 3 }),
+  orbeetle: gm("gmaxgravitas", "G-Max Gravitas", "Psychic", "A crushing pulse of gravity pulls the area down.", { linger: 1.8 }),
+  copperajah: gm("gmaxsteelsurge", "G-Max Steelsurge", "Steel", "A field of sharp steel spikes erupts and stays.", { linger: 3 }),
+  garbodor: gm("gmaxmalodor", "G-Max Malodor", "Poison", "A huge reeking sludge cloud that poisons.", { linger: 3, status: { kind: "psn", chance: 0.9 } }),
+  toxtricity: gm("gmaxstunshock", "G-Max Stun Shock", "Electric", "A wild chord of lightning that stuns whatever it hits.", { status: { kind: "par", chance: 0.8 } }),
+  cinderace: gm("gmaxfireball", "G-Max Fireball", "Fire", "A giant blazing ball kicked where you aim.", { windup: 0.45, status: { kind: "brn", chance: 0.5 } }),
+  rillaboom: gm("gmaxdrumsolo", "G-Max Drum Solo", "Grass", "A thundering drum solo of roots that shakes the ground.", { power: 3.4 }),
+  inteleon: gm("gmaxhydrosnipe", "G-Max Hydrosnipe", "Water", "A razor-fine water snipe that never misses.", { power: 3.5, windup: 0.4 }),
+  urshifu: gm("gmaxonblow", "G-Max One Blow", "Dark", "One enormous, perfectly aimed blow.", { power: 3.6, windup: 0.45 }),
+  hatterene: gm("gmaxsmite", "G-Max Smite", "Fairy", "A dazzling blast of fairy light that confuses.", { status: { kind: "cnf", chance: 0.7 } }),
+  grimmsnarl: gm("gmaxsnooze", "G-Max Snooze", "Dark", "A huge yawn of dark energy that sends foes to sleep.", { status: { kind: "slp", chance: 0.5 } }),
+  alcremie: gm("gmaxfinale", "G-Max Finale", "Fairy", "A tower of cream that heals Alcremie as it lands.", { drain: 0.4, power: 3 }),
+  appletun: gm("gmaxsweetness", "G-Max Sweetness", "Grass", "A sweet, sticky apple blast that heals Appletun.", { drain: 0.35 }),
+  flapple: gm("gmaxtartness", "G-Max Tartness", "Grass", "A sour apple blast that smashes down hard.", { power: 3.4 }),
+  sandaconda: gm("gmaxsandblast", "G-Max Sandblast", "Ground", "A raging sandstorm that scours the area.", { linger: 3 }),
+};
+
 export const Z_MOVES: Record<string, { name: string; bn: string }> = {
   Normal: { name: "Breakneck Blitz", bn: "ব্রেকনেক ব্লিটজ" },
   Fire: { name: "Inferno Overdrive", bn: "ইনফার্নো ওভারড্রাইভ" },

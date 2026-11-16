@@ -4,7 +4,7 @@
  * simulated headless (the CPU can even play the player's side).
  */
 import { MEGA_MOVES } from "./arena-megamoves";
-import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, movePool, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
+import { DIGGERS, FIELDS, FOE_POOL, ALT_BURST, GMAX, GMAX_MOVES, ITEMS, MEGAS, MOVES, PERKS, ROSTER, TERA_TYPES, Z_MOVES, Z_SIGNATURE, cleanMoves, gimmicksFor, isPhysical, isSwimmer, locoOf, movePool, speciesOf, type FieldKind, type GimmickKind, type ItemKind, type Loco, type MegaForm, type MoveDef, type Species, type StatusKind } from "@/lib/pokemon/arena-data";
 import { typeMult } from "@/lib/pokemon/shared";
 import { MOBILITY, mobilityOf, type Mobility } from "@/lib/pokemon/arena-mobility";
 import { abBase, abBlock, abFx, abilityDef, abilitiesOf, abNoStatus, abSpeed, abStrikeIn, abStrikeOut, abTick, giveGain, newAbState, pickAbility, type AbState } from "@/lib/pokemon/arena-abilities";
@@ -1749,7 +1749,7 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       const k = d > range ? range / d : 1;
       const x = clamp(f.x + (tx - f.x) * k, MARGIN, W - MARGIN);
       const y = clamp(f.y + (ty - f.y) * k, MARGIN, H - MARGIN);
-      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id === "gmaxblast" ? 108 : mv.hazard ? 96 : mv.linger ? 84 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: mv.linger ?? 0.35, dmg: baseDamage(f, mv) * (mv.linger ? 0.5 : 1), type: mv.type, status: mv.status, kb: mv.linger ? 120 : 260, struck: false, mv, player: f.isPlayer, tick: 0.5 });
+      S.zones.push({ id: S.nextId++, owner: f.id, team: f.team, shape: "circle", x, y, x2: x, y2: y, r: mv.id === "maxstrike" || mv.id.startsWith("gmax") ? 108 : mv.hazard ? 96 : mv.linger ? 84 : 62, delay: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), total: (mv.windup ?? 0.55) * (f.isPlayer ? 0.6 : 1), life: mv.linger ?? 0.35, dmg: baseDamage(f, mv) * (mv.linger ? 0.5 : 1), type: mv.type, status: mv.status, kb: mv.linger ? 120 : 260, struck: false, mv, player: f.isPlayer, tick: 0.5 });
       break;
     }
     case "bolt": {
@@ -2316,7 +2316,7 @@ function doDynamax(S: State, f: Fighter) {
   f.override[3] = f.sp.id === "greninja"
     ? { id: "megashuriken:dyna", name: "Max Water Shuriken", type: "Water", kind: "proj", power: 3.4, cd: 4.4, speed: 640, windup: 0, desc: "Double Team clones spin over its head and form a huge water shuriken that turns orange, then it strikes the foe." }
     : f.gmax
-    ? { id: "gmaxblast", name: `G-Max ${type}`, type, kind: "lob", power: 3.2, cd: 4.6, range: 400, windup: 0.5, desc: "A Gigantamax finisher that lands where you aim." }
+    ? (GMAX_MOVES[f.sp.id] ?? { id: "gmaxblast", name: `G-Max ${type}`, type, kind: "lob", power: 3.2, cd: 4.6, range: 400, windup: 0.5, desc: "A Gigantamax finisher that lands where you aim." })
     : { id: "maxstrike", name: `Max ${type}`, type, kind: "lob", power: 2.8, cd: 4.2, range: 380, windup: 0.5, desc: "A Max Move strike where you aim." };
   f.cd[3] = 0;
   S.events.push({ t: "dynamax", x: f.x, y: f.y, id: f.id, gmax: f.gmax });

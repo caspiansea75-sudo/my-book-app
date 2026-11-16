@@ -276,6 +276,23 @@ const cache = new Map<string, Mod>();
 const loading = new Set<string>();
 
 /** Where the target stands in a melee effect (effect pixels from its origin), so the strike can be laid on the one that was hit. */
+/**
+ * The effects are built on a small pixel grid. To keep them from looking like blocks, they are enlarged here in a way that rounds the
+ * stair-steps off: twice the size with smooth sampling, then a very slight blur (only where the browser supports canvas filters).
+ */
+function smoothUp(src: HTMLCanvasElement, dst?: HTMLCanvasElement): HTMLCanvasElement {
+  const out = dst ?? document.createElement("canvas");
+  if (out.width !== src.width * 2) { out.width = src.width * 2; out.height = src.height * 2; }
+  const g = out.getContext("2d")!;
+  g.clearRect(0, 0, out.width, out.height);
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = "high";
+  try { if ("filter" in g) g.filter = "blur(0.7px)"; } catch { /* no canvas filters: the smooth sampling alone is used */ }
+  g.drawImage(src, 0, 0, out.width, out.height);
+  try { if ("filter" in g) g.filter = "none"; } catch { /* */ }
+  return out;
+}
+
 export function targetX(id: string): number {
   const m = cache.get(id) as { act?: { target?: { x?: number }; targets?: { x?: number }[] } } | undefined;
   return m?.act?.target?.x ?? m?.act?.targets?.[0]?.x ?? 0;
@@ -346,6 +363,7 @@ type Live = {
   life: number;
   acc: number;
   dirty: boolean;
+  big?: HTMLCanvasElement; // the same picture enlarged smoothly (see smoothUp)
   stopped: boolean;
   /** seconds still to wait before it starts */
   wait: number;
@@ -515,7 +533,7 @@ export class PixelFxLayer {
         cv.width = sh.w;
         cv.height = sh.h;
         cv.getContext("2d")!.putImageData(sh.img!, 0, 0);
-        sh.frames.push(cv);
+        sh.frames.push(smoothUp(cv));
       } catch {
         sh.bad = true;
         this.queue.shift();
@@ -643,6 +661,8 @@ export class PixelFxLayer {
     l.fx.draw(l.frame);
     composite(l.frame, l.img.data, null);
     l.cx.putImageData(l.img, 0, 0);
+    if (this.tier < 2) l.big = smoothUp(l.cv, l.big);
+    else l.big = undefined;
     l.dirty = false;
     this.msAcc += performance.now() - t0;
   }
@@ -656,7 +676,7 @@ export class PixelFxLayer {
         const k = l.o.scale;
         g.save();
         g.imageSmoothingEnabled = true; g.imageSmoothingQuality = "high"; // smooth, not blocky: the art is built small and enlarged
-        g.drawImage(l.cv, -l.ox * k, -l.oy * k, l.cv.width * k, l.cv.height * k);
+        g.drawImage(l.big ?? l.cv, -l.ox * k, -l.oy * k, l.cv.width * k, l.cv.height * k);
         g.restore();
       });
     }
