@@ -4602,6 +4602,7 @@ export class ArenaRenderer {
   /** A tornado of fire, water or sand that stays where it landed: stacked turning rings that widen going up. */
   private drawWhirl(g: CanvasRenderingContext2D, z: State["zones"][number]) {
     const fx = z.mv.fx ?? z.mv.id;
+    if (z.mv.id.startsWith("gmax")) return; // G-Max zones use their own art (the pixel effects); no fire-coloured rings
     const pal: Record<string, [string, string, string, string]> = {
       firespin: ["#ff5a1a", "#ffa62e", "#ffe27a", "#7a1c0c"],
       whirlpool: ["#2f8fe0", "#8fd2ff", "#ffffff", "#12407a"],
