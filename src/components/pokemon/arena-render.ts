@@ -16,6 +16,7 @@ import { FALL_IDS, drawFall } from "./arena-fall";
 import { DUSK_BIG, DUSK_IDS, duskFlat, duskItems, duskIsGhost, type DuskSig } from "./arena-dusk";
 import { WYRM_BIG, WYRM_IDS, wyrmFlat, wyrmItems, type WyrmSig } from "./arena-wyrm";
 import { electroBoom } from "./arena-elec";
+import { drawSty, flatSty, newSty, tickSty, type Sty } from "./arena-style";
 import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./arena-fx13";
 import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
@@ -187,8 +188,15 @@ export type View = "top" | "third" | "first";
 type Cam3 = { px: number; py: number; H: number; phi: number; cp: number; sp: number; fl: number; hz: number; fx: number; fy: number; rx: number; ry: number };
 let WARP_C: HTMLCanvasElement | null = null;
 
+/** Moves whose blast gets the cartoon smoke burst. */
+const STY_SMOKE = new Set(["explosion", "selfdestruct", "blastburn", "eruption", "fireblast", "mistyexplosion", "bulldoze"]);
+/** Moves whose blast is drawn as a ribbon tornado. */
+const STY_TORNADO = new Set(["whirlwind", "hurricane", "gmaxwindrage"]);
 /** Blade-like shots drawn as a smooth glowing crescent (not a ball): colours are [edge, body]. */
 const SLASH_SHOTS: Record<string, [string, string]> = { airslash: ["#ffffff", "#9fd4ff"], psychocut: ["#ffe6fa", "#ff6ac8"] };
+
+/** Wind shots drawn as one smooth spinning swirl from the first frame (no change of picture in flight): [edge, body]. */
+const WIND_SHOTS: Record<string, [string, string]> = { gust: ["#ffffff", "#bfe0ff"], hurricanegale: ["#ffffff", "#8fc4ff"], icywind: ["#f2fcff", "#7fdcff"] };
 
 export class ArenaRenderer {
   private ctx: CanvasRenderingContext2D;
@@ -246,6 +254,12 @@ export class ArenaRenderer {
   private dusks: DuskSig[] = [];
   private wyrms: WyrmSig[] = [];
   private fx13: F13[] = [];
+  private sty: Sty[] = [];
+  private styCast = new Map<number, number>();
+  private addSty(k: Parameters<typeof newSty>[0], x: number, y: number, r: number, type: string, ang = 0) {
+    this.sty.push(newSty(k, x, y, r, type, ang));
+    if (this.sty.length > 10) this.sty.shift();
+  }
   private pfx = new PixelFxLayer();
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
   private scorch: { x: number; y: number; r: number; seed: number; t: number; max: number; type: string }[] = [];
@@ -1238,13 +1252,22 @@ export class ArenaRenderer {
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
-    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || SLASH_SHOTS[p.mv] || DRAKE_SHOTS.has(p.mv)) return null;
+    if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || SLASH_SHOTS[p.mv] || WIND_SHOTS[p.mv] || DRAKE_SHOTS.has(p.mv)) return null;
     const ms = MOVE_FX[p.mv]?.shot;
     const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
-    if (!sp || this.pfx.tier >= 3) return null;
+    if (!sp || (this.pfx.tier >= 3 && this.shotMode.get(p.id + ":" + p.born) !== "px")) return null;
+    // Pick the art once per shot and keep it: it used to start with the old picture (while the pixel art was still being
+    // prepared, or when the quality governor dropped a tier) and then swap to the pixel art in mid-flight.
+    const mode = this.shotMode.get(p.id + ":" + p.born);
+    if (mode === "old") return null;
     const sh = this.pfx.sheet(sp.id, sp.tint);
+    if (!mode) {
+      if (this.shotMode.size > 400) this.shotMode.clear();
+      this.shotMode.set(p.id + ":" + p.born, sh?.ready ? "px" : "old");
+    }
     return sh?.ready ? { sp, sh } : null;
   }
+  private shotMode = new Map<string, "px" | "old">();
 
   private static ITEMPX: Record<string, { id: PxId; k: number; tint?: string; beam?: boolean }> = {
     heal: { id: "pickups/heart-pickup", k: 0.9 },
@@ -1520,7 +1543,7 @@ export class ArenaRenderer {
         const k = Math.max(0.35, Math.min(1.5, r / 110));
         const base = { lift: 0 };
         switch (e.type) {
-          case "Fire": go(r >= 90 ? "explosions/big-explosion" : "explosions/small-explosion", e.x, e.y + 8, { ...base, scale: r >= 90 ? k * 0.8 : k * 1.1, speed: 1.7, max: 2.2 }); break;
+          case "Fire": if (r < 90) go("explosions/small-explosion", e.x, e.y + 8, { ...base, scale: k * 1.1, speed: 1.7, max: 2.2 }); break; // big ones: the cartoon smoke burst (arena-style)
           case "Water": go(r >= 90 ? "water/geyser" : "water/splash", e.x, e.y + 8, { ...base, scale: k * 1.0, speed: 1.5, max: 2.0 }); break;
           case "Electric": go("lightning/zap-hit", e.x, e.y + 4, { ...base, lift: 10, scale: k * 1.4, speed: 1.2, max: 0.9 }); break;
           case "Grass": case "Bug": go("nature/spore-burst", e.x, e.y + 4, { ...base, scale: k * 0.9, speed: 1.5, max: 1.8, tint: e.type === "Bug" ? "#a8c93a" : undefined }); break;
@@ -1597,6 +1620,10 @@ export class ArenaRenderer {
           ps.atkDir = e.dir;
           ps.kind = e.kind;
           this.poses.set(e.id, ps);
+          if (e.type === "Fire" && (e.kind === "lob" || e.kind === "proj" || e.kind === "nova" || e.kind === "spread" || e.kind === "bolt") && this.t - (this.styCast.get(e.id) ?? -9) > 0.7) {
+            this.styCast.set(e.id, this.t);
+            this.addSty("circle", e.x, e.y + 8, 62, "Fire");
+          }
           this.specialCast(e);
           this.beamTrench(e);
           if (DRAKE_BOLTS.has(e.mv)) {
@@ -1619,6 +1646,7 @@ export class ArenaRenderer {
           break;
         case "hit": {
           const c = col(e.type);
+          if (e.dmg > 0 && e.mv && MOVES[e.mv]?.kind === "dash") this.addSty("slash", e.x, e.y - 14, 70, e.type, Math.atan2(e.dy, e.dx) + Math.PI / 2 + (Math.random() - 0.5) * 0.7);
           if (e.dmg > 0) {
             const ps = this.poses.get(e.id) ?? { clock: 0, atk: 0, atkDir: 0, hurt: 0, hx: 0, hy: 0 };
             ps.hurt = 0.26;
@@ -1659,6 +1687,10 @@ export class ArenaRenderer {
         }
         case "explode": {
           const c = col(e.type);
+          if (e.mv === "maxstrike" || e.mv?.startsWith("gmax")) this.addSty("pillar", e.x, e.y, Math.max(e.r, 90), e.type);
+          else if (e.mv && STY_TORNADO.has(e.mv)) this.addSty("tornado", e.x, e.y, Math.max(e.r, 80), e.type);
+          else if (e.mv && STY_SMOKE.has(e.mv)) this.addSty("smoke", e.x, e.y + 6, Math.max(e.r, 80), e.type);
+          else if ((e.type === "Fire" || e.type === "Normal") && e.r >= 90 && !MOVE_FX[e.mv ?? e.fx ?? ""]?.blast) this.addSty("smoke", e.x, e.y + 6, e.r, e.type);
           // every blast marks the ground for good: small ones pit it, big ones dig a crater, throw rubble and crack it
           {
             const vs = e.mv ? SIG_MOVES[e.mv] : undefined;
@@ -2438,8 +2470,8 @@ export class ArenaRenderer {
     {
       // a hard ceiling on the big effects alive together (a room full of players all casting): the oldest ones are cut short, the newest keep playing
       {
-        const lists = [this.sigs, this.hells, this.psys, this.drakes, this.dusks, this.wyrms, this.fx13] as unknown[][];
-        const cost = [0.5, 1, 2, 2, 1, 2, 1];
+        const lists = [this.sigs, this.hells, this.psys, this.drakes, this.dusks, this.wyrms, this.fx13, this.sty] as unknown[][];
+        const cost = [0.5, 1, 2, 2, 1, 2, 1, 0.7];
         let tot = lists.reduce((a, l, i) => a + l.length * cost[i]!, 0);
         while (tot > 9) {
           let bi = -1, bt = Infinity;
@@ -2499,6 +2531,12 @@ export class ArenaRenderer {
       if (d.t >= d.life) this.fx13.splice(i, 1);
       else { flat13(G, d); tick13(d, dt, (q) => this.parts.push(q as unknown as Parti)); }
     }
+    for (let i = this.sty.length - 1; i >= 0; i--) {
+      const d = this.sty[i]!;
+      d.t += dt;
+      if (d.t >= d.life) this.sty.splice(i, 1);
+      else tickSty(d, dt, (q) => this.parts.push(q as unknown as Parti));
+    }
     for (let i = this.wyrms.length - 1; i >= 0; i--) {
       const d = this.wyrms[i]!;
       d.t += dt;
@@ -2533,6 +2571,7 @@ export class ArenaRenderer {
     this.pixelWorld(S, things, g, dk);
     this.pfx.items((x, y, lift, draw) => things.push({ y: dk(x, y) + 0.6, draw: () => this.pxAt(g, x, y, lift, () => draw(g)) }));
     for (const d of this.fx13) items13(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
+    for (const d of this.sty) things.push({ y: dk(d.x, d.y) + (flatSty(d) ? -40 : 0.4), draw: () => this.at(g, d.x, d.y, flatSty(d) ? "fl" : "bb", () => { g.save(); g.translate(d.x, d.y); drawSty(g, d); g.restore(); }) });
     for (const d of this.wyrms) wyrmItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const d of this.dusks) duskItems(d, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }));
     for (const h of this.drakes) drakeItems(h, (x, y, dy, draw) => things.push({ y: dk(x, y) + dy, draw: () => this.at(g, x, y, "bb", () => draw(g)) }), this.v3 ? this.yaw + Math.PI / 2 : 0);
@@ -6063,6 +6102,36 @@ export class ArenaRenderer {
         });
       }
       if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
+      if (WIND_SHOTS[p.mv]) {
+        const [ce, cb] = WIND_SHOTS[p.mv]!;
+        const R = Math.max(26, p.r * 3.2), up = 18, ang = Math.atan2(p.vy, p.vx);
+        this.at(g, p.x, p.y, "mix", () => {
+          const cy = p.y - (this.v3 ? 0 : up);
+          g.save();
+          g.translate(p.x, cy);
+          g.rotate(ang);
+          const tr = g.createLinearGradient(-R * 3, 0, 0, 0);
+          tr.addColorStop(0, "rgba(255,255,255,0)"); tr.addColorStop(1, cb);
+          g.globalAlpha = 0.35; g.fillStyle = tr;
+          g.beginPath(); g.moveTo(-R * 3, 0); g.lineTo(0, -R * 0.7); g.lineTo(0, R * 0.7); g.closePath(); g.fill();
+          g.globalAlpha = 1; g.lineCap = "round";
+          const spin = this.t * 14 + p.id;
+          for (let a = 0; a < 3; a++) {
+            const a0 = spin + (a * Math.PI * 2) / 3;
+            g.beginPath();
+            for (let i = 0; i <= 14; i++) {
+              const u = i / 14, r = R * (0.15 + 0.85 * u), th = a0 + u * 2.4;
+              const x = Math.cos(th) * r * 1.15, y = Math.sin(th) * r * 0.8;
+              i ? g.lineTo(x, y) : g.moveTo(x, y);
+            }
+            g.strokeStyle = cb; g.lineWidth = R * 0.2; g.globalAlpha = 0.75; g.stroke();
+            g.strokeStyle = ce; g.lineWidth = R * 0.07; g.globalAlpha = 1; g.stroke();
+          }
+          g.restore();
+        }, "p", this.v3 ? 32 : 0);
+        if (Math.random() < 0.7) this.parts.push({ kind: "dot", x: p.x - Math.cos(ang) * R + rnd(-5, 5), y: p.y - (this.v3 ? 0 : up) - Math.sin(ang) * R + rnd(-5, 5), vx: -Math.cos(ang) * 80 + rnd(-40, 40), vy: -Math.sin(ang) * 80 + rnd(-40, 40), g: 0, life: rnd(0.25, 0.45), max: 0.45, size: rnd(1.6, 3), grow: 0, color: ce, rot: 0, vr: 0 });
+        continue;
+      }
       if (SLASH_SHOTS[p.mv]) {
         // a sharp crescent of cutting air / psychic force, pointing the way it flies, with a streak behind
         const [ce, cb] = SLASH_SHOTS[p.mv]!;
