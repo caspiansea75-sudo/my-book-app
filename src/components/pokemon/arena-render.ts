@@ -16,7 +16,7 @@ import { FALL_IDS, drawFall } from "./arena-fall";
 import { DUSK_BIG, DUSK_IDS, duskFlat, duskItems, duskIsGhost, type DuskSig } from "./arena-dusk";
 import { WYRM_BIG, WYRM_IDS, wyrmFlat, wyrmItems, type WyrmSig } from "./arena-wyrm";
 import { electroBoom } from "./arena-elec";
-import { drawSty, flatSty, newSty, tickSty, type Sty } from "./arena-style";
+import { COSMIC_SHOT, drawCosmicShot, drawSty, flatSty, newSty, tickSty, type Sty } from "./arena-style";
 import { FX13_IDS, boom13, flat13, items13, newF13, tick13, type F13 } from "./arena-fx13";
 import { isVortex } from "./arena-vortex";
 import { HELL_IDS, hellFlat, hellItems, type HellSig } from "./arena-hell";
@@ -188,8 +188,13 @@ export type View = "top" | "third" | "first";
 type Cam3 = { px: number; py: number; H: number; phi: number; cp: number; sp: number; fl: number; hz: number; fx: number; fy: number; rx: number; ry: number };
 let WARP_C: HTMLCanvasElement | null = null;
 
+/** Flying shots drawn with the pixel-art sprites? Off: shooting moves use their original art. */
+const PIXEL_SHOTS = false;
 /** Moves whose blast gets the cartoon smoke burst. */
-const STY_SMOKE = new Set(["explosion", "selfdestruct", "blastburn", "eruption", "fireblast", "mistyexplosion", "bulldoze"]);
+const STY_SMOKE = new Set(["explosion", "selfdestruct", "fireblast", "mistyexplosion", "bulldoze"]);
+const STY_STAR = new Set(["dracometeor", "cosmicrequiem", "futuresight", "doomdesire", "photongeyser", "moonblast", "lightofruin"]);
+const STY_SOLAR = new Set(["eruption", "blastburn", "fusionflare", "blueflare"]);
+const STY_CASCADE = new Set(["waterspout", "gmaxcannonade", "gmaxfoamburst"]);
 /** Moves whose blast is drawn as a ribbon tornado. */
 const STY_TORNADO = new Set(["whirlwind", "hurricane", "gmaxwindrage"]);
 /** Blade-like shots drawn as a smooth glowing crescent (not a ball): colours are [edge, body]. */
@@ -258,7 +263,7 @@ export class ArenaRenderer {
   private styCast = new Map<number, number>();
   private addSty(k: Parameters<typeof newSty>[0], x: number, y: number, r: number, type: string, ang = 0) {
     this.sty.push(newSty(k, x, y, r, type, ang));
-    if (this.sty.length > 10) this.sty.shift();
+    if (this.sty.length > 14) this.sty.shift();
   }
   private pfx = new PixelFxLayer();
   private rocks: { x: number; y: number; h: number; hMax: number; rot: number; vr: number; size: number; t: number; max: number; seed: number }[] = [];
@@ -1252,6 +1257,7 @@ export class ArenaRenderer {
 
   /** The pixel-art look of a shot, when it has one and its frames are ready. */
   private pxShot(p: State["projs"][number]) {
+    if (!PIXEL_SHOTS) return null; // shooting moves keep their original (canvas) art
     if (p.beam || (p.hold ?? 0) > 0 || p.mv.startsWith("megashuriken") || p.mv === "watershuriken" || SLASH_SHOTS[p.mv] || WIND_SHOTS[p.mv] || DRAKE_SHOTS.has(p.mv)) return null;
     const ms = MOVE_FX[p.mv]?.shot;
     const sp = ms ? { id: ms.id as PxId, k: ms.k, round: ms.round, tint: ms.tint ?? undefined, lift: ms.lift } : ArenaRenderer.SHOT[p.type];
@@ -1624,6 +1630,11 @@ export class ArenaRenderer {
             this.styCast.set(e.id, this.t);
             this.addSty("circle", e.x, e.y + 8, 62, "Fire");
           }
+          if (e.type === "Electric" && e.kind === "nova" && this.t - (this.styCast.get(e.id + 100000) ?? -9) > 0.8) {
+            this.styCast.set(e.id + 100000, this.t);
+            this.addSty("stormfloor", e.x, e.y + 8, 78, "Electric");
+            this.addSty("storm", e.x, e.y + 8, 78, "Electric");
+          }
           this.specialCast(e);
           this.beamTrench(e);
           if (DRAKE_BOLTS.has(e.mv)) {
@@ -1687,7 +1698,10 @@ export class ArenaRenderer {
         }
         case "explode": {
           const c = col(e.type);
-          if (e.mv === "maxstrike" || e.mv?.startsWith("gmax")) this.addSty("pillar", e.x, e.y, Math.max(e.r, 90), e.type);
+          if (e.mv && STY_CASCADE.has(e.mv)) { this.addSty("ripple", e.x, e.y + 6, Math.max(e.r, 90), e.type); this.addSty("cascade", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
+          else if (e.mv && STY_STAR.has(e.mv)) { this.addSty("starfloor", e.x, e.y + 6, Math.max(e.r, 90), e.type); this.addSty("starfall", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
+          else if (e.mv && STY_SOLAR.has(e.mv)) { this.addSty("solarfloor", e.x, e.y + 6, Math.max(e.r, 90), e.type); this.addSty("solar", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
+          else if (e.mv === "maxstrike" || e.mv?.startsWith("gmax")) this.addSty("pillar", e.x, e.y, Math.max(e.r, 90), e.type);
           else if (e.mv && STY_TORNADO.has(e.mv)) this.addSty("tornado", e.x, e.y, Math.max(e.r, 80), e.type);
           else if (e.mv && STY_SMOKE.has(e.mv)) this.addSty("smoke", e.x, e.y + 6, Math.max(e.r, 80), e.type);
           else if ((e.type === "Fire" || e.type === "Normal") && e.r >= 90 && !MOVE_FX[e.mv ?? e.fx ?? ""]?.blast) this.addSty("smoke", e.x, e.y + 6, e.r, e.type);
@@ -6102,6 +6116,16 @@ export class ArenaRenderer {
         });
       }
       if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
+      if (COSMIC_SHOT[p.type] && !p.beam && !((p.hold ?? 0) > 0) && !p.mv.startsWith("megashuriken") && p.mv !== "watershuriken" && !SLASH_SHOTS[p.mv] && !WIND_SHOTS[p.mv] && !DRAKE_SHOTS.has(p.mv)) {
+        const R = Math.max(20, p.r * 2.5), up = 18, ang = Math.atan2(p.vy, p.vx), age = S.time - p.born;
+        this.at(g, p.x, p.y, "mix", () => {
+          g.save(); g.translate(p.x, p.y - (this.v3 ? 0 : up)); g.rotate(ang);
+          drawCosmicShot(g, COSMIC_SHOT[p.type]!, p.type, this.t + p.id, R, age);
+          g.restore();
+        }, "p", this.v3 ? 32 : 0);
+        if (Math.random() < 0.8) this.parts.push({ kind: "spark", x: p.x - Math.cos(ang) * R * 2 + rnd(-6, 6), y: p.y - (this.v3 ? 0 : up) - Math.sin(ang) * R * 2 + rnd(-6, 6), vx: -Math.cos(ang) * 60 + rnd(-50, 50), vy: -Math.sin(ang) * 60 + rnd(-50, 50), g: 0, life: rnd(0.3, 0.6), max: 0.6, size: rnd(1.2, 2.6), grow: 0, color: Math.random() < 0.5 ? "#e8f0ff" : "#ffe6a0", rot: 0, vr: 0 });
+        continue;
+      }
       if (WIND_SHOTS[p.mv]) {
         const [ce, cb] = WIND_SHOTS[p.mv]!;
         const R = Math.max(26, p.r * 3.2), up = 18, ang = Math.atan2(p.vy, p.vx);
