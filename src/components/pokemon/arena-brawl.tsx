@@ -439,7 +439,10 @@ export function ArenaBrawl() {
     const tick = (now: number) => {
       const S = r.S!;
       // `now` (the frame's timestamp) can be slightly older than `last` on the very first frame: never step backwards.
-      const dt = Math.max(0, Math.min(0.05, (now - r.last) / 1000));
+      // On a slow device a frame can take longer than 50 ms. The simulation used to just run slower then (slow motion); now it
+      // catches up in several small steps (up to 0.2 s of game time per frame), so the game keeps real-time speed and only looks choppier.
+      const rawDt = Math.max(0, Math.min(0.2, (now - r.last) / 1000));
+      const dt = Math.min(0.05, rawDt);
       r.last = now;
       const rend = r.R!;
       if (rend.getView() !== "top") {
@@ -466,17 +469,23 @@ export function ArenaBrawl() {
           if (S.mode === "quick") swapTo(S, 0, r.swapQ);
           r.swapQ = -1;
         }
-        step(S, build(), tdt);
-        if (S.events.length) {
-          onEvents(S, S.events);
-          S.events.length = 0;
-        }
+        let left = r.photo.on ? tdt : rawDt;
+        let guard = 0;
+        do {
+          const h = Math.min(0.05, left);
+          step(S, build(), h);
+          if (S.events.length) {
+            onEvents(S, S.events);
+            S.events.length = 0;
+          }
+          left -= h;
+        } while (left > 1e-4 && ++guard < 5);
       }
       const p = playerOf(S);
       r.me = p;
       r.R!.setAim(r.preview ? { from: p, mv: moveOf(p, r.preview.slot), x: r.preview.x, y: r.preview.y } : null, r.aim);
       try {
-        r.R!.render(S, r.photo.on ? tdt : r.paused ? 0 : dt, p);
+        r.R!.render(S, r.photo.on ? tdt : r.paused ? 0 : rawDt, p);
       } catch (err) {
         // One bad frame must never freeze the whole game on a black screen: skip it and keep going.
         if (!r.drawFailed) console.error("Arena Brawl: a frame failed to draw", err);

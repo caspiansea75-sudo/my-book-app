@@ -839,7 +839,8 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
     const tick = (now: number) => {
       if (dead) return;
       frameN++;
-      const dt = Math.max(0, Math.min(0.05, (now - (lastFrame || now)) / 1000));
+      const rawDt = Math.max(0, Math.min(0.2, (now - (lastFrame || now)) / 1000));
+      const dt = Math.min(0.05, rawDt);
       lastFrame = now;
       const inp = build();
       let V: State | null = null;
@@ -882,9 +883,17 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           }
           const others = new Map<number, Input>();
           for (const f of S.fighters) if (f.member !== meId && f.alive) others.set(f.id, recv.take(f.member ?? 0));
-          step(S, inp, dt, others);
-          const evs = S.events.slice();
-          S.events.length = 0;
+          // catch up in small steps when a frame was slow, so the match keeps real-time speed instead of slowing down for everybody
+          let left = rawDt;
+          const evs: typeof S.events = [];
+          let guard = 0;
+          do {
+            const h = Math.min(0.05, left);
+            step(S, inp, h, others);
+            evs.push(...S.events);
+            S.events.length = 0;
+            left -= h;
+          } while (left > 1e-4 && ++guard < 5);
           outEvents.push(...evs);
           const mine = S.fighters.find((f) => f.member === meId);
           localEvents(evs, mine);
