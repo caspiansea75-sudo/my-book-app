@@ -630,20 +630,24 @@ export class ArenaRenderer {
       const d0 = y - ext.t - this.camY, d1 = yb - ext.t - this.camY;
       const fm = 1 + (c * (d0 + d1)) / 2 / H;
       if (fm < 0.1) continue;
-      const y0 = Z * s * (d0 + (c * d0 * d0) / (2 * H));
-      const y1 = Z * s * (d1 + (c * d1 * d1) / (2 * H));
-      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, this.cx + (-ext.l - this.camX) * Z * fm + this.shx, SCR.CY + y0 + this.shy, W * Z * fm, y1 - y0 + 0.8);
+      // rows meet exactly on whole device pixels: no overlap (an overlap double-blended every soft shadow and every overlay into a
+      // dark stripe at each row) and no gap
+      const sk = this.scale;
+      const y0 = Math.round((SCR.CY + Z * s * (d0 + (c * d0 * d0) / (2 * H)) + this.shy) * sk) / sk;
+      const y1 = Math.round((SCR.CY + Z * s * (d1 + (c * d1 * d1) / (2 * H)) + this.shy) * sk) / sk;
+      if (y1 - y0 <= 0) continue;
+      g.drawImage(src, 0, y * kx, src.width, (yb - y) * kx, this.cx + (-ext.l - this.camX) * Z * fm + this.shx, y0, W * Z * fm, y1 - y0);
       if (pat) {
         // the fine detail on the same row, in the same perspective (it fades out with distance, where it would only shimmer)
         const da = dAlpha * Math.max(0, Math.min(1, (fm - 0.5) / 0.35));
         if (da > 0.04) {
-          const dd = (y1 - y0 + 0.8) / (yb - y);
+          const dd = (y1 - y0) / (yb - y);
           g.save();
           g.globalCompositeOperation = "overlay";
           g.globalAlpha = da;
-          g.transform(Z * fm, 0, 0, dd, this.cx - this.camX * Z * fm + this.shx, SCR.CY + y0 + this.shy - (y - ext.t) * dd);
+          g.transform(Z * fm, 0, 0, dd, this.cx - this.camX * Z * fm + this.shx, y0 - (y - ext.t) * dd);
           g.fillStyle = pat;
-          g.fillRect(-ext.l, y - ext.t, W, yb - y + 0.8 / dd);
+          g.fillRect(-ext.l, y - ext.t, W, yb - y);
           g.restore();
         }
       }
@@ -691,7 +695,7 @@ export class ArenaRenderer {
       g.save();
       g.setTransform(k, 0, 0, k, 0, 0);
       g.beginPath();
-      g.rect(0, ys + this.shy, this.sw, step + 0.8);
+      { const ra = Math.round((ys + this.shy) * k) / k, rb = Math.round((ys + step + this.shy) * k) / k; g.rect(0, ra, this.sw, rb - ra); }
       g.clip();
       const a = c.rx / kk;
       const cc = c.ry / kk;
