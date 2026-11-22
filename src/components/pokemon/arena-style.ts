@@ -385,7 +385,7 @@ export function tickSty(s: Sty, dt: number, emit0: Emit) {
 }
 
 /** Cosmic bolts for flying shots (from the starbolt references): origin = the shot, +x = the way it flies. */
-export const COSMIC_SHOT: Record<string, "star" | "orb" | "comet"> = { Psychic: "star", Fairy: "star", Ghost: "orb", Dragon: "orb", Dark: "comet" };
+export const COSMIC_SHOT: Record<string, "star" | "orb" | "comet"> = { Psychic: "star", Fairy: "star", Dragon: "orb", Dark: "comet" };
 export function drawCosmicShot(g: G, kind: "star" | "orb" | "comet", type: string, t: number, R: number, age: number) {
   const [dk, md, lt] = pal(type), tm = t * 9;
   g.save(); g.lineCap = "round"; g.globalCompositeOperation = "lighter";
