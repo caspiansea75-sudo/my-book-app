@@ -1524,7 +1524,7 @@ export class ArenaRenderer {
     switch (e.t) {
       case "cast": {
         if (e.kind && e.type && isPhysical({ kind: e.kind, type: e.type })) this.bladeHold.set(e.id, { until: this.t + 0.55, dir: e.dir });
-        const mf = MOVE_FX[e.mv]?.cast;
+        const mf = e.mv === "dracometeor" ? undefined : MOVE_FX[e.mv]?.cast; // Draco Meteor: just the one big comet, not a second small pixel meteor
         if (mf) this.pxMoveFx(mf, { kind: "cast", x: e.x, y: e.y, mv: e.mv, id: e.id, dir: e.dir, tx: e.tx, ty: e.ty, byPlayer: e.byPlayer });
         break;
       }
@@ -1640,7 +1640,17 @@ export class ArenaRenderer {
             this.addSty("storm", e.x, e.y + 8, 78, "Electric");
           }
           // Draco Meteor: nothing is drawn at the caster; only the meteor falling and the impact are shown
-          if (e.mv === "dracometeor") break;
+          if (e.mv === "dracometeor") {
+            // the one big comet falls the whole wind-up and lands exactly as the impact comes (the pixel meteor lands at the same moment)
+            const md = MOVES[e.mv], range = md?.range ?? 360;
+            let lx = e.tx ?? e.x, ly = e.ty ?? e.y;
+            const dd = Math.hypot(lx - e.x, ly - e.y), kk = dd > range ? range / dd : 1;
+            lx = clamp(e.x + (lx - e.x) * kk, 0, ARENA.W); ly = clamp(e.y + (ly - e.y) * kk, 0, ARENA.H);
+            const wind = (md?.windup ?? 0.55) * (e.byPlayer ? 0.6 : 1);
+            this.addSty("starfall", lx, ly + 6, 90, e.type, 1);
+            this.sty[this.sty.length - 1]!.t = 0.3 * 1.6 - wind; // lands (u = 0.3) just as the wind-up ends
+            break;
+          }
           this.specialCast(e);
           this.beamTrench(e);
           if (DRAKE_BOLTS.has(e.mv)) {
@@ -1707,7 +1717,7 @@ export class ArenaRenderer {
         case "explode": {
           const c = col(e.type);
           if (e.mv && STY_CASCADE.has(e.mv)) { this.addSty("ripple", e.x, e.y + 6, Math.max(e.r, 90), e.type); this.addSty("cascade", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
-          else if (e.mv && STY_STAR.has(e.mv)) { this.addSty("starfloor", e.x, e.y + 6, Math.max(e.r, 90), e.type); this.addSty("starfall", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
+          else if (e.mv && STY_STAR.has(e.mv)) { this.addSty("starfloor", e.x, e.y + 6, Math.max(e.r, 90), e.type); if (e.mv !== "dracometeor") this.addSty("starfall", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
           else if (e.mv && STY_SOLAR.has(e.mv)) { this.addSty("solarfloor", e.x, e.y + 6, Math.max(e.r, 90), e.type); this.addSty("solar", e.x, e.y + 6, Math.max(e.r, 90), e.type); }
           else if (e.mv === "maxstrike" || e.mv?.startsWith("gmax")) this.addSty("pillar", e.x, e.y, Math.max(e.r, 90), e.type);
           else if (e.mv && STY_TORNADO.has(e.mv)) this.addSty("tornado", e.x, e.y, Math.max(e.r, 80), e.type);

@@ -201,7 +201,7 @@ export function drawSty(g: G, s: Sty) {
       const fall = sm(0, 0.3, u), ex = 170 * (1 - fall), ey = -400 * (1 - fall), fade = 1 - sm(0.45, 0.75, u);
       if (u < 0.34) {
         const a = Math.atan2(-ey, -ex) + Math.PI; // pointing back up the path
-        g.save(); g.translate(ex, ey); g.rotate(a);
+        g.save(); g.translate(ex, ey); g.rotate(a); if (s.ang) g.scale(1.45, 1.45); // ang set = the big comet (Draco Meteor)
         g.globalCompositeOperation = "lighter";
         const L = 150 + 60 * (1 - fall), tg = g.createLinearGradient(0, 0, L, 0);
         tg.addColorStop(0, "rgba(190,200,255,0.95)"); tg.addColorStop(0.35, "rgba(110,90,255,0.7)"); tg.addColorStop(1, "rgba(80,40,200,0)");
