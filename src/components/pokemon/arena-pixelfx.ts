@@ -280,14 +280,14 @@ const loading = new Set<string>();
  * The effects are built on a small pixel grid. To keep them from looking like blocks, they are enlarged here in a way that rounds the
  * stair-steps off: twice the size with smooth sampling, then a very slight blur (only where the browser supports canvas filters).
  */
-function smoothUp(src: HTMLCanvasElement, dst?: HTMLCanvasElement): HTMLCanvasElement {
+function smoothUp(src: HTMLCanvasElement, dst?: HTMLCanvasElement, blur = true): HTMLCanvasElement {
   const out = dst ?? document.createElement("canvas");
   if (out.width !== src.width * 2) { out.width = src.width * 2; out.height = src.height * 2; }
   const g = out.getContext("2d")!;
   g.clearRect(0, 0, out.width, out.height);
   g.imageSmoothingEnabled = true;
   g.imageSmoothingQuality = "high";
-  try { if ("filter" in g) g.filter = "blur(0.7px)"; } catch { /* no canvas filters: the smooth sampling alone is used */ }
+  try { if (blur && "filter" in g) g.filter = "blur(0.7px)"; } catch { /* no canvas filters: the smooth sampling alone is used */ }
   g.drawImage(src, 0, 0, out.width, out.height);
   try { if ("filter" in g) g.filter = "none"; } catch { /* */ }
   return out;
@@ -661,7 +661,8 @@ export class PixelFxLayer {
     l.fx.draw(l.frame);
     composite(l.frame, l.img.data, null);
     l.cx.putImageData(l.img, 0, 0);
-    if (this.tier < 2) l.big = smoothUp(l.cv, l.big);
+    // redrawn every frame while it plays: no blur filter here (it is the expensive part), the smooth 2x sampling does the rounding
+    if (this.tier < 1) l.big = smoothUp(l.cv, l.big, false);
     else l.big = undefined;
     l.dirty = false;
     this.msAcc += performance.now() - t0;

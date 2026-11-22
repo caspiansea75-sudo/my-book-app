@@ -2303,8 +2303,9 @@ export class ArenaRenderer {
       this.frameEma += (dtReal - this.frameEma) * 0.02;
       // Quality only ever steps DOWN, and only when the game is clearly slow for a good while. It never climbs back by itself: the old
       // down-then-up cycle made the ground go blurry, then sharp, then blurry again every few seconds.
-      if (this.t > 6 && this.t - this.qAt > 5 && !this.z && !this.tint && !this.clean) {
-        if (this.frameEma > 0.032 && this.q > 0.7) { this.q = Math.max(0.7, this.q - 0.15); this.qAt = this.t; this.resize(); }
+      if (this.t > 4 && this.t - this.qAt > 3 && !this.z && !this.tint && !this.clean) {
+        // below about 40 frames a second the picture gets a little smaller (down to half the pixels per side): choppy motion is worse than a softer picture
+        if (this.frameEma > 0.025 && this.q > 0.5) { this.q = Math.max(0.5, this.q - 0.12); this.qAt = this.t; this.resize(); }
         if (this.q <= 0.7) this.hi = false;
       }
     }

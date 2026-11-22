@@ -897,7 +897,7 @@ export function MpGame({ init, live, onLeave, onRematch, onReport, onNext }: { i
           outEvents.push(...evs);
           const mine = S.fighters.find((f) => f.member === meId);
           localEvents(evs, mine);
-          if (now - lastSnap >= 50) {
+          if (now - lastSnap >= 33) {
             lastSnap = now;
             p2p.broadcast(enc.encode(S, outEvents, false));
             outEvents = [];
