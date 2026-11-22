@@ -8,6 +8,7 @@ import {
   List,
   Minus,
   Plus,
+  Sparkles,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -38,6 +39,8 @@ export function ReaderBar({
   const setAudioOn = useReaderStore((s) => s.setAudioOn);
   const audioVolume = useReaderStore((s) => s.audioVolume);
   const setAudioVolume = useReaderStore((s) => s.setAudioVolume);
+  const fx = useReaderStore((s) => s.fx);
+  const setFx = useReaderStore((s) => s.setFx);
 
   const cycleTheme = () => {
     const i = THEMES.findIndex((t) => t.id === theme);
@@ -165,6 +168,20 @@ export function ReaderBar({
             className="h-1.5 w-16 shrink-0 accent-lamp sm:w-20"
           />
         </div>
+
+        <button
+          type="button"
+          onClick={() => setFx(fx === "full" ? "lite" : "full")}
+          aria-pressed={fx === "full"}
+          aria-label={fx === "full" ? "পূর্ণ ইফেক্ট চালু আছে — হালকা করুন" : "হালকা ইফেক্ট — পূর্ণ করুন"}
+          title="থিমের বৃষ্টি, বজ্র, হাওয়া ও আলোর অ্যানিমেশন"
+          className={cn(
+            "pressable grid size-10 shrink-0 place-items-center rounded-full border",
+            fx === "full" ? "border-lamp text-lamp" : "border-border text-muted hover:text-fg",
+          )}
+        >
+          <Sparkles className="size-4" strokeWidth={1.75} />
+        </button>
 
         <button
           type="button"

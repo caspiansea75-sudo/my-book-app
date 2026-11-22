@@ -4,3 +4,12 @@
 .pk-pt-gauge > i[data-ready="1"] { background: linear-gradient(90deg, #ffcb05, #ff7a00); box-shadow: 0 0 8px #ffcb05; animation: pk-pt-ready 1s ease-in-out infinite; }
 @keyframes pk-pt-ready { 50% { filter: brightness(1.35); } }
 @media (prefers-reduced-motion: reduce) { .pk-pt-gauge > i { animation: none !important; transition: none; } }
+
+/* turn-based battle: round dividers in the log */
+.pk-log p.round { text-align: center; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.6; margin-top: 6px; }
+
+/* Petown battle uses the arena scene. Lookalike forms are tinted (the tint is combined with the sprite's own drop-shadow). */
+.pt-hue .pk-mon.me .pk-mon-inner img { filter: var(--pt-f-me, hue-rotate(0deg)) drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3)); }
+.pt-hue .pk-mon.foe .pk-mon-inner img { filter: var(--pt-f-foe, hue-rotate(0deg)) drop-shadow(0 6px 4px rgba(0, 0, 0, 0.3)); }
+.pk-stat.CNF { background: #d86bb0; }
+.pk-stat.LOVE { background: #ff5c8a; }

@@ -1714,20 +1714,6 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
       break;
     case "spread": {
       const n = mv.n ?? 3;
-      if (mv.vee) {
-        // a V sign: two straight arms of flame, shots staggered along each arm so they read as lines
-        const per = Math.max(1, Math.floor(n / 2));
-        for (const side of [-1, 1]) {
-          for (let j = 0; j < per; j++) {
-            spawnProj(S, f, mv, dx, dy, { off: side * mv.vee, dmg: baseDamage(f, mv), life: 0.85, r: 12 });
-            const p = S.projs[S.projs.length - 1]!;
-            const a = Math.atan2(dy, dx) + side * mv.vee;
-            p.x += Math.cos(a) * j * 30;
-            p.y += Math.sin(a) * j * 30;
-          }
-        }
-        break;
-      }
       for (let i = 0; i < n; i++) spawnProj(S, f, mv, dx, dy, { off: (i - (n - 1) / 2) * 0.17, dmg: baseDamage(f, mv) });
       break;
     }

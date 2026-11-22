@@ -34,8 +34,6 @@ export type MoveDef = {
   cd: number;
   /** Shots in a spread / hits in a beam. */
   n?: number;
-  /** A spread drawn as a "V": two straight arms of shots opening at this half-angle (radians). */
-  vee?: number;
   /** Projectile speed (px/s), dash length, nova radius, bolt length… whichever fits the kind. */
   range?: number;
   speed?: number;
@@ -73,7 +71,6 @@ export const isPhysical = (mv: Pick<MoveDef, "kind" | "type">) => mv.kind === "d
 export const MOVES: Record<string, MoveDef> = Object.fromEntries(
   [
     m({ id: "flamethrower", name: "Flamethrower", type: "Fire", kind: "beam", power: 0.42, cd: 2.6, n: 9, range: 260, status: { kind: "brn", chance: 0.18 }, desc: "A stream of fire that burns what it touches." }),
-    m({ id: "flamev", name: "Flame V", type: "Fire", kind: "spread", power: 0.5, cd: 3.2, n: 8, vee: 0.3, speed: 470, status: { kind: "brn", chance: 0.2 }, desc: "Throw two lines of fire out in a V sign." }),
     m({ id: "fireblast", name: "Fire Blast", type: "Fire", kind: "lob", power: 2.2, cd: 5.5, range: 340, windup: 0.55, status: { kind: "brn", chance: 0.5 }, desc: "A huge blast that lands where you aim." }),
     m({ id: "dig", name: "Dig", type: "Ground", kind: "burrow", power: 1.9, cd: 4.6, range: 270, desc: "Burrow under the floor, untouchable, and burst out under your foe." }),
     m({ id: "flamewheel", name: "Flame Wheel", type: "Fire", kind: "dash", power: 1.7, cd: 3.4, range: 230, status: { kind: "brn", chance: 0.3 }, desc: "Roll through foes, trailing flame." }),
