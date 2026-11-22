@@ -1,10 +1,10 @@
 import type { TextRun } from "@/lib/book";
-import { ALL_FX_IDS } from "@/lib/text-style";
+import { TEXT_EFFECTS } from "@/lib/text-style";
 
 export type Style = Omit<TextRun, "t">;
 type Ch = { ch: string; st: Style };
 
-const EFFECT_IDS: string[] = ALL_FX_IDS;
+const EFFECT_IDS: string[] = TEXT_EFFECTS.map((f) => f.id);
 
 export function runsToText(runs: TextRun[] | undefined): string {
   return (runs ?? []).map((r) => r.t).join("");
@@ -85,11 +85,6 @@ export function allInRange(
   if (e <= s) return false;
   for (let k = s; k < e; k++) if (!pred(chars[k]!.st)) return false;
   return true;
-}
-
-/** The style of the character at `pos` (undefined past the end). */
-export function styleAt(runs: TextRun[], pos: number): Style | undefined {
-  return expand(runs)[pos]?.st;
 }
 
 export function insertText(runs: TextRun[], pos: number, text: string): TextRun[] {

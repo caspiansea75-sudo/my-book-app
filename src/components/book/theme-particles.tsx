@@ -1,8 +1,5 @@
-import { Fragment, useEffect } from "react";
-import { useRouterState } from "@tanstack/react-router";
 import { RainLayer } from "@/components/book/rain-layer";
-import { ThemeFx } from "@/components/book/theme-fx";
-import { useReaderStore, type ThemeId } from "@/lib/reader-store";
+import type { ThemeId } from "@/lib/reader-store";
 
 const STEAM = Array.from({ length: 10 }, (_, i) => ({
   left: `${8 + ((i * 23) % 84)}%`,
@@ -23,34 +20,8 @@ const EMBERS = Array.from({ length: 16 }, (_, i) => ({
   duration: `${7 + (i % 5) * 1.6}s`,
 }));
 
-/**
- * Ambient visual layer matching the current reading theme. The simple drifting layer is always there;
- * in "full" mode the theme's whole atmosphere (thunder, wind, lamp light…) is added on top.
- */
+/** Ambient visual layer matching the current reading theme. Pure CSS — no canvas/JS animation loop. */
 export function ThemeParticles({ theme }: { theme: ThemeId }) {
-  const fx = useReaderStore((s) => s.fx);
-  // The full atmosphere (thunder flashes, wind, light) would sit on top of the Pokémon pages and battles, so it is left out there.
-  const onPokemon = useRouterState({ select: (s) => s.location.pathname.startsWith("/pokemon") });
-
-  // Nothing needs to move while the tab is in the background.
-  useEffect(() => {
-    const sync = () => {
-      document.documentElement.dataset.tfxPaused = document.hidden ? "1" : "";
-    };
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
-  }, []);
-
-  return (
-    <Fragment>
-      <BaseLayer theme={theme} />
-      {fx === "full" && !onPokemon ? <ThemeFx key={theme} theme={theme} /> : null}
-    </Fragment>
-  );
-}
-
-function BaseLayer({ theme }: { theme: ThemeId }) {
   if (theme === "monsoon") return <RainLayer />;
 
   if (theme === "cafe") {

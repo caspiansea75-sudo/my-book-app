@@ -6059,9 +6059,9 @@ export class ArenaRenderer {
       } else {
         g.rotate(ang);
         const n = mv.kind === "spread" ? mv.n ?? 3 : 1;
-        for (let i = 0; i < n; i++) {
+        for (let i = 0; i < (mv.vee ? 2 : n); i++) {
           g.save();
-          g.rotate((i - (n - 1) / 2) * 0.17);
+          g.rotate(mv.vee ? (i ? 1 : -1) * mv.vee : (i - (n - 1) / 2) * 0.17);
           g.setLineDash([10, 8]);
           g.beginPath();
           g.moveTo(f.r, 0);
