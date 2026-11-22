@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, redirect, useRouterState } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { SiteNav } from "@/components/book/site-nav";
 import { PokePage } from "@/components/pokemon/ui";
 import { redirectGuest } from "@/lib/auth/guest";
@@ -13,17 +13,11 @@ export const Route = createFileRoute("/pokemon")({
 });
 
 function PokemonLayout() {
-  // Keyed by the page that is actually on screen, so the "page opens" effects (see .pk-enter in pokemon.css) play
-  // when the new page appears. `location` changes the moment you tap a link, while the old page is still showing
-  // (the new one is still loading), which made the old page flash and the new one arrive with no effect.
-  const path = useRouterState({ select: (st) => st.resolvedLocation?.pathname ?? st.location.pathname });
   return (
     <main className="mf-page relative min-h-dvh">
       <PokePage>
         <SiteNav active="pokemon" />
-        <div key={path} className="pk-enter">
-          <Outlet />
-        </div>
+        <Outlet />
       </PokePage>
     </main>
   );
