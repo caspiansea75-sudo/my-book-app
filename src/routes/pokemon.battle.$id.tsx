@@ -111,7 +111,7 @@ function Arena({ initial }: { initial: BattleView }) {
         const fast = !item.animate || speedRef.current === 0;
         if (!fast && step.cue) {
           setCue(step.cue);
-          battleAudio.cue(step.cue, step.state, metaRef.current.you);
+          battleAudio.cue(step.cue, step.state, metaRef.current.you, speedRef.current || 1);
         }
         if (item.animate) {
           const sd = metaRef.current.you ?? "p1";
@@ -301,7 +301,7 @@ function Arena({ initial }: { initial: BattleView }) {
 
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="relative lg:col-start-1 lg:row-start-1">
-          <BattleScene state={bstate} you={you} sprites={meta.sprites} cue={cue} theme={arena === "auto" ? arenaForBattle(meta.id) : Number(arena)}>
+          <BattleScene state={bstate} you={you} sprites={meta.sprites} cue={cue} speed={speed || 1} theme={arena === "auto" ? arenaForBattle(meta.id) : Number(arena)}>
             {intro ? <VsIntro names={names} people={meta.people} you={you} onDone={finishIntro} /> : null}
             {showResult && meta.status === "done" ? <ResultOverlay view={meta} state={bstate} onReplay={() => void onReplay()} onRematch={meta.cpu && meta.mySets ? () => void onRematch() : undefined} /> : null}
           </BattleScene>

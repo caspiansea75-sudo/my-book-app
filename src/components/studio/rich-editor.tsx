@@ -12,8 +12,9 @@ import {
   runsToHtml,
   runsToText,
   setOffsets,
+  styleAt,
 } from "@/lib/rich";
-import { effectClass } from "@/lib/text-style";
+import { effectClass, sizeOf, toggleFx, withSize } from "@/lib/text-style";
 import { cn } from "@/lib/utils";
 
 export type FormatCmd =
@@ -22,6 +23,10 @@ export type FormatCmd =
   | { k: "u" }
   | { k: "c"; v?: string }
   | { k: "fx"; id: string }
+  /** Set the size step 1–9 (null or 5 = normal). */
+  | { k: "size"; v: number | null }
+  /** Make the text one step smaller (-1) or bigger (+1). */
+  | { k: "sizeStep"; d: 1 | -1 }
   | { k: "clear" }
   | { k: "quote" }
   | { k: "dash" };
@@ -42,6 +47,8 @@ type Props = {
   effects?: string[];
   align?: ParaAlign;
   placeholder?: string;
+  /** Effects (font, size, …) of the selected text, or null when nothing is selected. Fires only when they change. */
+  onSelectionFx?: (fx: string[] | null) => void;
   onChange: (runs: TextRun[]) => void;
   onSplit: (head: TextRun[], tail: TextRun[]) => void;
   onPasteParts: (head: TextRun[], rest: string[], tail: TextRun[]) => void;
@@ -54,6 +61,7 @@ export const RichEditor = forwardRef<RichHandle, Props>(function RichEditor(prop
   const el = useRef<HTMLDivElement>(null);
   const lastSig = useRef<string | null>(null);
   const lastSel = useRef<[number, number] | null>(null);
+  const lastFxSig = useRef("-");
   const cb = useRef(props);
   cb.current = props;
 
@@ -84,6 +92,13 @@ export const RichEditor = forwardRef<RichHandle, Props>(function RichEditor(prop
       if (!node || document.activeElement !== node) return;
       const o = getOffsets(node);
       lastSel.current = o && o[0] !== o[1] ? o : null;
+      if (!cb.current.onSelectionFx) return;
+      const fx = lastSel.current ? (styleAt(domToRuns(node), lastSel.current[0])?.fx ?? []) : null;
+      const sig = fx ? `+${[...fx].sort().join(",")}` : "-";
+      if (sig !== lastFxSig.current) {
+        lastFxSig.current = sig;
+        cb.current.onSelectionFx(fx);
+      }
     }
     document.addEventListener("selectionchange", onSel);
     return () => document.removeEventListener("selectionchange", onSel);
@@ -135,10 +150,16 @@ export const RichEditor = forwardRef<RichHandle, Props>(function RichEditor(prop
         break;
       case "fx": {
         const on = allInRange(cur, s, e, (st) => Boolean(st.fx?.includes(cmd.id)));
-        next = applyToRange(cur, s, e, (st) => ({
-          ...st,
-          fx: on ? (st.fx ?? []).filter((x) => x !== cmd.id) : [...(st.fx ?? []), cmd.id],
-        }));
+        next = applyToRange(cur, s, e, (st) => ({ ...st, fx: toggleFx(st.fx, cmd.id, !on) }));
+        break;
+      }
+      case "size":
+        next = applyToRange(cur, s, e, (st) => ({ ...st, fx: withSize(st.fx, cmd.v) }));
+        break;
+      case "sizeStep": {
+        const now = sizeOf(styleAt(cur, s)?.fx);
+        const to = Math.min(9, Math.max(1, now + cmd.d));
+        next = applyToRange(cur, s, e, (st) => ({ ...st, fx: withSize(st.fx, to) }));
         break;
       }
       case "clear":
