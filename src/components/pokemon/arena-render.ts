@@ -1672,8 +1672,10 @@ export class ArenaRenderer {
             ps.hy = e.dy;
             this.poses.set(e.id, ps);
           }
-          this.burst(e.x, e.y, c, e.heavy ? 18 : 9, e.heavy ? 280 : 190);
-          if (e.dmg > 0) {
+          // Draco Meteor already has its own big impact where it lands, so the foe's hit adds no second burst (just the damage number)
+          const quiet = e.mv === "dracometeor";
+          if (!quiet) this.burst(e.x, e.y, c, e.heavy ? 18 : 9, e.heavy ? 280 : 190);
+          if (e.dmg > 0 && !quiet) {
             this.elementBurst(e.x, e.y, e.type, e.heavy ? 56 : 30);
             const vmd = e.mv ? MOVES[e.mv] : undefined;
             if (vmd && !SPEC_ART.has(vmd.id)) vfxHit(vmd.id, vmd, e.x, e.y, e.heavy, e.dx, e.dy, this.sctx);
@@ -1682,7 +1684,7 @@ export class ArenaRenderer {
             if (e.crit || e.heavy) this.parts.push({ kind: "cross", x: e.x, y: e.y, vx: 0, vy: 0, g: 0, life: 0.24, max: 0.24, size: e.crit ? 56 : 40, grow: 0, color: e.crit ? "#ffe08a" : "#ffffff" });
             if (e.heavy) this.groundImpact(e.x, e.y + 8, c, 38);
           }
-          for (let i = 0; i < (e.heavy ? 8 : 3); i++) {
+          for (let i = 0; i < (quiet ? 0 : e.heavy ? 8 : 3); i++) {
             const a = Math.atan2(e.dy, e.dx) + rnd(-0.6, 0.6);
             const v = rnd(200, 420);
             this.parts.push({ kind: "streak", x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 0, life: 0.3, max: 0.3, size: rnd(5, 9), grow: 0, color: i % 2 ? "#fff" : c });
@@ -1739,7 +1741,7 @@ export class ArenaRenderer {
             boom13(f, (q) => this.parts.push(q as unknown as Parti));
             this.shake = Math.max(this.shake, 5); this.shakeT = Math.max(this.shakeT, 0.22);
           }
-          if (e.mv && WYRM_IDS.has(e.mv)) {
+          if (e.mv && WYRM_IDS.has(e.mv) && e.mv !== "dracometeor") { // Draco Meteor keeps just its own impact, no dragon spirit after it
             const big = WYRM_BIG.has(e.mv);
             this.wyrms.push({ x: e.x, y: e.y, r: Math.max(e.r, big ? 100 : 70), t: 0, life: big ? 2.8 : 2.0, seed: Math.random() * 90, mv: e.mv, big });
             if (this.wyrms.length > 8) this.wyrms.shift();
@@ -3755,6 +3757,7 @@ export class ArenaRenderer {
         const line = z.shape === "line";
         vfxStrike(z.mv, line ? (z.x + z.x2) / 2 : z.x, line ? (z.y + z.y2) / 2 : z.y, line ? z.r * 1.6 : z.r, this.sctx);
       }
+      if (!z.struck && z.player && z.mv.id === "dracometeor") continue; // no floor circle before your own Draco Meteor lands
       if (!z.struck) {
         const prog = Math.max(0, Math.min(1, 1 - Math.max(0, z.delay) / Math.max(0.05, z.total)));
         const pulse = 0.5 + Math.sin(this.t * 14) * 0.5;
