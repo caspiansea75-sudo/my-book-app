@@ -1639,6 +1639,8 @@ export class ArenaRenderer {
             this.addSty("stormfloor", e.x, e.y + 8, 78, "Electric");
             this.addSty("storm", e.x, e.y + 8, 78, "Electric");
           }
+          // Draco Meteor: nothing is drawn at the caster; only the meteor falling and the impact are shown
+          if (e.mv === "dracometeor") break;
           this.specialCast(e);
           this.beamTrench(e);
           if (DRAKE_BOLTS.has(e.mv)) {
@@ -3826,7 +3828,7 @@ export class ArenaRenderer {
             g.restore();
           });
           // meteors, boulders and lightning fall toward the circle before they land
-          if (z.mv.id === "dracometeor" || z.mv.id === "rockslide") this.sky(g, z.x, z.y, (g) => {
+          if (z.mv.id === "rockslide") this.sky(g, z.x, z.y, (g) => {
             for (let i = 0; i < 5; i++) {
               const mx = z.x + (i - 2) * z.r * 0.42;
               const my = z.y - (1 - prog) * 420 - i * 34 + 10;
@@ -5116,6 +5118,65 @@ export class ArenaRenderer {
     if (Math.random() < 0.8) {
       const tg = ang + side * Math.PI / 2;
       this.parts.push({ kind: Math.random() < 0.5 ? "dot" : "star", x: tx, y: ty, vx: Math.cos(tg) * rnd(60, 190) + rnd(-30, 30), vy: Math.sin(tg) * rnd(60, 190) + rnd(-30, 30), g: 160, life: rnd(0.3, 0.6), max: 0.6, size: rnd(1.6, 3.4), grow: 0, color: Math.random() < 0.5 ? "#e9f8ff" : "#8fd8ff", rot: 0, vr: 10 });
+    }
+  }
+
+  /** Brave Bird: the whole body is wrapped in a great glowing bird, wings swept back, that dives at the foe. */
+  private drawBirdDash(g: CanvasRenderingContext2D, f: Fighter) {
+    const d = f.dash;
+    if (!d) return;
+    const ang = Math.atan2(d.dy, d.dx), p = Math.min(1, d.t / Math.max(0.01, d.total)), t = this.t;
+    const s = Math.max(44, f.r * 3.3), flap = Math.sin(t * 24) * 0.16, fade = Math.min(1, d.t * 14) * (1 - Math.max(0, p - 0.8) * 4);
+    const cy = f.y - f.r * 0.3 - (f.air ?? 0) * (this.v3 ? 0 : 0.5);
+    g.save();
+    g.translate(f.x, cy);
+    g.rotate(ang);
+    g.globalCompositeOperation = "lighter";
+    g.lineCap = "round"; g.lineJoin = "round";
+    // the aura
+    const au = g.createRadialGradient(0, 0, s * 0.2, 0, 0, s * 2.1);
+    au.addColorStop(0, "rgba(140,210,255,.35)"); au.addColorStop(0.5, "rgba(70,150,255,.3)"); au.addColorStop(1, "rgba(40,90,255,0)");
+    g.globalAlpha = 0.9 * fade;
+    g.fillStyle = au; g.beginPath(); g.arc(-s * 0.1, 0, s * 2.1, 0, Math.PI * 2); g.fill();
+    // wings, swept back, feathered edge
+    g.globalAlpha = 0.85 * fade;
+    for (const k of [-1, 1]) {
+      const wg = g.createLinearGradient(s * 0.3, 0, -s * 1.5, k * s * 1.3);
+      wg.addColorStop(0, "#bfe6ff"); wg.addColorStop(0.5, "#4aa8ff"); wg.addColorStop(1, "rgba(60,110,255,.12)");
+      g.fillStyle = wg; g.strokeStyle = "#dff3ff"; g.lineWidth = 2.5;
+      const tip = s * (1.35 + flap * (k > 0 ? 1 : 1));
+      g.beginPath();
+      g.moveTo(s * 0.35, k * s * 0.15);
+      g.quadraticCurveTo(-s * 0.1, k * s * (0.7 + flap), -s * 1.05, k * tip);
+      for (let i = 0; i < 4; i++) { // the feather tips
+        const u = i / 3;
+        g.lineTo(-s * (1.05 + 0.35 * u) + s * 0.1, k * (tip - s * (0.28 + u * 0.3)));
+        g.lineTo(-s * (1.3 + 0.2 * u), k * (tip - s * (0.12 + u * 0.3)));
+      }
+      g.lineTo(-s * 0.55, k * s * 0.18);
+      g.closePath(); g.fill(); g.stroke();
+    }
+    // tail
+    g.strokeStyle = "#7cc4ff"; g.lineWidth = 4;
+    for (const k of [-0.28, 0, 0.28]) { g.beginPath(); g.moveTo(-s * 0.7, 0); g.lineTo(-s * 1.7, k * s * 1.2 + Math.sin(t * 20 + k * 9) * 3); g.stroke(); }
+    // body, head and beak
+    const bg = g.createLinearGradient(-s * 0.8, 0, s * 1.3, 0);
+    bg.addColorStop(0, "rgba(70,150,255,.5)"); bg.addColorStop(0.6, "#8fd0ff"); bg.addColorStop(1, "#d8f0ff");
+    g.fillStyle = bg; g.strokeStyle = "#ffffff"; g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(s * 1.3, 0);
+    g.quadraticCurveTo(s * 0.9, -s * 0.34, s * 0.3, -s * 0.34);
+    g.quadraticCurveTo(-s * 0.7, -s * 0.34, -s * 0.9, 0);
+    g.quadraticCurveTo(-s * 0.7, s * 0.34, s * 0.3, s * 0.34);
+    g.quadraticCurveTo(s * 0.9, s * 0.34, s * 1.3, 0);
+    g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = "#ffd24a"; g.beginPath(); g.moveTo(s * 1.45, 0); g.lineTo(s * 1.1, -s * 0.1); g.lineTo(s * 1.1, s * 0.1); g.closePath(); g.fill();
+    g.fillStyle = "#ff4a3a"; g.beginPath(); g.arc(s * 0.82, -s * 0.12, s * 0.07, 0, Math.PI * 2); g.fill();
+    g.restore();
+    // feathers shed behind
+    if (Math.random() < 0.9) {
+      const bx = f.x - Math.cos(ang) * s * 1.4, by = f.y - Math.sin(ang) * s * 1.4;
+      for (let i = 0; i < 2; i++) this.parts.push({ kind: "streak", x: bx + rnd(-s * 0.5, s * 0.5) * -Math.sin(ang), y: by + rnd(-s * 0.5, s * 0.5) * Math.cos(ang), vx: -Math.cos(ang) * rnd(60, 180), vy: -Math.sin(ang) * rnd(60, 180) - 20, g: 40, life: rnd(0.3, 0.6), max: 0.6, size: rnd(2, 4), grow: 0, color: i ? "#ffffff" : "#9fd6ff", rot: ang, vr: 0 } as unknown as Parti);
     }
   }
 
@@ -7142,6 +7203,7 @@ export class ArenaRenderer {
     g.stroke();
     g.restore();
 
+    if (f.dash && !under && f.dash.mv.id === "bravebird") this.drawBirdDash(g, f);
     if (f.dash && !under && (f.dash.mv.type === "Dragon" || ["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"].includes(f.dash.mv.id))) this.drawDragonDash(g, f);
     if (!under && f.sp.id === "greninja") {
       const hb = this.bladeHold.get(f.id);
