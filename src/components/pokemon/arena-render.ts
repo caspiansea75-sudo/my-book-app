@@ -6061,11 +6061,12 @@ export class ArenaRenderer {
         const n = mv.kind === "spread" ? mv.n ?? 3 : 1;
         for (let i = 0; i < (mv.vee ? 2 : n); i++) {
           g.save();
+          if (mv.vee) g.translate(f.r + 14, 0);
           g.rotate(mv.vee ? (i ? 1 : -1) * mv.vee : (i - (n - 1) / 2) * 0.17);
           g.setLineDash([10, 8]);
           g.beginPath();
-          g.moveTo(f.r, 0);
-          g.lineTo(360, 0);
+          g.moveTo(mv.vee ? 0 : f.r, 0);
+          g.lineTo(mv.vee ? 150 : 360, 0);
           g.stroke();
           g.restore();
         }
@@ -6121,6 +6122,22 @@ export class ArenaRenderer {
         });
       }
       if (this.pxShot(p) || (p.beam && this.pxStreams.has(p.owner))) continue; // drawn as pixel art instead (see pixelWorld)
+      if (p.mv === "vcreate") {
+        // one lick of the great fire V: a round flame, hot white at the heart; the shots sit close so together they read as a solid letter V
+        const R = 17, up = this.v3 ? 0 : 14, fl = Math.sin(this.t * 22 + p.id * 1.7) * 0.12 + 1;
+        this.at(g, p.x, p.y, "mix", () => {
+          g.save();
+          g.translate(p.x, p.y - up);
+          g.scale(fl, fl);
+          const gr = g.createRadialGradient(0, 0, 1, 0, 0, R);
+          gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.28, "#ffe27a"); gr.addColorStop(0.62, "#ff8a1f"); gr.addColorStop(1, "rgba(255,60,10,0)");
+          g.fillStyle = gr;
+          g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.fill();
+          g.restore();
+        }, "p", this.v3 ? 30 : 0);
+        if (Math.random() < 0.55) this.parts.push({ kind: "spark", x: p.x + rnd(-8, 8), y: p.y - up + rnd(-8, 8), vx: rnd(-40, 40) - p.vx * 0.1, vy: rnd(-90, -20), g: 0, life: rnd(0.3, 0.55), max: 0.55, size: rnd(1.5, 3), grow: 0, color: Math.random() < 0.5 ? "#ffd27a" : "#ff7a2a", rot: 0, vr: 0 });
+        continue;
+      }
       if (COSMIC_SHOT[p.type] && !p.beam && !((p.hold ?? 0) > 0) && !p.mv.startsWith("megashuriken") && p.mv !== "watershuriken" && !SLASH_SHOTS[p.mv] && !WIND_SHOTS[p.mv] && !DRAKE_SHOTS.has(p.mv)) {
         const R = Math.max(20, p.r * 2.5), up = 18, ang = Math.atan2(p.vy, p.vx), age = S.time - p.born;
         this.at(g, p.x, p.y, "mix", () => {

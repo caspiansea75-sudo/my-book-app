@@ -34,7 +34,7 @@ export type MoveDef = {
   cd: number;
   /** Shots in a spread / hits in a beam. */
   n?: number;
-  /** A spread drawn as a "V": two straight arms of shots opening at this half-angle (radians). */
+  /** A spread drawn as a letter "V": shots set in two arms opening at this half-angle (radians), flying together. */
   vee?: number;
   /** Projectile speed (px/s), dash length, nova radius, bolt length… whichever fits the kind. */
   range?: number;
@@ -73,7 +73,6 @@ export const isPhysical = (mv: Pick<MoveDef, "kind" | "type">) => mv.kind === "d
 export const MOVES: Record<string, MoveDef> = Object.fromEntries(
   [
     m({ id: "flamethrower", name: "Flamethrower", type: "Fire", kind: "beam", power: 0.42, cd: 2.6, n: 9, range: 260, status: { kind: "brn", chance: 0.18 }, desc: "A stream of fire that burns what it touches." }),
-    m({ id: "flamev", name: "Flame V", type: "Fire", kind: "spread", power: 0.5, cd: 3.2, n: 8, vee: 0.3, speed: 470, status: { kind: "brn", chance: 0.2 }, desc: "Throw two lines of fire out in a V sign." }),
     m({ id: "fireblast", name: "Fire Blast", type: "Fire", kind: "lob", power: 2.2, cd: 5.5, range: 340, windup: 0.55, status: { kind: "brn", chance: 0.5 }, desc: "A huge blast that lands where you aim." }),
     m({ id: "dig", name: "Dig", type: "Ground", kind: "burrow", power: 1.9, cd: 4.6, range: 270, desc: "Burrow under the floor, untouchable, and burst out under your foe." }),
     m({ id: "flamewheel", name: "Flame Wheel", type: "Fire", kind: "dash", power: 1.7, cd: 3.4, range: 230, status: { kind: "brn", chance: 0.3 }, desc: "Roll through foes, trailing flame." }),
@@ -434,7 +433,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "trickroom", name: "Trick Room", type: "Psychic", kind: "nova", power: 0.4, cd: 12, range: 230, windup: 0.3, status: { kind: "cnf", chance: 0.8 }, desc: "Twist the room: foes close by get confused." }),
     m({ id: "wideguard", name: "Wide Guard", type: "Rock", kind: "guard", power: 0, cd: 7, boost: { def: 1.2 }, dur: 8, desc: "Block almost everything and harden a little." }),
     m({ id: "whirlwind", name: "Whirlwind", type: "Flying", kind: "nova", power: 0.6, cd: 5, range: 230, windup: 0.25, desc: "A gust that blows nearby foes away." }),
-    m({ id: "vcreate", name: "V-create", type: "Fire", kind: "dash", power: 2.6, cd: 6.5, range: 300, desc: "A blazing rush with all you have." }),
+    m({ id: "vcreate", name: "V-create", type: "Fire", kind: "spread", power: 0.62, cd: 4.2, n: 15, vee: 0.62, speed: 430, pierce: true, status: { kind: "brn", chance: 0.3 }, desc: "Victini throws a great letter V of blazing fire that burns through everything it meets." }),
     m({ id: "sunnyday", name: "Sunny Day", type: "Fire", kind: "buff", weather: "sun", power: 1, cd: 14, boost: { spa: 1.2 }, dur: 12, desc: "Turns the sun harsh for a while." }),
     m({ id: "transform", name: "Transform", type: "Normal", kind: "buff", power: 1.2, cd: 14, boost: { atk: 1.2, spa: 1.2, def: 1.2, spd: 1.2, spe: 1.2 }, dur: 14, fx: "clones", desc: "Copy the best of everyone: all stats up a little." }),
     m({ id: "fakeout", name: "Fake Out", type: "Normal", kind: "dash", power: 0.9, cd: 6, range: 210, status: { kind: "par", chance: 0.9 }, desc: "A startling smack that locks the foe up." }),

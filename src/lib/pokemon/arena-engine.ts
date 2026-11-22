@@ -1715,15 +1715,16 @@ function fire(S: State, f: Fighter, slot: number, dx: number, dy: number, tx: nu
     case "spread": {
       const n = mv.n ?? 3;
       if (mv.vee) {
-        // a V sign: two straight arms of flame, shots staggered along each arm so they read as lines
-        const per = Math.max(1, Math.floor(n / 2));
-        for (const side of [-1, 1]) {
-          for (let j = 0; j < per; j++) {
-            spawnProj(S, f, mv, dx, dy, { off: side * mv.vee, dmg: baseDamage(f, mv), life: 0.85, r: 12 });
+        // a letter V made of flame: shots set in two arms that open toward the foe, all flying the same way so the V keeps its shape
+        const L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, px = -uy, py = ux;
+        const per = Math.max(1, Math.floor((n - 1) / 2)), gap = 20, c = Math.cos(mv.vee), sn = Math.sin(mv.vee);
+        for (let k = 0; k <= per; k++) {
+          for (const side of k === 0 ? [0] : [-1, 1]) {
+            spawnProj(S, f, mv, dx, dy, { dmg: baseDamage(f, mv), life: 1.0, r: 12 });
             const p = S.projs[S.projs.length - 1]!;
-            const a = Math.atan2(dy, dx) + side * mv.vee;
-            p.x += Math.cos(a) * j * 30;
-            p.y += Math.sin(a) * j * 30;
+            const fw = f.r + 14 + k * gap * c, lat = side * k * gap * sn;
+            p.x = f.x + ux * fw + px * lat;
+            p.y = f.y + uy * fw + py * lat;
           }
         }
         break;
