@@ -225,6 +225,7 @@ export type Ev =
   | { t: "heal"; x: number; y: number; amt: number; /** a drain: where the life came from */ fx?: number; fy?: number; id?: number }
   | { t: "status"; x: number; y: number; kind: StatusKind }
   | { t: "ailment"; x: number; y: number; kind: "par" | "cnf" | "slp" }
+  | { t: "bind"; id: number; x: number; y: number; dur: number }
   | { t: "shield"; x: number; y: number }
   | { t: "buff"; x: number; y: number; id: number; fx?: string }
   | { t: "stat"; x: number; y: number; id: number; up: string[]; down: string[] }
@@ -1566,6 +1567,15 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
     dst.kx *= 0.3;
     dst.ky *= 0.3;
     dst.cast = dst.channel = null;
+  }
+  // Spirit Shackle and its kin: ghostly shackles hold the target in place for a moment (it cannot move or act)
+  if (dmg > 0 && dst.hp > 0 && o.mv && (MOVES[o.mv]?.bind ?? 0) > 0 && dst.levT <= 0 && dst.slamT <= 0 && dst.grabT <= 0) {
+    const dur = (MOVES[o.mv]!.bind as number) * (dst.boss ? 0.5 : 1);
+    S.events.push({ t: "bind", id: dst.id, x: dst.x, y: dst.y, dur });
+    dst.stun = Math.max(dst.stun, dur);
+    dst.kx *= 0.2;
+    dst.ky *= 0.2;
+    dst.cast = dst.channel = dst.dash = null;
   }
   if (dst.hp <= 0) {
     // Aftermath: the one who landed the finishing close-range blow pays for it

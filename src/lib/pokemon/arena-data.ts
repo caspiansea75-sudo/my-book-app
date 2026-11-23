@@ -42,6 +42,8 @@ export type MoveDef = {
   /** Seconds of wind-up (shown as a warning when an enemy uses it). */
   windup?: number;
   status?: { kind: StatusKind; chance: number };
+  /** Seconds a hit holds the target in place, shackled (it cannot move or act). */
+  bind?: number;
   pierce?: boolean;
   /** Borrow another move's impact art (see the renderer's moveFx). */
   fx?: string;
@@ -373,7 +375,7 @@ export const MOVES: Record<string, MoveDef> = Object.fromEntries(
     m({ id: "fierywrath", name: "Fiery Wrath", type: "Dark", kind: "spread", power: 0.7, cd: 2.2, n: 3, speed: 460, desc: "Waves of dark fire." }),
     m({ id: "junglehealing", name: "Jungle Healing", type: "Grass", kind: "heal", power: 0.4, cd: 9, desc: "The jungle heals you." }),
     m({ id: "darkestlariat", name: "Darkest Lariat", type: "Dark", kind: "dash", power: 1.8, cd: 3.8, range: 230, desc: "Spin and swing both arms." }),
-    m({ id: "spiritshackle", name: "Spirit Shackle", type: "Ghost", kind: "proj", power: 1.2, cd: 2.4, speed: 520, desc: "An arrow that pins a shadow." }),
+    m({ id: "spiritshackle", name: "Spirit Shackle", type: "Ghost", kind: "proj", power: 1.2, cd: 2.4, speed: 520, bind: 1.5, desc: "An arrow that binds a foe in place with ghostly shackles." }),
     m({ id: "sparklingaria", name: "Sparkling Aria", type: "Water", kind: "nova", power: 1.7, cd: 4.6, range: 190, windup: 0.3, desc: "A song of bubbles." }),
     m({ id: "psychicfangs", name: "Psychic Fangs", type: "Psychic", kind: "dash", power: 1.6, cd: 3.2, range: 220, desc: "Bite with psychic power." }),
     m({ id: "overdrive", name: "Overdrive", type: "Electric", kind: "spread", power: 0.7, cd: 2.6, n: 4, speed: 480, desc: "A loud electric riff." }),

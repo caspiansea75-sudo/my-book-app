@@ -87,6 +87,26 @@ const picW = (p: Pic) => (p instanceof HTMLImageElement ? p.naturalWidth : p.wid
 const picH = (p: Pic) => (p instanceof HTMLImageElement ? p.naturalHeight : p.height) || 96;
 
 export type SpriteSource = (id: string, num: number) => string[];
+let blankCv: HTMLCanvasElement | null = null;
+/** True when a picture has nothing visible in it (a transparent placeholder some picture servers return for a form they lack), so the body would show as a glow only. */
+function blankPic(src: CanvasImageSource | null | undefined): boolean {
+  try {
+    if (!src) return false;
+    const w = (src as HTMLImageElement).naturalWidth || (src as HTMLCanvasElement).width || 0, h = (src as HTMLImageElement).naturalHeight || (src as HTMLCanvasElement).height || 0;
+    if (w <= 2 || h <= 2) return true; // a 1-pixel stub
+    blankCv ??= document.createElement("canvas");
+    blankCv.width = blankCv.height = 40;
+    const c = blankCv.getContext("2d", { willReadFrequently: true })!;
+    c.clearRect(0, 0, 40, 40);
+    c.drawImage(src, 0, 0, 40, 40);
+    const d = c.getImageData(0, 0, 40, 40).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i]! > 24) n++;
+    return n < 6;
+  } catch {
+    return false; // cannot be read (a picture from another site): trust it
+  }
+}
 const probe = spriteChain({ id: "pikachu", num: 25 }, { still: true });
 const defaultSources: SpriteSource = (id, num) => {
   if (id.includes("-")) {
@@ -986,6 +1006,7 @@ export class ArenaRenderer {
       if (plain) im.crossOrigin = "anonymous";
       let again = plain;
       im.onload = () => {
+        if (blankPic(im)) { got[k] = null; settle(); return; } // an empty picture is no picture: try the next address, then the base form
         got[k] = im;
         // do not wait for the better ones forever: after a moment, take what has arrived
         if (!done) {
@@ -1041,10 +1062,10 @@ export class ArenaRenderer {
     const viaImg = () => {
       const im = new Image();
       im.crossOrigin = "anonymous";
-      im.onload = () => this.anims.set(key, im);
+      im.onload = () => (blankPic(im) ? fail() : this.anims.set(key, im));
       im.onerror = () => {
         const im2 = new Image();
-        im2.onload = () => this.anims.set(key, im2);
+        im2.onload = () => (blankPic(im2) ? fail() : this.anims.set(key, im2));
         im2.onerror = fail;
         im2.src = direct ?? url;
       };
@@ -1055,7 +1076,11 @@ export class ArenaRenderer {
     else
       get(url)
         .catch(() => get(direct!))
-        .then((b) => this.anims.set(key, decodeGif(b)))
+        .then((b) => {
+          const gf = decodeGif(b);
+          if (blankPic(frameAt(gf, 0).el)) throw new Error("blank"); // an empty animation would draw nothing but the glow
+          this.anims.set(key, gf);
+        })
         .catch(viaImg);
     return null;
   }
@@ -1787,6 +1812,15 @@ export class ArenaRenderer {
             this.scorch.push({ x: e.x, y: e.y, r: Math.min(34, e.r * 0.4), seed: Math.random() * 100, t: 2.5, max: 2.5, type: e.type });
             if (this.scorch.length > 28) this.scorch.shift();
           }
+          break;
+        }
+        case "bind": {
+          // the shackles snap shut: a violet ring and a burst of ghost-light where the foe stands
+          this.shackled.set(e.id, { t0: this.t, dur: e.dur });
+          this.ring(e.x, e.y, "#b79cff", 70, 0.45);
+          this.ring(e.x, e.y, "#e6dcff", 110, 0.6);
+          for (let i = 0; i < 12; i++) this.parts.push({ kind: "spark", x: e.x + rnd(-18, 18), y: e.y + rnd(-10, 10), vx: rnd(-90, 90), vy: rnd(-120, -30), g: 0, life: rnd(0.4, 0.7), max: 0.7, size: rnd(2, 4), grow: 0, color: i % 2 ? "#c8b0ff" : "#ffffff", rot: 0, vr: 0 });
+          this.flashT = Math.max(this.flashT, 0.04);
           break;
         }
         case "lift": {
@@ -5112,6 +5146,8 @@ export class ArenaRenderer {
   /** Greninja's water blade: a kunai of rippling water with a ring at the grip, swung in its hand during contact moves (see drawWaterKunai). */
   /** Greninja keeps its water blade in hand for a moment after any physical move (not just dashes). */
   private bladeHold = new Map<number, { until: number; dir: number }>();
+  /** Fighters held in ghostly shackles (Spirit Shackle): when it began and how long it lasts. */
+  private shackled = new Map<number, { t0: number; dur: number }>();
   private drawWaterBlade(g: CanvasRenderingContext2D, f: Fighter, hold?: { until: number; dir: number }) {
     const d = f.dash ?? (hold ? { dx: Math.cos(hold.dir), dy: Math.sin(hold.dir), t: Math.max(0, 0.55 - (hold.until - this.t)), total: 0.55 } : null);
     if (!d) return;
@@ -5132,6 +5168,49 @@ export class ArenaRenderer {
       const tg = ang + side * Math.PI / 2;
       this.parts.push({ kind: Math.random() < 0.5 ? "dot" : "star", x: tx, y: ty, vx: Math.cos(tg) * rnd(60, 190) + rnd(-30, 30), vy: Math.sin(tg) * rnd(60, 190) + rnd(-30, 30), g: 160, life: rnd(0.3, 0.6), max: 0.6, size: rnd(1.6, 3.4), grow: 0, color: Math.random() < 0.5 ? "#e9f8ff" : "#8fd8ff", rot: 0, vr: 10 });
     }
+  }
+
+  /** Spirit Shackle: iron manacles of ghost-light clamp the body, with chains pulled taut to the ground on every side. */
+  private drawShackles(g: CanvasRenderingContext2D, f: Fighter) {
+    const sh = this.shackled.get(f.id);
+    if (!sh) return;
+    const age = this.t - sh.t0;
+    if (age > sh.dur + 0.05 || !f.alive) { this.shackled.delete(f.id); return; }
+    const snap = Math.min(1, age / 0.18), out = Math.min(1, Math.max(0, (sh.dur - age) / 0.25)), a = out * (0.75 + Math.sin(this.t * 14) * 0.12);
+    const R = f.r * 1.15 * (1.6 - 0.6 * snap), cy = f.y - f.r * 0.5;
+    const link = (x: number, y: number, ang: number, w: number, h: number) => {
+      g.save(); g.translate(x, y); g.rotate(ang);
+      g.beginPath(); g.ellipse(0, 0, w, h, 0, 0, Math.PI * 2); g.stroke(); g.restore();
+    };
+    g.save();
+    g.globalCompositeOperation = "lighter";
+    g.globalAlpha = a;
+    g.lineCap = "round";
+    // chains out to four anchors on the ground, each a run of interlocking links
+    const anchors = [[-1, 0.55], [1, 0.55], [-0.75, -0.7], [0.75, -0.7]];
+    for (const [ax, ay] of anchors) {
+      const x1 = f.x + ax! * f.r * 0.9, y1 = cy + (ay! > 0 ? f.r * 0.35 : -f.r * 0.2);
+      const x2 = f.x + ax! * f.r * 3.6, y2 = f.y + ay! * f.r * 1.7 + f.r * 0.3;
+      const n = 6, tt = Math.min(1, snap * 1.4);
+      for (let i = 0; i < n; i++) {
+        const u = (i + 0.5) / n * tt, x = x1 + (x2 - x1) * u, y = y1 + (y2 - y1) * u + Math.sin(u * Math.PI) * 4, ang = Math.atan2(y2 - y1, x2 - x1) + (i % 2 ? Math.PI / 2 : 0);
+        g.strokeStyle = "rgba(120,80,220,.55)"; g.lineWidth = 4.5; link(x, y, ang, 6, 3.4);
+        g.strokeStyle = "#e2d4ff"; g.lineWidth = 1.6; link(x, y, ang, 6, 3.4);
+      }
+      if (tt >= 1) { // the stake it is pinned to
+        g.fillStyle = "#cdb8ff"; g.beginPath(); g.arc(x2, y2, 4.2, 0, Math.PI * 2); g.fill();
+        g.strokeStyle = "rgba(160,120,255,.6)"; g.lineWidth = 1.5; g.beginPath(); g.ellipse(x2, y2, 9, 4.5, 0, 0, Math.PI * 2); g.stroke();
+      }
+    }
+    // the two cuffs round the body: a thick violet band edged in pale light, a buckle on the front
+    for (const [dy, k] of [[0.35, 1], [-0.35, 0.82]] as const) {
+      const y = cy + dy * f.r, rx = R * k, ry = R * k * 0.34;
+      g.strokeStyle = "rgba(100,60,210,.65)"; g.lineWidth = 9; g.beginPath(); g.ellipse(f.x, y, rx, ry, 0, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = "#e9deff"; g.lineWidth = 2.4; g.beginPath(); g.ellipse(f.x, y, rx, ry, 0, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = "#fff"; g.beginPath(); g.arc(f.x, y + ry, 3.6, 0, Math.PI * 2); g.fill();
+    }
+    g.restore();
+    if (Math.random() < 0.25) this.parts.push({ kind: "spark", x: f.x + rnd(-R, R), y: cy + rnd(-f.r * 0.5, f.r * 0.6), vx: rnd(-12, 12), vy: rnd(-45, -15), g: 0, life: 0.6, max: 0.6, size: rnd(1.5, 2.8), grow: 0, color: "#cdb8ff", rot: 0, vr: 0 });
   }
 
   /** Brave Bird: the whole body is wrapped in a great glowing bird, wings swept back, that dives at the foe. */
@@ -7217,6 +7296,7 @@ export class ArenaRenderer {
     g.restore();
 
     if (f.dash && !under && f.dash.mv.id === "bravebird") this.drawBirdDash(g, f);
+    if (!under && this.shackled.has(f.id)) this.drawShackles(g, f);
     if (f.dash && !under && (f.dash.mv.type === "Dragon" || ["shadowclaw", "drainpunch", "nuzzle", "thunderpunch", "strength"].includes(f.dash.mv.id))) this.drawDragonDash(g, f);
     if (!under && f.sp.id === "greninja") {
       const hb = this.bladeHold.get(f.id);
