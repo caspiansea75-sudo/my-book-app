@@ -93,6 +93,14 @@ export type AbFx = {
   toxicDebris?: boolean;
   /** Its attacks' status effects are dropped for more damage. */
   sheer?: boolean;
+  /** When life falls to `at` (a share of the max) it gets a heal and / or a temporary change, then has to wait `cd` seconds before it can do it again. */
+  lowTrigger?: { at: number; heal?: number; gain?: Gain; cd: number };
+  /** Takes back this share of the damage it deals as life. */
+  lifesteal?: number;
+  /** Its close-range moves do not count as contact (no thorns, burns or paralysis come back at it). */
+  noContact?: boolean;
+  /** When it is hit it ignores the attacker's temporary damage boosts. */
+  unaware?: boolean;
 };
 
 export type AbDef = { id: string; name: string; desc: string; fx: AbFx };
@@ -104,10 +112,12 @@ const BITE = /Bite|Fang|Crunch|Jaw/;
 const SLICE = /Slash|Cut|Blade|Edge|Scissor|Cutter|Razor|Sword|Fury Cutter|Leaf Blade|Sacred|Ceaseless|Psyblade|Aqua Cutter|Stone Axe|Kowtow|Tachyon/;
 const RECOIL = /Double-Edge|Brave Bird|Flare Blitz|Wild Charge|Wood Hammer|Head Smash|Take Down|Submission|Volt Tackle|Wave Crash|Head Charge|Light of Ruin|Chloroblast/;
 
+const EXPLODE = /Explosion|Self-Destruct|Mind Blown|Misty Explosion|Blast Burn/;
+
 const NONE: AbFx = {};
 const A = (name: string, desc: string, fx: AbFx = NONE): AbDef => ({ id: name.toLowerCase().replace(/[^a-z0-9]/g, ""), name, desc, fx });
 const low = (type: string, name: string, moves: string): AbDef => A(name, `${moves} moves hit 50% harder when life is low.`, { boost: [{ mul: 1.5, type: [type], low: true }] });
-const same = (name: string): AbDef => A(name, "Does nothing in Brawl.");
+const same = (name: string): AbDef => A(name, "Does nothing in Brawl (it only matters for held items).");
 const veil = (name: string, kind: StatusKind, word: string): AbDef => A(name, `Cannot be ${word}.`, { noStatus: [kind] });
 const steady = (name: string): AbDef => A(name, "Foes cannot weaken its attacks (Intimidate does not work on it).", { noIntimidate: true });
 
@@ -117,24 +127,24 @@ const LIST: AbDef[] = [
   A("Air Lock", "Weather does nothing to it.", { noField: true, noChip: true }),
   A("Analytic", "Hits 25% harder against foes that are faster than it.", { boost: [{ mul: 1.25, foeFaster: true }] }),
   A("Anger Point", "A critical hit makes it hit 80% harder for 12 seconds.", { onHit: { crit: true, gain: { dmg: 1.8, t: 12 } } }),
-  same("Anticipation"),
-  same("Aroma Veil"),
+  A("Anticipation", "Takes 15% less damage from super effective hits.", { guard: [{ mul: 0.85, se: true }] }),
+  A("Aroma Veil", "Cannot be confused or put to sleep.", { noStatus: ["cnf", "slp"] }),
   A("Aura Break", "Dark Aura and Fairy Aura are weaker while it is in the fight.", { auraBreak: true }),
   A("Bad Dreams", "Sleeping foes lose 3% of their life every second.", { badDreams: true }),
   A("Battle Bond", "After a KO it hits 25% harder for 20 seconds.", { onKo: { dmg: 1.25, cap: 1, t: 20 } }),
-  same("Big Pecks"),
+  A("Big Pecks", "Intimidate does not work on it, and it is knocked back 20% less.", { noIntimidate: true, kb: 0.8 }),
   low("Fire", "Blaze", "Fire"),
   A("Bulletproof", "Immune to ball and bomb moves.", { blocks: BULLET }),
   A("Chlorophyll", "40% faster in harsh sun.", { speed: { mul: 1.4, field: "sun" } }),
   steady("Clear Body"),
   A("Cloud Nine", "Weather does nothing to it.", { noField: true, noChip: true }),
-  same("Commander"),
+  A("Commander", "Calls the shots: hits 15% harder for the first 20 seconds.", { enter: { dmg: 1.15, t: 20 } }),
   A("Competitive", "Hits 40% harder for 12 seconds after a foe tries to weaken it.", { onIntimidated: { dmg: 1.4, t: 12 } }),
-  same("Compound Eyes"),
-  same("Corrosion"),
+  A("Compound Eyes", "More critical hits (+10%).", { crit: 0.1 }),
+  A("Corrosion", "Poison moves hit 25% harder.", { boost: [{ mul: 1.25, type: ["Poison"] }] }),
   A("Cursed Body", "When hit it has a 30% chance to confuse the attacker.", { contact: { status: "cnf", p: 0.3, anyHit: true } }),
   A("Cute Charm", "A close-range attacker has a 30% chance to be confused.", { contact: { status: "cnf", p: 0.3 } }),
-  same("Damp"),
+  A("Damp", "Immune to explosion moves, and takes 15% less damage from Fire.", { blocks: EXPLODE, guard: [{ mul: 0.85, type: ["Fire"] }] }),
   A("Dark Aura", "Dark moves from everyone hit 33% harder while it is in the fight.", { aura: { type: "Dark", mul: 1.33 } }),
   A("Dauntless Shield", "Takes 15% less damage for the first 15 seconds.", { enter: { take: 0.85, t: 15 } }),
   A("Disguise", "Blocks the first hit it takes.", { disguise: true }),
@@ -142,62 +152,62 @@ const LIST: AbDef[] = [
   A("Drought", "Starts the fight with harsh sun.", { weather: "sun" }),
   A("Early Bird", "Wakes from sleep twice as fast.", { cure: { slp: 2 } }),
   A("Electric Surge", "Electric moves hit 20% harder.", { boost: [{ mul: 1.2, type: ["Electric"] }] }),
-  same("Emergency Exit"),
+  A("Emergency Exit", "At half life it dashes clear: 40% faster and takes 30% less damage for 5 seconds (once every 40 seconds).", { lowTrigger: { at: 0.5, gain: { spd: 1.4, take: 0.7, t: 5 }, cd: 40 } }),
   A("Fairy Aura", "Fairy moves from everyone hit 33% harder while it is in the fight.", { aura: { type: "Fairy", mul: 1.33 } }),
   A("Flame Body", "A close-range attacker has a 30% chance to be burned.", { contact: { status: "brn", p: 0.3 } }),
   A("Flash Fire", "Immune to Fire. Being hit by Fire makes its Fire moves 40% stronger for 10 seconds.", { immune: ["Fire"], gain: { dmg: 1.4, t: 10, type: ["Fire"] } }),
-  same("Frisk"),
+  A("Frisk", "Sizes up the foe at the start: hits 10% harder for 15 seconds, and more critical hits (+4%).", { enter: { dmg: 1.1, t: 15 }, crit: 0.04 }),
   steady("Full Metal Body"),
-  same("Gluttony"),
+  A("Gluttony", "At half life it eats: heals 25% of its life (once every 40 seconds).", { lowTrigger: { at: 0.5, heal: 0.25, cd: 40 } }),
   A("Good as Gold", "Immune to every status effect.", { noStatus: ["brn", "psn", "par", "slp", "frz", "cnf"] }),
   A("Grassy Surge", "Grass moves hit 20% harder, and it slowly heals.", { boost: [{ mul: 1.2, type: ["Grass"] }], regen: 0.008 }),
   A("Guts", "With a status effect it hits 40% harder.", { boost: [{ mul: 1.4, status: true }] }),
-  same("Healer"),
+  A("Healer", "Every 3 seconds a 50% chance to shake off a status effect.", { shed: 0.5 }),
   A("Heavy Metal", "Heavy: knocked back 40% less.", { kb: 0.6 }),
   A("Hustle", "Hits 25% harder.", { boost: [{ mul: 1.25 }] }),
   A("Hydration", "Status effects wear off 3 times faster in rain.", { cure: { all: 3, field: "rain" } }),
   steady("Hyper Cutter"),
   A("Ice Body", "Heals 1.5% of its life a second in hail, and hail does not hurt it.", { regenField: { field: "hail", pct: 0.015 }, noChip: true }),
-  same("Illuminate"),
+  A("Illuminate", "Lights the way: 15% faster for the first 20 seconds, and more critical hits (+4%).", { enter: { spd: 1.15, t: 20 }, crit: 0.04 }),
   veil("Immunity", "psn", "poisoned"),
-  same("Infiltrator"),
+  A("Infiltrator", "Its moves ignore the other side's abilities, shields and all.", { pierce: true }),
   A("Inner Focus", "Knocked back 55% less, and Intimidate does not work on it.", { kb: 0.45, noIntimidate: true }),
   veil("Insomnia", "slp", "put to sleep"),
   A("Intimidate", "At the start, foes hit 13% weaker for 12 seconds.", { intimidate: true }),
   A("Intrepid Sword", "Hits 15% harder for the first 15 seconds.", { enter: { dmg: 1.15, t: 15 } }),
   A("Iron Fist", "Punching moves hit 25% harder.", { boost: [{ mul: 1.25, name: PUNCH }] }),
   A("Justified", "Hit by a Dark move: hits 30% harder for 12 seconds.", { onHit: { type: ["Dark"], gain: { dmg: 1.3, t: 12 } } }),
-  same("Keen Eye"),
+  A("Keen Eye", "Intimidate does not work on it, and more critical hits (+5%).", { noIntimidate: true, crit: 0.05 }),
   same("Klutz"),
   A("Leaf Guard", "Cannot get a status effect in harsh sun.", { noStatusField: { field: "sun", kinds: ["brn", "psn", "par", "slp", "frz", "cnf"] } }),
   A("Levitate", "Immune to Ground moves and to Spikes and other hazards on the floor.", { immune: ["Ground"], levitate: true }),
   A("Libero", "Every move gets the same-type bonus.", { protean: true }),
-  same("Light Metal"),
+  A("Light Metal", "Light: 12% faster, but knocked back 30% more.", { speed: { mul: 1.12 }, kb: 1.3 }),
   A("Lightning Rod", "Immune to Electric. Being hit by it makes it hit 25% harder for 10 seconds.", { immune: ["Electric"], gain: { dmg: 1.25, t: 10 } }),
   veil("Limber", "par", "paralyzed"),
-  same("Liquid Voice"),
-  same("Long Reach"),
+  A("Liquid Voice", "Sound moves hit 25% harder.", { boost: [{ mul: 1.25, name: SOUND }] }),
+  A("Long Reach", "Its close-range moves do not count as contact: no thorns, burns or other contact effects come back at it.", { noContact: true }),
   A("Magic Bounce", "Immune to every status effect.", { noStatus: ["brn", "psn", "par", "slp", "frz", "cnf"] }),
   A("Magic Guard", "Only attacks can hurt it: no burn, poison, weather or hazard damage.", { magicGuard: true, noChip: true }),
-  same("Magician"),
+  A("Magician", "Takes back 8% of the damage it deals as life.", { lifesteal: 0.08 }),
   veil("Magma Armor", "frz", "frozen"),
-  same("Minus"),
+  A("Minus", "Electric moves hit 20% harder.", { boost: [{ mul: 1.2, type: ["Electric"] }] }),
   A("Mirror Armor", "Intimidate does not work on it.", { noIntimidate: true }),
   A("Mold Breaker", "Its moves ignore the other side's abilities.", { pierce: true }),
   A("Moody", "Every 7 seconds it hits 25% harder or moves 20% faster.", { moody: true }),
   A("Moxie", "Every KO makes it hit 12% harder for 25 seconds (up to 5 times).", { onKo: { dmg: 1.12, cap: 5, t: 25 } }),
   A("Multiscale", "Takes half damage while at full life.", { guard: [{ mul: 0.5, full: true }] }),
-  same("Multitype"),
+  A("Multitype", "Every move gets the same-type bonus.", { protean: true }),
   A("Natural Cure", "Status effects wear off 2 times faster.", { cure: { all: 2.2 } }),
-  same("No Guard"),
+  A("No Guard", "Hits 15% harder, but takes 10% more damage.", { boost: [{ mul: 1.15 }], guard: [{ mul: 1.1 }] }),
   steady("Oblivious"),
   A("Overcoat", "Weather does not hurt it.", { noChip: true }),
   A("Overgrow", "Grass moves hit 50% harder when life is low.", { boost: [{ mul: 1.5, type: ["Grass"], low: true }] }),
   A("Own Tempo", "Cannot be confused, and Intimidate does not work on it.", { noStatus: ["cnf"], noIntimidate: true }),
-  same("Pickpocket"),
-  same("Plus"),
-  same("Power Construct"),
-  same("Prankster"),
+  A("Pickpocket", "A close-range hit makes it hit 12% harder for 8 seconds.", { onHit: { contact: true, gain: { dmg: 1.12, t: 8 } } }),
+  A("Plus", "Electric moves hit 20% harder.", { boost: [{ mul: 1.2, type: ["Electric"] }] }),
+  A("Power Construct", "At half life it heals 30% of its life (once every 60 seconds).", { lowTrigger: { at: 0.5, heal: 0.3, cd: 60 } }),
+  A("Prankster", "Always a step ahead: 10% faster.", { speed: { mul: 1.1 } }),
   A("Pressure", "Foes that hit it have to wait a little longer before their next move.", { pressure: true }),
   A("Prism Armor", "Takes 25% less damage from super effective hits.", { guard: [{ mul: 0.75, se: true }] }),
   A("Protean", "Every move gets the same-type bonus.", { protean: true }),
@@ -207,11 +217,11 @@ const LIST: AbDef[] = [
   A("Rain Dish", "Heals 1.2% of its life a second in rain.", { regenField: { field: "rain", pct: 0.012 } }),
   A("Reckless", "Recoil moves hit 20% harder.", { boost: [{ mul: 1.2, name: RECOIL }] }),
   A("Regenerator", "Slowly heals 1.2% of its life a second.", { regen: 0.012 }),
-  same("Ripen"),
-  same("Rivalry"),
-  same("Rock Head"),
+  A("Ripen", "At half life it eats a ripe berry: heals 35% of its life (once every 40 seconds).", { lowTrigger: { at: 0.5, heal: 0.35, cd: 40 } }),
+  A("Rivalry", "Hits 10% harder.", { boost: [{ mul: 1.1 }] }),
+  A("Rock Head", "A hard head: knocked back 30% less.", { kb: 0.7 }),
   A("Rough Skin", "A close-range attacker loses 7% of their life.", { contact: { p: 1, chip: 0.07 } }),
-  same("Run Away"),
+  A("Run Away", "At half life it bolts: 40% faster for 6 seconds (once every 40 seconds).", { lowTrigger: { at: 0.5, gain: { spd: 1.4, t: 6 }, cd: 40 } }),
   A("Sand Force", "Ground, Rock and Steel moves hit 30% harder in a sandstorm, which does not hurt it.", { boost: [{ mul: 1.3, type: ["Ground", "Rock", "Steel"], field: "sand" }], noChip: true }),
   A("Sand Rush", "40% faster in a sandstorm, which does not hurt it.", { speed: { mul: 1.4, field: "sand" }, noChip: true }),
   A("Sand Spit", "When hit, a sandstorm begins.", { sandSpit: true }),
@@ -231,9 +241,9 @@ const LIST: AbDef[] = [
   A("Soul-Heart", "Every KO, of anybody, makes it hit 10% harder for 25 seconds (up to 5 times).", { onKo: { dmg: 1.1, cap: 5, t: 25, any: true } }),
   A("Soundproof", "Immune to sound moves.", { blocks: SOUND }),
   A("Speed Boost", "Gets 5% faster every 3 seconds, up to 35%.", { speedBoost: true }),
-  same("Stall"),
-  same("Stalwart"),
-  same("Stance Change"),
+  A("Stall", "Takes 10% less damage.", { guard: [{ mul: 0.9 }] }),
+  A("Stalwart", "Knocked back 30% less, and Intimidate does not work on it.", { kb: 0.7, noIntimidate: true }),
+  A("Stance Change", "Blade and shield together: hits 10% harder and takes 10% less damage.", { boost: [{ mul: 1.1 }], guard: [{ mul: 0.9 }] }),
   A("Static", "A close-range attacker has a 30% chance to be paralyzed.", { contact: { status: "par", p: 0.3 } }),
   A("Steadfast", "When hit it has a 30% chance to get 15% faster for 5 seconds.", { onHit: { p: 0.3, gain: { spd: 1.15, t: 5 } } }),
   A("Steam Engine", "Hit by Fire or Water: 50% faster for 6 seconds.", { onHit: { type: ["Fire", "Water"], gain: { spd: 1.5, t: 6 } } }),
@@ -246,9 +256,9 @@ const LIST: AbDef[] = [
   A("Sweet Veil", "Cannot be put to sleep.", { noStatus: ["slp"] }),
   A("Swift Swim", "40% faster in rain.", { speed: { mul: 1.4, field: "rain" } }),
   A("Synchronize", "A burn, poison or paralysis it gets is passed on to the attacker.", { sync: true }),
-  same("Tangled Feet"),
+  A("Tangled Feet", "Cannot be confused, and 10% faster while it has a status effect.", { noStatus: ["cnf"], speed: { mul: 1.1, status: true } }),
   A("Technician", "Weak moves hit 40% harder.", { boost: [{ mul: 1.4, weak: true }] }),
-  same("Telepathy"),
+  A("Telepathy", "Reads the foe's moves: takes 8% less damage.", { guard: [{ mul: 0.92 }] }),
   A("Teravolt", "Its moves ignore the other side's abilities.", { pierce: true }),
   A("Thermal Exchange", "Cannot be burned. Hit by Fire: hits 25% harder for 10 seconds.", { noStatus: ["brn"], onHit: { type: ["Fire"], gain: { dmg: 1.25, t: 10 } } }),
   A("Thick Fat", "Takes half damage from Fire and Ice.", { guard: [{ mul: 0.5, type: ["Fire", "Ice"] }] }),
@@ -257,10 +267,10 @@ const LIST: AbDef[] = [
   A("Toxic Debris", "When a close-range move hits it, Toxic Spikes appear on the floor around it.", { toxicDebris: true }),
   A("Trace", "At the start it copies the nearest foe's ability.", { trace: true }),
   A("Turboblaze", "Its moves ignore the other side's abilities.", { pierce: true }),
-  same("Unaware"),
-  same("Unburden"),
-  same("Unnerve"),
-  same("Unseen Fist"),
+  A("Unaware", "Ignores the foe's damage boosts when it is hit.", { unaware: true }),
+  A("Unburden", "At half life it throws off its load: 60% faster for 8 seconds (once every 40 seconds).", { lowTrigger: { at: 0.5, gain: { spd: 1.6, t: 8 }, cd: 40 } }),
+  A("Unnerve", "Foes that hit it have to wait a little longer before their next move.", { pressure: true }),
+  A("Unseen Fist", "Punching moves hit 25% harder, and its moves ignore the other side's abilities.", { boost: [{ mul: 1.25, name: PUNCH }], pierce: true }),
   A("Volt Absorb", "Immune to Electric: heals 25% of its life instead.", { immune: ["Electric"], absorb: 0.25 }),
   A("Water Absorb", "Immune to Water: heals 25% of its life instead.", { immune: ["Water"], absorb: 0.25 }),
   A("Weak Armor", "A close-range hit makes it 25% faster but takes 10% more damage, for 6 seconds.", { onHit: { contact: true, gain: { spd: 1.25, take: 1.1, t: 6 } } }),
@@ -650,6 +660,11 @@ export function abStrikeOut(src: Src, dst: Src, type: string, eff: number, mv: M
   if (eff < 1 && eff > 0 && fx.tinted) m *= fx.tinted;
   for (const b of fx.boost ?? []) if (b.foeFaster && dst.speed > src.speed) m *= b.mul;
   for (const a of auras) if (a.type === type) m *= a.mul;
+  // Unaware: the target does not see the attacker's damage boosts
+  if (fxOf(dst).unaware) {
+    if (src.abx.dmgT > 0) m /= src.abx.dmg;
+    if (src.abx.typed && mv && src.abx.typed.types.includes(mv.type)) m /= src.abx.typed.mul;
+  }
   void mv;
   void field;
   return m;

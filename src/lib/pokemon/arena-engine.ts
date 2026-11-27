@@ -1374,6 +1374,13 @@ function abilityTick(S: State, f: Fighter, dt: number) {
   const heal = (amt: number) => {
     if (f.hp < f.maxHp) f.hp = Math.min(f.maxHp, f.hp + amt);
   };
+  // Emergency Exit, Gluttony, Unburden...: at low life a one-time (then on a cooldown) heal and / or burst
+  if (fx.lowTrigger && f.alive && f.hp > 0 && f.hp <= f.maxHp * fx.lowTrigger.at && !(x.t.low > 0)) {
+    x.t.low = fx.lowTrigger.cd;
+    if (fx.lowTrigger.heal) heal(f.maxHp * fx.lowTrigger.heal);
+    if (fx.lowTrigger.gain) giveGain(f, fx.lowTrigger.gain);
+    abPop(S, f);
+  }
   if (fx.regen) heal(f.maxHp * fx.regen * dt);
   if (fx.regenField && S.field === fx.regenField.field && !fx.noField) heal(f.maxHp * fx.regenField.pct * dt);
   if (fx.speedBoost && !(x.t.sb > 0)) {
@@ -1553,7 +1560,9 @@ function strike(S: State, src: Fighter, dst: Fighter, dmgBase: number, type: str
   }
   if (sab.stun && dmg > 0 && Math.random() < sab.stun && !dst.boss) dst.stun = Math.max(dst.stun, 0.35);
   const contact = !!mvd && (mvd.kind === "dash" || mvd.kind === "grab" || mvd.kind === "burrow");
-  if (dmg > 0) abilityReact(S, src, dst, crit, type, mvd, contact);
+  if (dmg > 0) abilityReact(S, src, dst, crit, type, mvd, contact && !sab.noContact);
+  // Magician: a share of what it deals comes back as life
+  if (dmg > 0 && sab.lifesteal && src.alive && src !== dst && src.hp < src.maxHp) src.hp = Math.min(src.maxHp, src.hp + dmg * sab.lifesteal);
   S.events.push({ t: "hit", id: dst.id, x: dst.x, y: dst.y, dmg, crit, eff, type, toPlayer: dst.isPlayer, byPlayer: src.isPlayer, dx: nx, dy: ny, heavy, mv: o.mv });
   if (type === "Ice" && S.pools.length) freezeWater(S, dst.x, dst.y, 46);
   else if (type === "Fire" && S.frozen.length) meltIce(S, dst.x, dst.y, 40);
